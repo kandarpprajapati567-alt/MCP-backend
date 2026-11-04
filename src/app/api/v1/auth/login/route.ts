@@ -3,21 +3,28 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function privateJson(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return privateJson({ error: "Invalid JSON body." }, 400);
   }
 
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ error: "A JSON object is required." }, { status: 400 });
+    return privateJson({ error: "A JSON object is required." }, 400);
   }
 
   const { email, password } = body as Record<string, unknown>;
   if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
-    return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+    return privateJson({ error: "Email and password are required." }, 400);
   }
 
   const supabase = await createClient();
@@ -27,10 +34,10 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+    return privateJson({ error: "Invalid email or password." }, 401);
   }
 
-  return NextResponse.json({
+  return privateJson({
     user: { id: data.user.id, email: data.user.email },
     message: "Signed in.",
   });
