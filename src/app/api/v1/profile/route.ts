@@ -3,6 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function privateJson(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
 async function getAuthenticatedUser() {
   const supabase = await createClient();
   // Verify the session with Supabase Auth, not only local JWT claims.
@@ -14,7 +21,7 @@ async function getAuthenticatedUser() {
 
 export async function GET() {
   const { supabase, userId } = await getAuthenticatedUser();
-  if (!userId) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  if (!userId) return privateJson({ error: "Unauthorized." }, 401);
 
   const { data, error } = await supabase
     .from("profiles")
@@ -22,23 +29,23 @@ export async function GET() {
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: "Unable to load profile." }, { status: 500 });
-  return NextResponse.json({ profile: data });
+  if (error) return privateJson({ error: "Unable to load profile." }, 500);
+  return privateJson({ profile: data });
 }
 
 export async function PATCH(request: Request) {
   const { supabase, userId } = await getAuthenticatedUser();
-  if (!userId) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  if (!userId) return privateJson({ error: "Unauthorized." }, 401);
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return privateJson({ error: "Invalid JSON body." }, 400);
   }
 
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ error: "A JSON object is required." }, { status: 400 });
+    return privateJson({ error: "A JSON object is required." }, 400);
   }
 
   const input = body as Record<string, unknown>;
@@ -51,9 +58,9 @@ export async function PATCH(request: Request) {
         input.display_name.trim().length < 1 ||
         input.display_name.trim().length > 80)
     ) {
-      return NextResponse.json(
+      return privateJson(
         { error: "display_name must be null or 1–80 characters." },
-        { status: 400 },
+        400,
       );
     }
     updates.display_name =
@@ -71,21 +78,21 @@ export async function PATCH(request: Request) {
         }
         updates.avatar_url = parsed.toString();
       } catch {
-        return NextResponse.json(
+        return privateJson(
           { error: "avatar_url must be a valid HTTP(S) URL." },
-          { status: 400 },
+          400,
         );
       }
     } else {
-      return NextResponse.json(
+      return privateJson(
         { error: "avatar_url must be null or a URL up to 2048 characters." },
-        { status: 400 },
+        400,
       );
     }
   }
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: "No supported profile fields supplied." }, { status: 400 });
+    return privateJson({ error: "No supported profile fields supplied." }, 400);
   }
 
   const { data, error } = await supabase
@@ -94,6 +101,6 @@ export async function PATCH(request: Request) {
     .select("id, display_name, avatar_url, created_at, updated_at")
     .single();
 
-  if (error) return NextResponse.json({ error: "Unable to update profile." }, { status: 500 });
-  return NextResponse.json({ profile: data });
+  if (error) return privateJson({ error: "Unable to update profile." }, 500);
+  return privateJson({ profile: data });
 }
