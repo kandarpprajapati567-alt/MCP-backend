@@ -5,10 +5,11 @@ export const dynamic = "force-dynamic";
 
 async function getAuthenticatedUser() {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  // Verify the session with Supabase Auth, not only local JWT claims.
+  const { data, error } = await supabase.auth.getUser();
 
-  if (error || !data?.claims?.sub) return { supabase, userId: null };
-  return { supabase, userId: data.claims.sub };
+  if (error || !data.user) return { supabase, userId: null };
+  return { supabase, userId: data.user.id };
 }
 
 export async function GET() {
