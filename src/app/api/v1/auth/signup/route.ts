@@ -3,16 +3,23 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function privateJson(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return privateJson({ error: "Invalid JSON body." }, 400);
   }
 
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ error: "A JSON object is required." }, { status: 400 });
+    return privateJson({ error: "A JSON object is required." }, 400);
   }
 
   const { email, password } = body as Record<string, unknown>;
@@ -23,9 +30,9 @@ export async function POST(request: Request) {
     password.length < 8 ||
     password.length > 128
   ) {
-    return NextResponse.json(
+    return privateJson(
       { error: "Provide a valid email and a password of 8–128 characters." },
-      { status: 400 },
+      400,
     );
   }
 
@@ -39,10 +46,10 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return privateJson({ error: error.message }, 400);
   }
 
-  return NextResponse.json(
+  return privateJson(
     {
       user: data.user ? { id: data.user.id, email: data.user.email } : null,
       sessionCreated: Boolean(data.session),
@@ -50,6 +57,6 @@ export async function POST(request: Request) {
         ? "Account created and signed in."
         : "Account created. Check your email to confirm the address before signing in.",
     },
-    { status: 201 },
+    201,
   );
 }
