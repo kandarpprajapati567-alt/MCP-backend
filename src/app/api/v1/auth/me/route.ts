@@ -5,16 +5,20 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  // Verify the session with Supabase Auth, not only local JWT claims.
+  const { data, error } = await supabase.auth.getUser();
 
-  if (error || !data?.claims?.sub) {
-    return NextResponse.json({ user: null }, { status: 401 });
+  if (error || !data.user) {
+    return NextResponse.json({ user: null }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
 
-  return NextResponse.json({
-    user: {
-      id: data.claims.sub,
-      email: typeof data.claims.email === "string" ? data.claims.email : null,
+  return NextResponse.json(
+    {
+      user: {
+        id: data.user.id,
+        email: data.user.email ?? null,
+      },
     },
-  });
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
