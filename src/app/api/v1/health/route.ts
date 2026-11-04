@@ -29,9 +29,12 @@ export async function GET() {
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("profiles").select("id").limit(1);
+    // Probe database connectivity without reading user data or bypassing RLS.
+    const { data, error } = await supabase.rpc("health_check");
 
-    const database: ServiceStatus = error ? "unavailable" : "ok";
+    const database: ServiceStatus =
+      error || data !== true ? "unavailable" : "ok";
+
     return NextResponse.json(
       {
         status: database === "ok" ? "ok" : "degraded",
@@ -52,7 +55,7 @@ export async function GET() {
         version,
         services: {
           database: "unavailable" satisfies ServiceStatus,
-          authentication: "unavailable" satisfies ServiceStatus,
+          authentication: "ok" satisfies ServiceStatus,
         },
       },
       { headers: { "Cache-Control": "no-store" } },
