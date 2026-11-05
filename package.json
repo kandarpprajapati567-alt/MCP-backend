@@ -2,13 +2,16 @@
   "name": "futuristic-system-web",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npx --yes tsx@4.20.6 --test tests/server/ai/routing/router.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
