@@ -1,76 +1,90 @@
 # Futuristic System — AI Backend & Control Centre
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/) [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3FCF8E?logo=supabase)](https://supabase.com/) [![Vercel](https://img.shields.io/badge/Deployment-Vercel-black?logo=vercel)](https://vercel.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/) [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3FCF8E?logo=supabase)](https://supabase.com/) [![Deployment](https://img.shields.io/badge/Deployment-Vercel-black?logo=vercel)](https://vercel.com/)
 
-**Futuristic System** is an AI-powered personal computing platform. This repository contains its server-side backend and web-based Control Centre. It is designed to work with the separate Android application, not replace it.
+**Futuristic System** is an AI-powered personal computing platform. This repository contains the server-side backend and web-based Control Centre. It works alongside a separate Android application; it does not replace the app or directly control the phone.
 
-> Status: active development. Authentication, encrypted provider credential storage, capability-aware routing, retryable fallback execution, and initial OpenAI-compatible adapters exist. Live provider orchestration and Android device integration are still under development.
+> **Development status:** Authentication, health checks, encrypted provider-key storage, capability-aware model routing, retryable fallback execution, and an initial OpenAI-compatible adapter for OpenAI and OpenRouter are present. Adapter tests, live provider execution, complete agent orchestration, and Android integration are not yet verified or complete.
 
-## Platform architecture
+## Architecture
 
 ```text
-Android App (user interface, local device permissions, local capabilities)
-                 | authenticated, versioned API
-                 v
-Backend (authentication, AI orchestration, routing, planner, tool permissions,
-         executor, tasks, events, results)
-          |                         |
-          v                         v
-Supabase (Auth + Postgres)     AI Providers (OpenAI, Anthropic, Google, etc.)
+Android App
+  - User interface
+  - Android permissions and device actions
+  - Local file creation / saving
+          | authenticated, versioned API
+          v
+Futuristic System Backend
+  - Authentication and ownership checks
+  - AI provider credentials and model routing
+  - Planner, tool permissions, executor
+  - Tasks, events, and result synthesis
+       |                         |
+       v                         v
+Supabase                   AI Providers
+(Auth + Postgres)          (server-side adapters)
 
-Web Control Centre: configure and monitor the backend; not the Android app.
+Web Control Centre
+  - Backend configuration and monitoring
+  - Separate from the Android app
 ```
 
-### Component responsibilities
-- **Android application:** primary user experience and authority for Android-specific permissions and local device actions.
-- **Backend:** trusted orchestration layer for authentication, AI workflows, provider access, tool authorization, and task execution.
-- **Web Control Centre:** configuration and monitoring interface; it is not the Android app.
-- **Supabase:** authentication and persistent application data.
-- **AI providers:** replaceable inference services accessed only through server-side adapters.
+### Responsibility boundary
+- **Android app:** owns phone-side permissions and local actions involving files, camera, microphone, and other device capabilities.
+- **Backend:** authenticates requests and orchestrates AI workflows, provider calls, registered tools, and task execution.
+- **Control Centre:** provides web-based backend configuration and monitoring.
+- **Supabase:** provides authentication and persistent data.
+- **AI providers:** inference services accessed through server-side adapters.
 
-The backend must never assume it can access a phone's files, camera, microphone, or other device capabilities without explicit app-side permission and a secure integration.
+The backend must not claim direct access to a user's phone files, camera, or microphone. Such capabilities require an explicit, authenticated Android-side bridge and user permission.
 
-## Design principles
-1. Server-side secrets never enter browser bundles or API responses.
-2. Enforce least privilege with authentication, ownership checks, RLS, registered tools, and permission gates.
-3. Use a common provider adapter contract to avoid vendor lock-in.
-4. Treat model output as untrusted; validate plans and tool arguments before execution.
-5. Use mock adapters during development; do not expose arbitrary shell, eval, filesystem, or unrestricted network tools.
-6. Keep APIs versioned under `/api/v1`.
+## Design and security principles
+1. Never expose provider credentials, encryption keys, or privileged database access to browser code or API responses.
+2. Enforce authentication, user ownership, Row Level Security, allow-listed providers/tools, and explicit permission gates.
+3. Keep provider integrations behind a shared adapter contract.
+4. Treat model output as untrusted input; validate plans and tool arguments before execution.
+5. Use mock providers for development and tests. Do not add arbitrary shell, `eval`, unrestricted filesystem, or unrestricted network tools.
+6. Keep application APIs versioned under `/api/v1`.
+7. Keep secrets out of logs, commits, issues, and client-visible errors.
 
-## Technology stack
+## Technology
 - Next.js 15 / React 19
 - TypeScript
-- Supabase Auth, Postgres, and Row Level Security
+- Supabase Auth and Postgres
 - Vercel
+- Node.js (use Node 22 or later for the current Supabase dependency set)
+
+## Local development
+
+### Requirements
 - Node.js 22+
-
-## Getting started
-### Prerequisites
-- Node.js 20 or later
 - npm
-- A Supabase project
+- A Supabase project configured for this application
 
-### Install and run
+### Setup
 ```bash
 npm install
 cp .env.example .env.local
 npm run dev
 ```
+
 Open http://localhost:3000.
 
 ### Environment variables
+
 | Variable | Exposure | Purpose |
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL` | Public | Canonical application URL |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public | Supabase publishable key |
 | `SUPABASE_SECRET_KEY` | Server only | Privileged server-side Supabase operations |
-| `AI_PROVIDER_ENCRYPTION_KEY` | Server only | Encrypts stored provider credentials |
+| `AI_PROVIDER_ENCRYPTION_KEY` | Server only | AES-256-GCM encryption key for stored provider credentials |
 
-Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_PUBLIC_`. Keep `AI_PROVIDER_ENCRYPTION_KEY` stable; changing it without a key-rotation process makes existing encrypted credentials unreadable. See `.env.example`.
+Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_PUBLIC_`. Keep `AI_PROVIDER_ENCRYPTION_KEY` stable: changing it without a planned key-rotation and re-encryption process makes existing stored credentials unreadable. Refer to `.env.example` for the expected configuration.
 
 ## Implemented API surface
+
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/v1/health` | Backend/database health |
@@ -80,39 +94,62 @@ Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_
 | GET | `/api/v1/auth/me` | Validate current session |
 | GET | `/api/v1/profile` | Read caller profile |
 | PATCH | `/api/v1/profile` | Update caller profile |
-| GET | `/api/v1/ai/providers/health` | Authenticated mock-adapter smoke test |
-| GET/PUT/DELETE | `/api/v1/ai/providers/keys` | Manage encrypted provider credentials |
+| GET | `/api/v1/ai/providers/health` | Authenticated mock-provider check |
+| GET / PUT / DELETE | `/api/v1/ai/providers/keys` | List metadata, save encrypted key, or delete key |
 
-The provider health endpoint tests only the mock adapter. It does not prove credential decryption or live vendor generation.
+The provider health endpoint exercises the mock provider only. The provider-key endpoints store encrypted credentials and return metadata; they do not expose plaintext keys.
+
+## AI execution foundation
+
+- Shared provider contract and deterministic mock provider.
+- Workflow policies and capability-aware model routing.
+- Retryable fallback execution; non-retryable errors stop fallback.
+- AES-256-GCM encrypted provider credential storage.
+- Server-only provider credential loader.
+- Initial OpenAI-compatible Chat Completions adapter for OpenAI and OpenRouter, with fixed endpoints, bounded input, timeout handling, and normalized errors.
+
+**Not yet complete:** adapter regression tests and live vendor verification; connecting decrypted credentials to a runtime provider registry; authenticated end-to-end generation route; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, and Android device bridge.
 
 ## Roadmap
-- [x] Phase 0 — engineering baseline
-- [x] Phase 1 — Supabase SSR authentication, profile API, and health foundation
-- [x] Phase 2.2 — provider adapter contract and mock foundation
-- [x] Phase 2.3 — encrypted provider credential storage foundation
-- [x] Phase 2.4 — workflow/model routing and retryable fallback foundation (tests included)
-- [ ] Phase 2.5 — schema-validated agent planner
-- [ ] Phase 2.6 — allow-listed tool registry and permission gates
-- [ ] Phase 2.7 — bounded executor foundation exists; live provider registry wiring and result synthesizer remain
-- [ ] Phase 2.8 — task persistence, lifecycle, and events
-- [ ] Phase 2.9 — Control Centre integration with real backend workflows
-- [ ] Phase 2.10 — security, integration, and deployment verification
-- [ ] Android integration — authenticated app/backend connection and device capability bridge
 
-A checked item means the foundation exists; it does not imply every production acceptance test has passed. See `docs/PHASE-2-ARCHITECTURE.md`.
+- [x] Engineering baseline and project structure
+- [x] Supabase SSR authentication, profile API, and health foundation
+- [x] Provider contract and mock foundation
+- [x] Encrypted provider credential storage foundation
+- [x] Capability-aware workflow/model routing and fallback foundation
+- [x] Bounded, provider-agnostic executor foundation
+- [x] Initial OpenAI/OpenRouter-compatible adapter implementation
+- [ ] Provider adapter tests and live-provider verification
+- [ ] Runtime provider registry and authenticated generation API
+- [ ] Schema-validated AI planner
+- [ ] Allow-listed tool registry and permission gates
+- [ ] Result synthesizer
+- [ ] Task persistence, lifecycle, and events
+- [ ] Full Control Centre integration
+- [ ] Android app integration and secure device capability bridge
+- [ ] Production security, CI, and deployment verification
+- [ ] Public release readiness (including an explicit open-source license)
+
+A checked item means implementation exists; it does not imply every production acceptance test has passed. See `docs/PHASE-2-ARCHITECTURE.md` for the architecture contract.
 
 ## Quality checks
+
 ```bash
 npm run typecheck
+npm test
 npm run build
 ```
-The lint script should be treated as a required gate only after ESLint configuration and dependencies are verified.
 
-## Security
-See `SECURITY.md` for responsible vulnerability disclosure. Never include credentials or personal data in issues or pull requests.
+Run these checks before proposing or merging changes. A CI run must be confirmed successful for the exact commit before describing that commit as verified.
+
+## Security reporting
+
+See [SECURITY.md](SECURITY.md) for responsible vulnerability disclosure. Do not include API keys, encryption keys, access tokens, or personal data in issues or pull requests.
 
 ## Contributing
-Contributions must preserve the Android/backend boundary, server-only secret handling, API versioning, and least-privilege tool execution. Discuss substantial changes in an issue before submitting a pull request.
+
+Contributions must preserve the Android/backend boundary, server-only secret handling, API versioning, least-privilege execution, and test coverage. Discuss substantial architectural changes before submitting a pull request.
 
 ## License
-No open-source license has been selected yet. Until a license file is added, public visibility does not grant permission to reuse, redistribute, or create derivative works. Choose and add an explicit license before accepting external contributions under open-source terms.
+
+No open-source license has been selected yet. Public repository visibility does not itself grant permission to reuse, redistribute, or create derivative works. Add an explicit license before presenting this repository as open source or accepting external contributions under open-source terms.
