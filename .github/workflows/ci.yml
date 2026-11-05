@@ -23,12 +23,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install dependencies
         run: npm install
       - name: Typecheck
         run: npm run typecheck
-      - name: Routing tests
+      - name: Provider and routing tests
         env:
           NODE_OPTIONS: --conditions=react-server
         run: npm run test
