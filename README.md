@@ -1,61 +1,118 @@
-# Futuristic System Web
+# Futuristic System — AI Backend & Control Centre
 
-Separate Next.js control centre and future backend for the Futuristic System platform. It does **not** modify or replace the Android app (`com.futuristic.system`).
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/) [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3FCF8E?logo=supabase)](https://supabase.com/) [![Vercel](https://img.shields.io/badge/Deployment-Vercel-black?logo=vercel)](https://vercel.com/)
 
-## Requirements
+**Futuristic System** is an AI-powered personal computing platform. This repository contains its server-side backend and web-based Control Centre. It is designed to work with the separate Android application, not replace it.
 
+> Status: active development. Authentication and initial provider/secret foundations exist. Agent execution and Android device integration are still under development.
+
+## Platform architecture
+
+```text
+Android App (user interface, local device permissions, local capabilities)
+                 | authenticated, versioned API
+                 v
+Backend (authentication, AI orchestration, routing, planner, tool permissions,
+         executor, tasks, events, results)
+          |                         |
+          v                         v
+Supabase (Auth + Postgres)     AI Providers (OpenAI, Anthropic, Google, etc.)
+
+Web Control Centre: configure and monitor the backend; not the Android app.
+```
+
+### Component responsibilities
+- **Android application:** primary user experience and authority for Android-specific permissions and local device actions.
+- **Backend:** trusted orchestration layer for authentication, AI workflows, provider access, tool authorization, and task execution.
+- **Web Control Centre:** configuration and monitoring interface; it is not the Android app.
+- **Supabase:** authentication and persistent application data.
+- **AI providers:** replaceable inference services accessed only through server-side adapters.
+
+The backend must never assume it can access a phone's files, camera, microphone, or other device capabilities without explicit app-side permission and a secure integration.
+
+## Design principles
+1. Server-side secrets never enter browser bundles or API responses.
+2. Enforce least privilege with authentication, ownership checks, RLS, registered tools, and permission gates.
+3. Use a common provider adapter contract to avoid vendor lock-in.
+4. Treat model output as untrusted; validate plans and tool arguments before execution.
+5. Use mock adapters during development; do not expose arbitrary shell, eval, filesystem, or unrestricted network tools.
+6. Keep APIs versioned under `/api/v1`.
+
+## Technology stack
+- Next.js 15 / React 19
+- TypeScript
+- Supabase Auth, Postgres, and Row Level Security
+- Vercel
 - Node.js 20+
+
+## Getting started
+### Prerequisites
+- Node.js 20 or later
 - npm
+- A Supabase project
 
-## Run locally
-
+### Install and run
 ```bash
 npm install
 cp .env.example .env.local
 npm run dev
 ```
-
 Open http://localhost:3000.
 
-## Quality checks
+### Environment variables
+| Variable | Exposure | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | Public | Canonical application URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Public | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public | Supabase publishable key |
+| `SUPABASE_SECRET_KEY` | Server only | Privileged server-side Supabase operations |
+| `AI_PROVIDER_ENCRYPTION_KEY` | Server only | Encrypts stored provider credentials |
 
+Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_PUBLIC_`. Keep `AI_PROVIDER_ENCRYPTION_KEY` stable; changing it without a key-rotation process makes existing encrypted credentials unreadable. See `.env.example`.
+
+## Implemented API surface
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/v1/health` | Backend/database health |
+| POST | `/api/v1/auth/signup` | Registration |
+| POST | `/api/v1/auth/login` | Sign in |
+| POST | `/api/v1/auth/logout` | Sign out |
+| GET | `/api/v1/auth/me` | Validate current session |
+| GET | `/api/v1/profile` | Read caller profile |
+| PATCH | `/api/v1/profile` | Update caller profile |
+| GET | `/api/v1/ai/providers/health` | Authenticated mock-adapter smoke test |
+| GET/PUT/DELETE | `/api/v1/ai/providers/keys` | Manage encrypted provider credentials |
+
+The provider health endpoint tests only the mock adapter. It does not prove credential decryption or live vendor generation.
+
+## Roadmap
+- [x] Phase 0 — engineering baseline
+- [x] Phase 1 — Supabase SSR authentication, profile API, and health foundation
+- [x] Phase 2.2 — provider adapter contract and mock foundation
+- [x] Phase 2.3 — encrypted provider credential storage foundation
+- [ ] Phase 2.4 — workflow/model routing (initial policies and resolver exist; verification pending)
+- [ ] Phase 2.5 — schema-validated agent planner
+- [ ] Phase 2.6 — allow-listed tool registry and permission gates
+- [ ] Phase 2.7 — bounded executor and result synthesizer
+- [ ] Phase 2.8 — task persistence, lifecycle, and events
+- [ ] Phase 2.9 — Control Centre integration with real backend workflows
+- [ ] Phase 2.10 — security, integration, and deployment verification
+- [ ] Android integration — authenticated app/backend connection and device capability bridge
+
+A checked item means the foundation exists; it does not imply every production acceptance test has passed. See `docs/PHASE-2-ARCHITECTURE.md`.
+
+## Quality checks
 ```bash
 npm run typecheck
 npm run build
 ```
+The lint script should be treated as a required gate only after ESLint configuration and dependencies are verified.
 
-The `lint` script is declared in `package.json`, but ESLint and its configuration still need to be added before it can be treated as a reliable check.
+## Security
+See `SECURITY.md` for responsible vulnerability disclosure. Never include credentials or personal data in issues or pull requests.
 
-## Supabase setup
+## Contributing
+Contributions must preserve the Android/backend boundary, server-only secret handling, API versioning, and least-privilege tool execution. Discuss substantial changes in an issue before submitting a pull request.
 
-Set these values in `.env.local` for local development and in the Vercel project's environment settings for each deployment environment:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-
-Use the project's publishable key (or legacy anon key only if needed for compatibility). Never put a Supabase secret/service-role key in a `NEXT_PUBLIC_*` variable or browser code. This application uses cookie-based SSR sessions through `@supabase/ssr`.
-
-In Supabase Authentication settings, configure the Site URL and allowed redirect URLs to include the deployed app URL and local development callback:
-- `https://YOUR_APP_DOMAIN/auth/callback`
-- `http://localhost:3000/auth/callback`
-
-Email/password sign-up may require email confirmation depending on the project's Auth settings. OAuth providers are not enabled by this phase.
-
-## Implemented API
-
-- `GET /api/v1/health` — checks whether the profile table is reachable.
-- `POST /api/v1/auth/signup` — email/password registration.
-- `POST /api/v1/auth/login` — email/password sign-in.
-- `POST /api/v1/auth/logout` — sign-out and clear session cookies.
-- `GET /api/v1/auth/me` — validates the signed-in identity with `getClaims()`.
-- `GET /auth/callback` — exchanges the PKCE authorization code.
-- `GET /api/v1/profile` — reads the caller's own profile.
-- `PATCH /api/v1/profile` — updates the caller's own profile under database RLS.
-
-All profile access uses the authenticated user's cookie-backed client and the database's own-row RLS policies. No service-role key is used.
-
-## Current implementation status
-
-Phase 0 baseline is complete. Phase 1 adds the Supabase SSR clients, cookie refresh, email/password auth endpoints, PKCE callback, profile API, and health check. AI provider execution, search, MCP tools, device pairing, and authenticated business workflows remain future phases.
-
-See [Phase 0 engineering baseline](docs/PHASE-0-BASELINE.md) for verified findings and architecture boundaries.
+## License
+No open-source license has been selected yet. Until a license file is added, public visibility does not grant permission to reuse, redistribute, or create derivative works. Choose and add an explicit license before accepting external contributions under open-source terms.
