@@ -28,5 +28,9 @@ jobs:
         run: npm install
       - name: Typecheck
         run: npm run typecheck
+      - name: Routing tests
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npm run test
       - name: Production build
         run: npm run build
