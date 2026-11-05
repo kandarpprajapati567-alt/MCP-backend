@@ -33,7 +33,8 @@ export async function executeWorkflow(
       if (!provider || !compatible(provider, policy)) continue;
       orderedRoutes.push({
         workflow,
-        providerId: provider.id,
+        // Keep the registry key: executor lookup must use the same key.
+        providerId,
         model: policy.fallbackModel ?? policy.primaryModel,
         isFallback: true,
       });
