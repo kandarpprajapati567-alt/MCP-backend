@@ -160,3 +160,35 @@ test("does not fallback for non-retryable authentication failures", async () => 
   );
   assert.equal(fallbackCalled, false);
 });
+
+
+test("keeps registry keys when fallback provider ids differ", async () => {
+  const primary: AIProvider = {
+    id: "vendor-primary",
+    capabilities: ["text-generation"],
+    async generate() {
+      throw new AIProviderError("RATE_LIMITED", "Rate limited", true);
+    },
+  };
+  const backup: AIProvider = {
+    id: "vendor-backup",
+    capabilities: ["text-generation"],
+    async generate(request) {
+      return {
+        provider: "vendor-backup",
+        model: request.model ?? "unknown",
+        text: "registry-key-fallback",
+        finishReason: "stop",
+        requestId: "b2",
+      };
+    },
+  };
+  const execution = await executeWorkflow("planner", policy, {
+    primary: primary,
+    backup: backup,
+  }, {
+    messages: [{ role: "user", content: "hello" }],
+  });
+  assert.equal(execution.result.text, "registry-key-fallback");
+  assert.equal(execution.route.providerId, "backup");
+});
