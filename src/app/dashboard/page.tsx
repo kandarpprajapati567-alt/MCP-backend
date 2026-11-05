@@ -91,6 +91,67 @@ export default function DashboardPage() {
   const [mockLoading, setMockLoading] = useState(false);
   const [mockResult, setMockResult] = useState("");
   const [mockError, setMockError] = useState("");
+  const [providerName, setProviderName] = useState("openai");
+  const [providerApiKey, setProviderApiKey] = useState("");
+  const [providerKeys, setProviderKeys] = useState<Array<{ provider: string; created_at: string; updated_at: string }>>([]);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerMessage, setProviderMessage] = useState("");
+  const [providerError, setProviderError] = useState("");
+
+  async function loadProviderKeys() {
+    setProviderLoading(true);
+    setProviderError("");
+    try {
+      const response = await fetch("/api/v1/ai/providers/keys", { cache: "no-store", credentials: "same-origin" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not load provider settings.");
+      setProviderKeys(result.providers ?? []);
+    } catch (e) {
+      setProviderError(e instanceof Error ? e.message : "Could not load provider settings.");
+    } finally { setProviderLoading(false); }
+  }
+
+  useEffect(() => {
+    if (user) void loadProviderKeys();
+    else setProviderKeys([]);
+  }, [user]);
+
+  async function saveProviderKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setProviderSaving(true); setProviderMessage(""); setProviderError("");
+    try {
+      const response = await fetch("/api/v1/ai/providers/keys", {
+        method: "PUT", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: providerName, apiKey: providerApiKey }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not save provider key.");
+      setProviderApiKey("");
+      setProviderMessage(`${providerName} key encrypted and saved. The key itself is never displayed.`);
+      await loadProviderKeys();
+    } catch (e) {
+      setProviderError(e instanceof Error ? e.message : "Could not save provider key.");
+    } finally { setProviderSaving(false); }
+  }
+
+  async function deleteProviderKey(provider: string) {
+    if (!window.confirm(`Remove the saved ${provider} API key?`)) return;
+    setProviderMessage(""); setProviderError("");
+    try {
+      const response = await fetch("/api/v1/ai/providers/keys", {
+        method: "DELETE", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not remove provider key.");
+      setProviderMessage(`${provider} key removed.`);
+      await loadProviderKeys();
+    } catch (e) {
+      setProviderError(e instanceof Error ? e.message : "Could not remove provider key.");
+    }
+  }
+
 
   async function testMockAI(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setMockLoading(true); setMockResult(""); setMockError("");
@@ -168,6 +229,46 @@ export default function DashboardPage() {
             </form>
             {mockError && <p role="alert" className="mt-4 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-300">{mockError}</p>}
             {mockResult && <div role="status" className="mt-4 rounded-xl border border-emerald-900/70 bg-emerald-950/30 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Mock response</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{mockResult}</p></div>}
+          </section>
+        )}
+
+
+        {user && (
+          <section className="rounded-2xl border border-border bg-zinc-950/80 p-5 sm:p-7">
+            <h2 className="text-lg font-semibold text-white">AI provider API keys</h2>
+            <p className="mt-1 text-sm text-zinc-400">Save your provider key. It is encrypted on the server and never returned to the browser after saving.</p>
+            <form onSubmit={saveProviderKey} className="mt-5 space-y-4">
+              <div>
+                <label htmlFor="provider-name" className="mb-2 block text-sm font-medium text-zinc-300">Provider</label>
+                <select id="provider-name" value={providerName} onChange={(e) => setProviderName(e.target.value)} className="w-full rounded-xl border border-border bg-zinc-900 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none">
+                  <option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="provider-api-key" className="mb-2 block text-sm font-medium text-zinc-300">API key</label>
+                <input id="provider-api-key" type="password" value={providerApiKey} onChange={(e) => setProviderApiKey(e.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" autoCapitalize="none" spellCheck={false} required placeholder="Paste provider API key" className="w-full rounded-xl border border-border bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-400 focus:outline-none" />
+                <p className="mt-1 text-xs text-zinc-500">Saved keys cannot be viewed again. Saving replaces the existing key for this provider.</p>
+              </div>
+              <button type="submit" disabled={providerSaving || !providerApiKey.trim()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60">{providerSaving ? "Encrypting and saving…" : "Save provider key"}</button>
+            </form>
+            <div className="mt-6 border-t border-border pt-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-white">Saved providers</h3>
+                <button type="button" onClick={loadProviderKeys} disabled={providerLoading} className="text-xs text-cyan-300 hover:text-cyan-200 disabled:opacity-60">{providerLoading ? "Refreshing…" : "Refresh"}</button>
+              </div>
+              {providerLoading ? <p className="mt-3 text-sm text-zinc-400">Loading saved providers…</p> : providerKeys.length === 0 ? <p className="mt-3 text-sm text-zinc-500">No provider keys saved yet.</p> : (
+                <ul className="mt-3 space-y-2">
+                  {providerKeys.map((item) => (
+                    <li key={item.provider} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-zinc-900/70 px-4 py-3">
+                      <div><p className="text-sm font-medium capitalize text-zinc-200">{item.provider}</p><p className="mt-1 text-xs text-zinc-500">Saved {new Date(item.updated_at).toLocaleString()}</p></div>
+                      <button type="button" onClick={() => void deleteProviderKey(item.provider)} className="rounded-lg border border-red-900/70 px-3 py-2 text-xs text-red-300 hover:bg-red-950/40">Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {providerError && <p role="alert" className="mt-4 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-300">{providerError}</p>}
+            {providerMessage && <p role="status" className="mt-4 rounded-xl border border-emerald-900/70 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">{providerMessage}</p>}
           </section>
         )}
 
