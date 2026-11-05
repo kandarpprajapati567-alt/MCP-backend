@@ -39,7 +39,7 @@ export function resolveModelRoute(
 
     return {
       workflow,
-      providerId: provider.id,
+      providerId: candidate.providerId,
       model: candidate.isFallback
         ? policy.fallbackModel ?? policy.primaryModel
         : policy.primaryModel,
