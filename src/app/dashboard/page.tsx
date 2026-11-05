@@ -87,6 +87,26 @@ export default function DashboardPage() {
     }
   }
 
+  const [mockPrompt, setMockPrompt] = useState("Explain the purpose of an AI provider interface in one sentence.");
+  const [mockLoading, setMockLoading] = useState(false);
+  const [mockResult, setMockResult] = useState("");
+  const [mockError, setMockError] = useState("");
+
+  async function testMockAI(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setMockLoading(true); setMockResult(""); setMockError("");
+    try {
+      const response = await fetch("/api/v1/ai/providers/mock/test", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: mockPrompt.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Mock AI test failed.");
+      setMockResult(result.output?.text ?? result.text ?? "Mock AI responded successfully.");
+    } catch (e) { setMockError(e instanceof Error ? e.message : "Mock AI test failed."); }
+    finally { setMockLoading(false); }
+  }
+
   async function signOut() {
     setError("");
     setMessage("");
@@ -136,6 +156,20 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+
+        {user && (
+          <section className="rounded-2xl border border-border bg-zinc-950/80 p-5 sm:p-7">
+            <h2 className="text-lg font-semibold text-white">Mock AI provider test</h2>
+            <p className="mt-1 text-sm text-zinc-400">Authenticated endpoint test. Deterministic mock; no API key required.</p>
+            <form onSubmit={testMockAI} className="mt-5 space-y-4">
+              <label htmlFor="mock-ai-prompt" className="block text-sm font-medium text-zinc-300">Test prompt</label>
+              <textarea id="mock-ai-prompt" value={mockPrompt} onChange={(e) => setMockPrompt(e.target.value)} maxLength={1000} required rows={3} className="w-full rounded-xl border border-border bg-zinc-900 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" />
+              <button type="submit" disabled={mockLoading || !mockPrompt.trim()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60">{mockLoading ? "Testing…" : "Run Mock AI test"}</button>
+            </form>
+            {mockError && <p role="alert" className="mt-4 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-300">{mockError}</p>}
+            {mockResult && <div role="status" className="mt-4 rounded-xl border border-emerald-900/70 bg-emerald-950/30 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Mock response</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{mockResult}</p></div>}
+          </section>
+        )}
 
         {user && (
           <section className="rounded-2xl border border-border bg-zinc-950/80 p-5 sm:p-7">
