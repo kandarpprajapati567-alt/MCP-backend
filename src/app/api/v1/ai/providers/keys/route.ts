@@ -83,9 +83,18 @@ export async function PUT(request: Request) {
       { onConflict: "user_id,provider" },
     );
 
-    if (error) return privateJson({ error: "Unable to save provider credential." }, 500);
+    if (error) {
+      console.error("[provider-keys] Upsert failed", {
+        code: error.code,
+        message: error.message,
+      });
+      return privateJson({ error: "Unable to save provider credential." }, 500);
+    }
     return privateJson({ saved: true, provider: input.provider });
-  } catch {
+  } catch (error) {
+    console.error("[provider-keys] PUT failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
     return privateJson({ error: "Provider secret storage is not configured or unavailable." }, 503);
   }
 }
