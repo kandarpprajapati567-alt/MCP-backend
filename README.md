@@ -4,7 +4,7 @@
 
 **Futuristic System** is an AI-powered personal computing platform. This repository contains its server-side backend and web-based Control Centre. It is designed to work with the separate Android application, not replace it.
 
-> Status: active development. Authentication and initial provider/secret foundations exist. Agent execution and Android device integration are still under development.
+> Status: active development. Authentication, encrypted provider credential storage, capability-aware routing, retryable fallback execution, and initial OpenAI-compatible adapters exist. Live provider orchestration and Android device integration are still under development.
 
 ## Platform architecture
 
@@ -43,7 +43,7 @@ The backend must never assume it can access a phone's files, camera, microphone,
 - TypeScript
 - Supabase Auth, Postgres, and Row Level Security
 - Vercel
-- Node.js 20+
+- Node.js 22+
 
 ## Getting started
 ### Prerequisites
@@ -90,10 +90,10 @@ The provider health endpoint tests only the mock adapter. It does not prove cred
 - [x] Phase 1 — Supabase SSR authentication, profile API, and health foundation
 - [x] Phase 2.2 — provider adapter contract and mock foundation
 - [x] Phase 2.3 — encrypted provider credential storage foundation
-- [ ] Phase 2.4 — workflow/model routing (initial policies and resolver exist; verification pending)
+- [x] Phase 2.4 — workflow/model routing and retryable fallback foundation (tests included)
 - [ ] Phase 2.5 — schema-validated agent planner
 - [ ] Phase 2.6 — allow-listed tool registry and permission gates
-- [ ] Phase 2.7 — bounded executor and result synthesizer
+- [ ] Phase 2.7 — bounded executor foundation exists; live provider registry wiring and result synthesizer remain
 - [ ] Phase 2.8 — task persistence, lifecycle, and events
 - [ ] Phase 2.9 — Control Centre integration with real backend workflows
 - [ ] Phase 2.10 — security, integration, and deployment verification
