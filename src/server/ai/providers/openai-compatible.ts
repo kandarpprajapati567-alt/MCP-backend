@@ -32,9 +32,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readText(content: ChatCompletionPayload["choices"] extends Array<infer C>
-  ? C extends { message?: infer M } ? M extends { content?: infer T } ? T : never : never
-  : never): string {
+type ChatMessageContent = string | Array<{ type?: string; text?: string }> | null | undefined;
+
+function readText(content: ChatMessageContent): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
@@ -82,6 +82,10 @@ export class OpenAICompatibleProvider implements AIProvider {
       )
     ) {
       throw new AIProviderError("INVALID_REQUEST", "A valid messages array is required.");
+    }
+
+    if (typeof request.model !== "string" || !request.model.trim() || request.model.length > 200) {
+      throw new AIProviderError("INVALID_REQUEST", "A valid model identifier is required.");
     }
 
     const totalLength = request.messages.reduce((sum, message) => sum + message.content.length, 0);
@@ -142,7 +146,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       }
 
       const data = payload as ChatCompletionPayload;
-      const choice = data.choices[0];
+      const choice = data.choices?.[0];
       if (!choice?.message) {
         throw new AIProviderError("UNKNOWN", "The provider response did not contain a message.");
       }
