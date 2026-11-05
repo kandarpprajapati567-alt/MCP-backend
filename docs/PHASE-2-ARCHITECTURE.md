@@ -1,6 +1,6 @@
 # Phase 2 — AI Core Architecture
 
-**Status:** Architecture baseline drafted; implementation not yet started.
+**Status:** In progress. Provider foundation and encrypted credential storage are implemented; initial workflow routing files exist. Agent execution, persistence, and end-to-end verification remain pending.
 **Scope:** Add an extensible AI-agent backend to the existing Next.js 15 + TypeScript + Supabase application without changing Phase 1 authentication/profile behavior or the Android application.
 
 ## 1. Goals
@@ -104,6 +104,21 @@ Terminal alternatives: `failed`, `cancelled`. State transitions must be validate
 - Task state transitions and retries are deterministic and tested.
 - Supabase RLS/security advisors, TypeScript checks, build, and deployment smoke tests pass.
 
-## 10. Immediate next implementation step
+## 10. Current implementation snapshot
 
-Inspect existing server-side Supabase helpers and route conventions, then add only the provider adapter contract and a mock implementation. Do not create provider-secret tables or accept real API keys until the secret-storage design and SSRF controls are reviewed.
+- Provider contract and deterministic mock adapter exist under `src/server/ai/providers/`.
+- Authenticated mock provider health endpoint exists at `GET /api/v1/ai/providers/health`.
+- Encrypted provider credential storage exists under `src/server/ai/secrets/` and `/api/v1/ai/providers/keys`. Save/list verification is not equivalent to successful decryption and live vendor generation.
+- Initial workflow policies and a capability-aware route resolver exist under `src/server/ai/routing/`. These currently default to the mock provider; real provider execution, retry behavior, and automated tests remain pending.
+
+## 11. Next implementation sequence
+
+1. Verify routing with deterministic automated tests and TypeScript/build checks.
+2. Connect the selected route to a server-only provider execution service.
+3. Implement and validate the agent planner without executing tools.
+4. Add the allow-listed tool registry and permission gates.
+5. Add bounded execution and result synthesis.
+6. Persist task lifecycle and safe events with ownership/RLS.
+7. Connect the Control Centre and then the Android app through authenticated, versioned APIs.
+
+Do not expose real provider credentials to client code. Do not add arbitrary provider URLs, shell execution, eval, or unrestricted network tools. Keep the Android application as the authority for Android device permissions.
