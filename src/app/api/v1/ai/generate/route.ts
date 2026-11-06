@@ -4,9 +4,9 @@ import { AIProviderError } from "@/server/ai/providers/types";
 import { parseAIGenerationInput } from "@/server/ai/routing/generation-request";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import { consumeAIRequest, recordAIOutputUsage } from "@/server/ai/usage/usage-limits";
+import { recordProviderObservation, type ProviderObservation } from "@/server/ai/usage/provider-observability";
 
 export const dynamic = "force-dynamic";
-
 const MAX_BODY_BYTES = 16_384;
 
 function privateJson(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
@@ -33,19 +33,12 @@ export async function POST(request: Request) {
   }
 
   let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return privateJson({ error: "Invalid JSON body." }, 400);
-  }
+  try { body = await request.json(); }
+  catch { return privateJson({ error: "Invalid JSON body." }, 400); }
 
   const parsed = parseAIGenerationInput(body);
   if (!parsed.ok) return privateJson({ error: parsed.error }, parsed.status);
-
-  const inputCharacters = parsed.value.messages.reduce(
-    (total, message) => total + message.content.length,
-    0,
-  );
+  const inputCharacters = parsed.value.messages.reduce((total, message) => total + message.content.length, 0);
 
   try {
     const decision = await consumeAIRequest(userId, inputCharacters);
@@ -63,18 +56,31 @@ export async function POST(request: Request) {
     return privateJson({ error: "AI generation is temporarily unavailable." }, 503);
   }
 
+  const observations: ProviderObservation[] = [];
   try {
-    const execution = await executeUserWorkflow(userId, parsed.value.workflow, {
-      messages: parsed.value.messages,
-      ...(parsed.value.temperature === undefined ? {} : { temperature: parsed.value.temperature }),
-      ...(parsed.value.maxOutputTokens === undefined ? {} : { maxOutputTokens: parsed.value.maxOutputTokens }),
-    });
+    const execution = await executeUserWorkflow(
+      userId,
+      parsed.value.workflow,
+      {
+        messages: parsed.value.messages,
+        ...(parsed.value.temperature === undefined ? {} : { temperature: parsed.value.temperature }),
+        ...(parsed.value.maxOutputTokens === undefined ? {} : { maxOutputTokens: parsed.value.maxOutputTokens }),
+      },
+      (attempt) => {
+        if (attempt.providerId !== "mock" && attempt.providerId !== "openai" && attempt.providerId !== "openrouter") return;
+        observations.push({
+          providerId: attempt.providerId,
+          outcome: attempt.outcome,
+          latencyMs: attempt.latencyMs,
+          ...(attempt.errorCode === undefined ? {} : { errorCode: attempt.errorCode }),
+        });
+      },
+    );
 
     const outputTokens = execution.result.usage?.outputTokens;
     if (typeof outputTokens === "number") {
-      try {
-        await recordAIOutputUsage(userId, outputTokens);
-      } catch (error) {
+      try { await recordAIOutputUsage(userId, outputTokens); }
+      catch (error) {
         console.error("[ai-generate] Usage accounting failed", {
           name: error instanceof Error ? error.name : "UnknownError",
         });
@@ -104,5 +110,14 @@ export async function POST(request: Request) {
       name: error instanceof Error ? error.name : "UnknownError",
     });
     return privateJson({ error: "AI generation is temporarily unavailable." }, 503);
+  } finally {
+    await Promise.all(observations.map(async (observation) => {
+      try { await recordProviderObservation(userId, observation); }
+      catch (error) {
+        console.error("[ai-generate] Provider observation recording failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
+    }));
   }
 }
