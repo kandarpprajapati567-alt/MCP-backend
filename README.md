@@ -4,7 +4,7 @@
 
 **Futuristic System** is an AI-powered personal computing platform. This repository contains the server-side backend and web-based Control Centre. It works alongside a separate Android application; it does not replace the app or directly control the phone.
 
-> **Development status:** Authenticated AI generation, encrypted per-user provider credentials, runtime OpenAI/OpenRouter registry, retryable fallback, distributed per-user quotas, and provider-readiness diagnostics are implemented. CI verifies typecheck, provider/routing/quota tests, and production build. Live vendor credentials/connectivity, full agent orchestration, and Android integration still require separate acceptance testing.
+> **Development status:** Authenticated AI generation, encrypted per-user provider credentials, runtime OpenAI/OpenRouter registry, retryable fallback, distributed per-user quotas, provider-readiness diagnostics, and an authenticated usage-status API are implemented. CI verifies typecheck, provider/routing/quota tests, and production build. Live vendor credentials/connectivity, full agent orchestration, and Android integration still require separate acceptance testing.
 
 ## Architecture
 
@@ -95,10 +95,11 @@ Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_
 | GET | `/api/v1/profile` | Read caller profile |
 | PATCH | `/api/v1/profile` | Update caller profile |
 | GET | `/api/v1/ai/providers/health` | Authenticated provider configuration/readiness check (no vendor call) |
+| GET | `/api/v1/ai/usage` | Authenticated current usage counters and reset boundaries |
 | POST | `/api/v1/ai/generate` | Authenticated workflow generation with server-side provider routing and quotas |
 | GET / PUT / DELETE | `/api/v1/ai/providers/keys` | List metadata, save encrypted key, or delete key |
 
-The provider health endpoint reports which adapters are configured and ready to be selected; it does not prove vendor network connectivity and does not spend provider credits. The provider-key endpoints store encrypted credentials and return metadata; they never expose plaintext keys. The generation endpoint accepts only allow-listed workflows and validated messages; provider/model selection stays server-side.
+The provider health endpoint reports which adapters are configured and ready to be selected; it does not prove vendor network connectivity and does not spend provider credits. The usage endpoint reports the authenticated user's current minute/day request counts, daily input characters, output tokens, limits, and reset timestamps. Both endpoints are private and non-cacheable. The provider-key endpoints store encrypted credentials and return metadata; they never expose plaintext keys. The generation endpoint accepts only allow-listed workflows and validated messages; provider/model selection stays server-side.
 
 ## AI execution foundation
 
@@ -112,9 +113,10 @@ The provider health endpoint reports which adapters are configured and ready to 
 - Authenticated generation endpoint with allow-listed workflows, server-side model selection, and retryable fallback.
 - Atomic Postgres quota reservation: 10 requests/minute, 200 requests/day, and 2,000,000 input characters/day per user. Rejected requests receive HTTP 429 and `Retry-After`.
 - Output-token usage is recorded after successful generation when the provider returns token usage metadata.
+- Authenticated usage-status RPC and API report current counters and reset boundaries; they do not call AI vendors.
 - Provider readiness diagnostics report configured adapters without contacting vendors or consuming credits.
 
-**Not yet complete:** live vendor verification with user-configured credentials; provider connectivity/latency monitoring; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, and Android device bridge.
+**Not yet complete:** live vendor verification with user-configured credentials; provider connectivity/latency monitoring; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, full Control Centre UI, and Android device bridge.
 
 ## Roadmap
 
@@ -129,6 +131,7 @@ The provider health endpoint reports which adapters are configured and ready to 
 - [x] Runtime provider registry and authenticated generation API
 - [x] Distributed per-user request and input-usage quotas
 - [x] Provider configuration/readiness diagnostics
+- [x] Authenticated AI usage-status API and RPC
 - [ ] Live-provider verification with user-configured credentials
 - [ ] Schema-validated AI planner
 - [ ] Allow-listed tool registry and permission gates
