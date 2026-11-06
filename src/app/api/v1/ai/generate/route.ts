@@ -68,11 +68,12 @@ export async function POST(request: Request) {
       },
       (attempt) => {
         if (attempt.providerId !== "mock" && attempt.providerId !== "openai" && attempt.providerId !== "openrouter") return;
+        const safeErrorCode = attempt.errorCode === "INVALID_REQUEST" ? "UNKNOWN" : attempt.errorCode;
         observations.push({
           providerId: attempt.providerId,
           outcome: attempt.outcome,
           latencyMs: attempt.latencyMs,
-          ...(attempt.errorCode === undefined ? {} : { errorCode: attempt.errorCode }),
+          ...(safeErrorCode === undefined ? {} : { errorCode: safeErrorCode }),
         });
       },
     );
