@@ -93,3 +93,41 @@ test("rejects malformed generation requests before network access", async () => 
   );
   assert.equal(called, false);
 });
+
+
+test("normalizes provider timeouts as retryable failures", async () => {
+  const provider = new OpenAICompatibleProvider(
+    "openai",
+    "test-secret-key",
+    1_000,
+    async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      }),
+  );
+
+  await assert.rejects(
+    () => provider.generate({ model: "gpt-test", messages: [{ role: "user", content: "hello" }] }),
+    (error: unknown) =>
+      error instanceof AIProviderError &&
+      error.code === "TIMEOUT" &&
+      error.retryable,
+  );
+});
+
+test("normalizes provider server errors as retryable failures", async () => {
+  const provider = new OpenAICompatibleProvider("openai", "test-secret-key", 5_000, async () =>
+    new Response("internal provider diagnostic", { status: 503 }),
+  );
+
+  await assert.rejects(
+    () => provider.generate({ model: "gpt-test", messages: [{ role: "user", content: "hello" }] }),
+    (error: unknown) =>
+      error instanceof AIProviderError &&
+      error.code === "PROVIDER_UNAVAILABLE" &&
+      error.retryable &&
+      !error.message.includes("internal provider diagnostic"),
+  );
+});
