@@ -1,12 +1,9 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parseAIUsageDecision, type AIUsageDecision } from "./usage-decision";
 
-export interface AIUsageDecision {
-  allowed: boolean;
-  retryAfterSeconds: number;
-  reason: string;
-}
+export type { AIUsageDecision } from "./usage-decision";
 
 /** Atomically reserves a request against per-user limits in shared Postgres storage. */
 export async function consumeAIRequest(
@@ -19,28 +16,10 @@ export async function consumeAIRequest(
     p_input_characters: inputCharacters,
   });
 
-  if (error || !Array.isArray(data) || data.length !== 1) {
+  if (error) {
     throw new Error("AI usage controls are unavailable.");
   }
-
-  const row = data[0] as {
-    allowed?: unknown;
-    retry_after_seconds?: unknown;
-    reason?: unknown;
-  };
-  if (
-    typeof row.allowed !== "boolean" ||
-    typeof row.retry_after_seconds !== "number" ||
-    typeof row.reason !== "string"
-  ) {
-    throw new Error("AI usage controls returned an invalid response.");
-  }
-
-  return {
-    allowed: row.allowed,
-    retryAfterSeconds: Math.max(0, Math.ceil(row.retry_after_seconds)),
-    reason: row.reason,
-  };
+  return parseAIUsageDecision(data);
 }
 
 export async function recordAIOutputUsage(userId: string, outputTokens: number) {
