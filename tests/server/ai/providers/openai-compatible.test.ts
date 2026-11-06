@@ -72,7 +72,7 @@ test("marks rate limits as retryable", async () => {
   );
 
   await assert.rejects(
-    () => provider.generate({ messages: [{ role: "user", content: "hello" }] }),
+    () => provider.generate({ model: "gpt-test", messages: [{ role: "user", content: "hello" }] }),
     (error: unknown) =>
       error instanceof AIProviderError &&
       error.code === "RATE_LIMITED" &&
