@@ -3,15 +3,16 @@ import { createClient } from "@/lib/supabase/server";
 import { AIProviderError } from "@/server/ai/providers/types";
 import { parseAIGenerationInput } from "@/server/ai/routing/generation-request";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
+import { consumeAIRequest, recordAIOutputUsage } from "@/server/ai/usage/usage-limits";
 
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 16_384;
 
-function privateJson(body: unknown, status = 200) {
+function privateJson(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "private, no-store" },
+    headers: { "Cache-Control": "private, no-store", ...extraHeaders },
   });
 }
 
@@ -41,12 +42,44 @@ export async function POST(request: Request) {
   const parsed = parseAIGenerationInput(body);
   if (!parsed.ok) return privateJson({ error: parsed.error }, parsed.status);
 
+  const inputCharacters = parsed.value.messages.reduce(
+    (total, message) => total + message.content.length,
+    0,
+  );
+
+  try {
+    const decision = await consumeAIRequest(userId, inputCharacters);
+    if (!decision.allowed) {
+      return privateJson(
+        { error: "AI usage limit reached. Please retry later.", code: decision.reason },
+        429,
+        { "Retry-After": String(Math.max(1, decision.retryAfterSeconds)) },
+      );
+    }
+  } catch (error) {
+    console.error("[ai-generate] Usage control unavailable", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+    return privateJson({ error: "AI generation is temporarily unavailable." }, 503);
+  }
+
   try {
     const execution = await executeUserWorkflow(userId, parsed.value.workflow, {
       messages: parsed.value.messages,
       ...(parsed.value.temperature === undefined ? {} : { temperature: parsed.value.temperature }),
       ...(parsed.value.maxOutputTokens === undefined ? {} : { maxOutputTokens: parsed.value.maxOutputTokens }),
     });
+
+    const outputTokens = execution.result.usage?.outputTokens;
+    if (typeof outputTokens === "number") {
+      try {
+        await recordAIOutputUsage(userId, outputTokens);
+      } catch (error) {
+        console.error("[ai-generate] Usage accounting failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
+    }
 
     return privateJson({
       workflow: execution.route.workflow,
