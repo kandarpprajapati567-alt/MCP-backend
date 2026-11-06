@@ -1,10 +1,9 @@
 import {NextResponse} from "next/server";
-import {createOwnerSession,verifyOwnerMasterToken} from "@/server/security/owner-auth";
+import {createOwnerSession,isSameOriginRequest,verifyOwnerMasterToken} from "@/server/security/owner-auth";
 export const dynamic="force-dynamic";
 export async function POST(request:Request){
  const headers={"Cache-Control":"no-store"};
- const origin=request.headers.get("origin");
- if(origin){try{if(new URL(origin).origin!==new URL(request.url).origin)return NextResponse.json({error:"Cross-origin request rejected."},{status:403,headers});}catch{return NextResponse.json({error:"Invalid request origin."},{status:403,headers});}}
+ if(!isSameOriginRequest(request))return NextResponse.json({error:"Cross-origin request rejected."},{status:403,headers});
  const length=Number(request.headers.get("content-length")??"0");if(length>8192)return NextResponse.json({error:"Request too large."},{status:413,headers});
  let body:unknown;try{body=await request.json();}catch{return NextResponse.json({error:"Invalid JSON body."},{status:400,headers});}
  const ownerToken=body&&typeof body==="object"&&!Array.isArray(body)?(body as Record<string,unknown>).ownerToken:undefined;
