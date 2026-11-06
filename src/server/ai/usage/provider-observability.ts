@@ -30,23 +30,29 @@ export async function getProviderObservations(userId: string) {
   if (!Array.isArray(data)) throw new Error("Provider observations returned an invalid response.");
 
   return data.map((row: Record<string, unknown>) => {
+    const requests = Number(row.requests_24h);
+    const successes = Number(row.successes_24h);
+    const failures = Number(row.failures_24h);
+    const averageLatencyMs = typeof row.average_latency_ms === "number"
+      ? row.average_latency_ms
+      : typeof row.average_latency_ms === "string" ? Number(row.average_latency_ms) : NaN;
     if (
       !["mock", "openai", "openrouter"].includes(String(row.provider_id)) ||
-      !Number.isSafeInteger(row.requests_24h) ||
-      !Number.isSafeInteger(row.successes_24h) ||
-      !Number.isSafeInteger(row.failures_24h) ||
-      typeof row.average_latency_ms !== "number" ||
-      !Number.isFinite(row.average_latency_ms) ||
+      !Number.isSafeInteger(requests) || requests < 0 ||
+      !Number.isSafeInteger(successes) || successes < 0 ||
+      !Number.isSafeInteger(failures) || failures < 0 ||
+      successes + failures !== requests ||
+      !Number.isFinite(averageLatencyMs) || averageLatencyMs < 0 ||
       typeof row.last_observed_at !== "string" ||
       !Number.isFinite(Date.parse(row.last_observed_at))
     ) throw new Error("Provider observations returned an invalid response.");
 
     return {
       providerId: row.provider_id,
-      requests24h: row.requests_24h,
-      successes24h: row.successes_24h,
-      failures24h: row.failures_24h,
-      averageLatencyMs: row.average_latency_ms,
+      requests24h: requests,
+      successes24h: successes,
+      failures24h: failures,
+      averageLatencyMs,
       lastObservedAt: row.last_observed_at,
     };
   });
