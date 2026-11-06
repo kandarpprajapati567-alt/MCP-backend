@@ -1,4 +1,3 @@
-import "server-only";
 import {createHmac,timingSafeEqual} from "node:crypto";
 export const PERSONAL_OWNER_ID="00000000-0000-4000-8000-000000000001";
 export const OWNER_SESSION_TTL_SECONDS=4*24*60*60;
