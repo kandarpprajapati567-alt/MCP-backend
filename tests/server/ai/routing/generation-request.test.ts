@@ -36,7 +36,12 @@ test("rejects empty, oversized, and malformed message arrays", () => {
 test("rejects aggregate message content above the request limit", () => {
   const result = parseAIGenerationInput({
     workflow: "research",
-    messages: [{ role: "user", content: "x".repeat(4000) }, { role: "assistant", content: "y".repeat(4000) }, { role: "user", content: "z".repeat(4001) }],
+    messages: [
+      { role: "user", content: "x".repeat(4000) },
+      { role: "assistant", content: "y".repeat(4000) },
+      { role: "user", content: "z".repeat(4000) },
+      { role: "assistant", content: "w".repeat(4000) },
+    ],
   });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.status, 413);
