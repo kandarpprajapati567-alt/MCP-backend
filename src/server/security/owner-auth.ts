@@ -4,6 +4,18 @@ export const OWNER_SESSION_TTL_SECONDS=4*24*60*60;
 const SESSION_VERSION="fs1";
 function secret(){const value=process.env.FS_OWNER_TOKEN;if(!value||value.length<32)throw new Error("Owner authentication is not configured.");return value;}
 function sign(payload:string){return createHmac("sha256",secret()).update(payload).digest("base64url");}
+export function isSameOriginRequest(request:Request):boolean{
+ const originHeader=request.headers.get("origin");
+ if(!originHeader)return true;
+ try{
+  const origin=new URL(originHeader);
+  const forwardedHost=request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host=(forwardedHost||request.headers.get("host")||new URL(request.url).host).toLowerCase();
+  const forwardedProto=request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol=(forwardedProto||new URL(request.url).protocol.replace(":","")).toLowerCase();
+  return origin.host.toLowerCase()===host&&origin.protocol===protocol+":";
+ }catch{return false;}
+}
 export function verifyOwnerMasterToken(value:unknown):boolean{
  if(typeof value!=="string"||value.length<32)return false;
  const expected=Buffer.from(secret(),"utf8"),supplied=Buffer.from(value,"utf8");
@@ -27,8 +39,6 @@ export function verifyOwnerSession(value:string,now=Date.now()):boolean{
 }
 export function verifyOwnerRequest(request:Request):string|null{
  const supplied=request.headers.get("x-fs-owner-token")??request.headers.get("authorization")?.replace(/^Bearer\\s+/i,"")??"";
- if(!verifyOwnerSession(supplied))return null;
- const origin=request.headers.get("origin");
- if(origin){try{if(new URL(origin).origin!==new URL(request.url).origin)return null;}catch{return null;}}
+ if(!verifyOwnerSession(supplied)||!isSameOriginRequest(request))return null;
  return PERSONAL_OWNER_ID;
 }
