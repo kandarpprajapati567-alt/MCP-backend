@@ -109,16 +109,15 @@ Terminal alternatives: `failed`, `cancelled`. State transitions must be validate
 - Provider contract and deterministic mock adapter exist under `src/server/ai/providers/`.
 - Authenticated mock provider health endpoint exists at `GET /api/v1/ai/providers/health`.
 - Encrypted provider credential storage exists under `src/server/ai/secrets/` and `/api/v1/ai/providers/keys`. Save/list verification is not equivalent to successful decryption and live vendor generation.
-- Initial workflow policies and a capability-aware route resolver exist under `src/server/ai/routing/`. These currently default to the mock provider; real provider execution, retry behavior, and automated tests remain pending.
+- Initial workflow policies and a capability-aware route resolver exist under `src/server/ai/routing/`.
+- The schema-validated planner foundation exists under `src/server/agent/`: it accepts bounded task text, requests JSON from a provider, and strictly validates a versioned plan with at most eight steps. It does not execute tools.
 
-## 11. Next implementation sequence
+## 11. Current next implementation sequence
 
-1. Verify routing with deterministic automated tests and TypeScript/build checks.
-2. Connect the selected route to a server-only provider execution service.
-3. Implement and validate the agent planner without executing tools.
-4. Add the allow-listed tool registry and permission gates.
-5. Add bounded execution and result synthesis.
-6. Persist task lifecycle and safe events with ownership/RLS.
-7. Connect the Control Centre and then the Android app through authenticated, versioned APIs.
+1. Add the allow-listed tool registry with strict argument schemas and explicit permission requirements.
+2. Add permission decisions and approval gates; no model-generated tool may execute without registry membership and authorization.
+3. Add bounded execution and evidence-linked result synthesis.
+4. Persist task lifecycle and safe events with ownership/RLS.
+5. Connect the Control Centre and then the Android app through authenticated, versioned APIs.
 
 Do not expose real provider credentials to client code. Do not add arbitrary provider URLs, shell execution, eval, or unrestricted network tools. Keep the Android application as the authority for Android device permissions.
