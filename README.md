@@ -4,7 +4,7 @@
 
 **Futuristic System** is an AI-powered personal computing platform. This repository contains the server-side backend and web-based Control Centre. It works alongside a separate Android application; it does not replace the app or directly control the phone.
 
-> **Development status:** Authenticated AI generation, encrypted per-user provider credentials, runtime OpenAI/OpenRouter registry, retryable fallback, distributed per-user quotas, provider-readiness diagnostics, and an authenticated usage-status API are implemented. CI verifies typecheck, provider/routing/quota tests, and production build. Live vendor credentials/connectivity, full agent orchestration, and Android integration still require separate acceptance testing.
+> **Development status:** Authenticated AI generation, encrypted per-user provider credentials, runtime OpenAI/OpenRouter registry, retryable fallback, distributed per-user quotas, provider-readiness diagnostics, authenticated usage status, and passive per-provider latency/outcome monitoring are implemented. CI verifies typecheck, provider/routing/quota tests, and production build. Live vendor credentials/connectivity, full agent orchestration, and Android integration still require separate acceptance testing.
 
 ## Architecture
 
@@ -94,12 +94,12 @@ Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_
 | GET | `/api/v1/auth/me` | Validate current session |
 | GET | `/api/v1/profile` | Read caller profile |
 | PATCH | `/api/v1/profile` | Update caller profile |
-| GET | `/api/v1/ai/providers/health` | Authenticated provider configuration/readiness check (no vendor call) |
+| GET | `/api/v1/ai/providers/health` | Authenticated readiness plus last-24-hour passive provider observations (no vendor call) |
 | GET | `/api/v1/ai/usage` | Authenticated current usage counters and reset boundaries |
 | POST | `/api/v1/ai/generate` | Authenticated workflow generation with server-side provider routing and quotas |
 | GET / PUT / DELETE | `/api/v1/ai/providers/keys` | List metadata, save encrypted key, or delete key |
 
-The provider health endpoint reports which adapters are configured and ready to be selected; it does not prove vendor network connectivity and does not spend provider credits. The usage endpoint reports the authenticated user's current minute/day request counts, daily input characters, output tokens, limits, and reset timestamps. Both endpoints are private and non-cacheable. The provider-key endpoints store encrypted credentials and return metadata; they never expose plaintext keys. The generation endpoint accepts only allow-listed workflows and validated messages; provider/model selection stays server-side.
+The provider health endpoint reports configured adapters and aggregates observations from actual generation attempts over the last 24 hours (request count, success/failure count, and average latency). It does not run an active connectivity test, prove current vendor availability, or spend provider credits. Observation records are private to the authenticated user and are pruned after 30 days during subsequent writes. The usage endpoint reports the authenticated user's current minute/day request counts, daily input characters, output tokens, limits, and reset timestamps. Both endpoints are private and non-cacheable. The provider-key endpoints store encrypted credentials and return metadata; they never expose plaintext keys. The generation endpoint accepts only allow-listed workflows and validated messages; provider/model selection stays server-side.
 
 ## AI execution foundation
 
@@ -115,8 +115,10 @@ The provider health endpoint reports which adapters are configured and ready to 
 - Output-token usage is recorded after successful generation when the provider returns token usage metadata.
 - Authenticated usage-status RPC and API report current counters and reset boundaries; they do not call AI vendors.
 - Provider readiness diagnostics report configured adapters without contacting vendors or consuming credits.
+- Passive provider observability records per-attempt latency and success/failure, including failed primary attempts before fallback; monitoring-write failures never change the generation result.
+- The provider health response includes per-user, last-24-hour aggregates. Raw observation records are private and have a 30-day opportunistic retention window.
 
-**Not yet complete:** live vendor verification with user-configured credentials; provider connectivity/latency monitoring; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, full Control Centre UI, and Android device bridge.
+**Not yet complete:** live vendor verification with user-configured credentials; active provider connectivity checks; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, full Control Centre UI, and Android device bridge.
 
 ## Roadmap
 
@@ -139,7 +141,8 @@ The provider health endpoint reports which adapters are configured and ready to 
 - [ ] Task persistence, lifecycle, and events
 - [ ] Full Control Centre integration
 - [ ] Android app integration and secure device capability bridge
-- [ ] Provider connectivity and latency monitoring
+- [x] Passive provider latency/outcome monitoring
+- [ ] Explicit opt-in active provider connectivity checks
 - [ ] Production security, CI, and deployment verification
 - [ ] Public release readiness (including an explicit open-source license)
 
