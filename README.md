@@ -4,7 +4,7 @@
 
 **Futuristic System** is an AI-powered personal computing platform. This repository contains the server-side backend and web-based Control Centre. It works alongside a separate Android application; it does not replace the app or directly control the phone.
 
-> **Development status:** Authentication, health checks, encrypted provider-key storage, capability-aware model routing, retryable fallback execution, and an initial OpenAI-compatible adapter for OpenAI and OpenRouter are present. Adapter tests, live provider execution, complete agent orchestration, and Android integration are not yet verified or complete.
+> **Development status:** Authenticated AI generation, encrypted per-user provider credentials, runtime OpenAI/OpenRouter registry, retryable fallback, distributed per-user quotas, and provider-readiness diagnostics are implemented. CI verifies typecheck, provider/routing/quota tests, and production build. Live vendor credentials/connectivity, full agent orchestration, and Android integration still require separate acceptance testing.
 
 ## Architecture
 
@@ -94,10 +94,11 @@ Never commit `.env.local` or real credentials. Never prefix a secret with `NEXT_
 | GET | `/api/v1/auth/me` | Validate current session |
 | GET | `/api/v1/profile` | Read caller profile |
 | PATCH | `/api/v1/profile` | Update caller profile |
-| GET | `/api/v1/ai/providers/health` | Authenticated mock-provider check |
+| GET | `/api/v1/ai/providers/health` | Authenticated provider configuration/readiness check (no vendor call) |
+| POST | `/api/v1/ai/generate` | Authenticated workflow generation with server-side provider routing and quotas |
 | GET / PUT / DELETE | `/api/v1/ai/providers/keys` | List metadata, save encrypted key, or delete key |
 
-The provider health endpoint exercises the mock provider only. The provider-key endpoints store encrypted credentials and return metadata; they do not expose plaintext keys.
+The provider health endpoint reports which adapters are configured and ready to be selected; it does not prove vendor network connectivity and does not spend provider credits. The provider-key endpoints store encrypted credentials and return metadata; they never expose plaintext keys. The generation endpoint accepts only allow-listed workflows and validated messages; provider/model selection stays server-side.
 
 ## AI execution foundation
 
@@ -107,8 +108,13 @@ The provider health endpoint exercises the mock provider only. The provider-key 
 - AES-256-GCM encrypted provider credential storage.
 - Server-only provider credential loader.
 - Initial OpenAI-compatible Chat Completions adapter for OpenAI and OpenRouter, with fixed endpoints, bounded input, timeout handling, and normalized errors.
+- Request-scoped runtime registry loads only the authenticated user's encrypted OpenAI/OpenRouter credentials.
+- Authenticated generation endpoint with allow-listed workflows, server-side model selection, and retryable fallback.
+- Atomic Postgres quota reservation: 10 requests/minute, 200 requests/day, and 2,000,000 input characters/day per user. Rejected requests receive HTTP 429 and `Retry-After`.
+- Output-token usage is recorded after successful generation when the provider returns token usage metadata.
+- Provider readiness diagnostics report configured adapters without contacting vendors or consuming credits.
 
-**Not yet complete:** adapter regression tests and live vendor verification; connecting decrypted credentials to a runtime provider registry; authenticated end-to-end generation route; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, and Android device bridge.
+**Not yet complete:** live vendor verification with user-configured credentials; provider connectivity/latency monitoring; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, and Android device bridge.
 
 ## Roadmap
 
@@ -119,14 +125,18 @@ The provider health endpoint exercises the mock provider only. The provider-key 
 - [x] Capability-aware workflow/model routing and fallback foundation
 - [x] Bounded, provider-agnostic executor foundation
 - [x] Initial OpenAI/OpenRouter-compatible adapter implementation
-- [ ] Provider adapter tests and live-provider verification
-- [ ] Runtime provider registry and authenticated generation API
+- [x] Provider adapter regression tests (including timeout and outage normalization)
+- [x] Runtime provider registry and authenticated generation API
+- [x] Distributed per-user request and input-usage quotas
+- [x] Provider configuration/readiness diagnostics
+- [ ] Live-provider verification with user-configured credentials
 - [ ] Schema-validated AI planner
 - [ ] Allow-listed tool registry and permission gates
 - [ ] Result synthesizer
 - [ ] Task persistence, lifecycle, and events
 - [ ] Full Control Centre integration
 - [ ] Android app integration and secure device capability bridge
+- [ ] Provider connectivity and latency monitoring
 - [ ] Production security, CI, and deployment verification
 - [ ] Public release readiness (including an explicit open-source license)
 
