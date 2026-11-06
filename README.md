@@ -116,6 +116,7 @@ The provider health endpoint reports configured adapters and aggregates observat
 - Authenticated usage-status RPC and API report current counters and reset boundaries; they do not call AI vendors.
 - Provider readiness diagnostics report configured adapters without contacting vendors or consuming credits.
 - Passive provider observability records per-attempt latency and success/failure, including failed primary attempts before fallback; monitoring-write failures never change the generation result.
+- Schema-validated planner foundation converts a task into a bounded versioned plan (1–8 steps); model output is parsed strictly and rejected on unknown fields or invalid values. Planning does not execute tools.
 - The provider health response includes per-user, last-24-hour aggregates. Raw observation records are private and have a 30-day opportunistic retention window.
 
 **Not yet complete:** live vendor verification with user-configured credentials; active provider connectivity checks; planner, validated tool registry/permission gates, result synthesizer, task persistence/events, full Control Centre UI, and Android device bridge.
@@ -135,7 +136,7 @@ The provider health endpoint reports configured adapters and aggregates observat
 - [x] Provider configuration/readiness diagnostics
 - [x] Authenticated AI usage-status API and RPC
 - [ ] Live-provider verification with user-configured credentials
-- [ ] Schema-validated AI planner
+- [x] Schema-validated AI planner foundation (plan generation + strict schema validation; no tool execution)
 - [ ] Allow-listed tool registry and permission gates
 - [ ] Result synthesizer
 - [ ] Task persistence, lifecycle, and events
