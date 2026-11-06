@@ -1,145 +1,54 @@
 "use client";
-
-import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Card, CardHeader } from "@/components/ui/Card";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-
-type User = { id: string; email: string | null };
-type Profile = { id: string; display_name: string | null; avatar_url: string | null; created_at: string; updated_at: string };
-
-export default function DashboardPage() {
-  const [user,setUser]=useState<User|null>(null);
-  const [profile,setProfile]=useState<Profile|null>(null);
-  const [displayName,setDisplayName]=useState("");
-  const [avatarUrl,setAvatarUrl]=useState("");
-  const [loading,setLoading]=useState(true);
-  const [saving,setSaving]=useState(false);
-  const [message,setMessage]=useState("");
-  const [error,setError]=useState("");
-  const [mockPrompt,setMockPrompt]=useState("Explain the purpose of an AI provider interface in one sentence.");
-  const [mockLoading,setMockLoading]=useState(false);
-  const [mockResult,setMockResult]=useState("");
-  const [mockError,setMockError]=useState("");
-  const [providerName,setProviderName]=useState("openai");
-  const [providerApiKey,setProviderApiKey]=useState("");
-  const [providerKeys,setProviderKeys]=useState<Array<{provider:string;created_at:string;updated_at:string}>>([]);
-  const [providerLoading,setProviderLoading]=useState(false);
-  const [providerSaving,setProviderSaving]=useState(false);
-  const [providerMessage,setProviderMessage]=useState("");
-  const [providerError,setProviderError]=useState("");
-
-  async function loadProfile() {
-    setLoading(true);setError("");
-    try {
-      const authResponse=await fetch("/api/v1/auth/me",{cache:"no-store",credentials:"same-origin"});
-      const auth=await authResponse.json();
-      if(!authResponse.ok||!auth.user){setUser(null);setProfile(null);setError("Please sign in to view your profile.");return;}
-      setUser(auth.user);
-      const profileResponse=await fetch("/api/v1/profile",{cache:"no-store",credentials:"same-origin"});
-      const result=await profileResponse.json();
-      if(!profileResponse.ok)throw new Error(result.error??"Could not load profile.");
-      const p=result.profile as Profile|null;setProfile(p);setDisplayName(p?.display_name??"");setAvatarUrl(p?.avatar_url??"");
-    } catch(e){setError(e instanceof Error?e.message:"Could not load your profile.");}
-    finally{setLoading(false);}
-  }
-  useEffect(()=>{void loadProfile();},[]);
-
-  async function loadProviderKeys() {
-    setProviderLoading(true);setProviderError("");
-    try {
-      const response=await fetch("/api/v1/ai/providers/keys",{cache:"no-store",credentials:"same-origin"});
-      const result=await response.json();if(!response.ok)throw new Error(result.error??"Could not load provider settings.");
-      setProviderKeys(result.providers??[]);
-    } catch(e){setProviderError(e instanceof Error?e.message:"Could not load provider settings.");}
-    finally{setProviderLoading(false);}
-  }
-  useEffect(()=>{if(user)void loadProviderKeys();else setProviderKeys([]);},[user]);
-
-  async function saveProfile(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault();setSaving(true);setMessage("");setError("");
-    try {
-      const response=await fetch("/api/v1/profile",{method:"PATCH",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({display_name:displayName.trim()||null,avatar_url:avatarUrl.trim()||null})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error??"Could not save profile.");
-      setProfile(result.profile);setDisplayName(result.profile?.display_name??"");setAvatarUrl(result.profile?.avatar_url??"");setMessage("Profile saved successfully.");
-    } catch(e){setError(e instanceof Error?e.message:"Could not save profile.");}
-    finally{setSaving(false);}
-  }
-
-  async function saveProviderKey(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault();setProviderSaving(true);setProviderMessage("");setProviderError("");
-    try {
-      const response=await fetch("/api/v1/ai/providers/keys",{method:"PUT",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider:providerName,apiKey:providerApiKey})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error??"Could not save provider key.");
-      setProviderApiKey("");setProviderMessage(`${providerName} key encrypted and saved. The key itself is never displayed.`);await loadProviderKeys();
-    } catch(e){setProviderError(e instanceof Error?e.message:"Could not save provider key.");}
-    finally{setProviderSaving(false);}
-  }
-
-  async function deleteProviderKey(provider:string) {
-    if(!window.confirm(`Remove the saved ${provider} API key?`))return;
-    setProviderMessage("");setProviderError("");
-    try {
-      const response=await fetch("/api/v1/ai/providers/keys",{method:"DELETE",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error??"Could not remove provider key.");
-      setProviderMessage(`${provider} key removed.`);await loadProviderKeys();
-    } catch(e){setProviderError(e instanceof Error?e.message:"Could not remove provider key.");}
-  }
-
-  async function testMockAI(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault();setMockLoading(true);setMockResult("");setMockError("");
-    try {
-      const response=await fetch("/api/v1/ai/providers/mock/test",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:mockPrompt.trim()})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error?.message??result.error??"Mock AI test failed.");
-      setMockResult(result.result?.text??result.output?.text??result.text??"Mock AI responded successfully.");
-    } catch(e){setMockError(e instanceof Error?e.message:"Mock AI test failed.");}
-    finally{setMockLoading(false);}
-  }
-
-  async function signOut() {
-    setError("");setMessage("");
-    try {
-      const response=await fetch("/api/v1/auth/logout",{method:"POST",credentials:"same-origin",cache:"no-store"});
-      if(!response.ok)throw new Error("Sign out failed. Please retry.");window.location.href="/login";
-    } catch(e){setError(e instanceof Error?e.message:"Sign out failed.");}
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4"><PageHeader title="Dashboard" description="Account, profile, and AI provider controls" />{user&&<button onClick={signOut} type="button" className="rounded-xl border border-border px-4 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white">Sign out</button>}</div>
-      <Card><CardHeader title="Account" description="Authenticated session status" />
-        {loading?<p className="text-sm text-zinc-400">Checking secure session…</p>:user?<div className="flex flex-wrap items-center gap-3"><StatusBadge status="ok" /><div className="min-w-0"><p className="truncate text-sm text-zinc-200">{user.email}</p><p className="truncate text-xs text-zinc-500">ID: {user.id}</p></div></div>:<div className="space-y-3"><StatusBadge status="not_configured" /><p className="text-sm text-zinc-400">You are not signed in.</p><Link href="/login" className="inline-flex rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-300">Go to login</Link></div>}
-      </Card>
-      {user&&<>
-        <Card><CardHeader title="Mock AI provider test" description="Authenticated endpoint. Deterministic mock — no API key required." />
-          <form onSubmit={testMockAI} className="space-y-4"><div><label htmlFor="mock-ai-prompt" className="mb-1.5 block text-sm font-medium text-zinc-300">Test prompt</label><textarea id="mock-ai-prompt" value={mockPrompt} onChange={e=>setMockPrompt(e.target.value)} maxLength={1000} required rows={3} className="w-full rounded-xl border border-border bg-zinc-900/80 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-400 focus:outline-none" /></div><button type="submit" disabled={mockLoading||!mockPrompt.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-300 disabled:opacity-60">{mockLoading?"Testing…":"Run Mock AI test"}</button></form>
-          {mockError&&<p role="alert" className="mt-4 rounded-xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">{mockError}</p>}
-          {mockResult&&<div role="status" className="mt-4 rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Mock response</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{mockResult}</p></div>}
-        </Card>
-        <Card><CardHeader title="AI provider API keys" description="Keys are encrypted on the server and never returned to the browser after saving." />
-          <form onSubmit={saveProviderKey} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2">
-            <div><label htmlFor="provider-name" className="mb-1.5 block text-sm font-medium text-zinc-300">Provider</label><select id="provider-name" value={providerName} onChange={e=>setProviderName(e.target.value)} className="w-full rounded-xl border border-border bg-zinc-900/80 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option><option value="openrouter">OpenRouter</option></select></div>
-            <div><label htmlFor="provider-api-key" className="mb-1.5 block text-sm font-medium text-zinc-300">API key</label><input id="provider-api-key" type="password" value={providerApiKey} onChange={e=>setProviderApiKey(e.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" autoCapitalize="none" spellCheck={false} required placeholder="Paste provider API key" className="w-full rounded-xl border border-border bg-zinc-900/80 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-400 focus:outline-none" /></div>
-          </div><p className="text-xs text-zinc-500">Saved keys cannot be viewed again. Saving replaces the existing key for this provider.</p><button type="submit" disabled={providerSaving||!providerApiKey.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-300 disabled:opacity-60">{providerSaving?"Encrypting and saving…":"Save provider key"}</button></form>
-          <div className="mt-6 border-t border-border pt-5"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-white">Saved providers</h3><button type="button" onClick={loadProviderKeys} disabled={providerLoading} className="text-xs text-cyan-400 transition hover:text-cyan-300 disabled:opacity-60">{providerLoading?"Refreshing…":"Refresh"}</button></div>
-            {providerLoading?<p className="mt-3 text-sm text-zinc-400">Loading saved providers…</p>:providerKeys.length===0?<p className="mt-3 text-sm text-zinc-500">No provider keys saved yet.</p>:<ul className="mt-3 space-y-2">{providerKeys.map(item=><li key={item.provider} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-zinc-900/50 px-4 py-3"><div><p className="text-sm font-medium capitalize text-zinc-200">{item.provider}</p><p className="mt-0.5 text-xs text-zinc-500">Saved {new Date(item.updated_at).toLocaleString()}</p></div><button type="button" onClick={()=>void deleteProviderKey(item.provider)} className="rounded-lg border border-red-900/50 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-950/40">Remove</button></li>)}</ul>}
-          </div>
-          {providerError&&<p role="alert" className="mt-4 rounded-xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">{providerError}</p>}
-          {providerMessage&&<p role="status" className="mt-4 rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300">{providerMessage}</p>}
-        </Card>
-        <Card><CardHeader title="Profile" description="Linked to your authenticated account. Only your own profile can be changed." />
-          <form onSubmit={saveProfile} className="space-y-5"><div><label htmlFor="display-name" className="mb-1.5 block text-sm font-medium text-zinc-300">Display name</label><input id="display-name" value={displayName} onChange={e=>setDisplayName(e.target.value)} maxLength={80} placeholder="Your name (optional)" className="w-full rounded-xl border border-border bg-zinc-900/80 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-400 focus:outline-none" /><p className="mt-1 text-xs text-zinc-500">Up to 80 characters.</p></div>
-            <div><label htmlFor="avatar-url" className="mb-1.5 block text-sm font-medium text-zinc-300">Avatar image URL</label><input id="avatar-url" type="url" value={avatarUrl} onChange={e=>setAvatarUrl(e.target.value)} maxLength={2048} placeholder="https://example.com/avatar.png (optional)" className="w-full rounded-xl border border-border bg-zinc-900/80 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-400 focus:outline-none" /><p className="mt-1 text-xs text-zinc-500">Use an HTTP or HTTPS image URL.</p></div>
-            {avatarUrl&&<div className="flex items-center gap-3"><img src={avatarUrl} alt="Profile avatar preview" referrerPolicy="no-referrer" className="h-12 w-12 rounded-full border border-border object-cover" onError={e=>{e.currentTarget.style.visibility="hidden";}} /><span className="text-xs text-zinc-500">Avatar preview</span></div>}
-            {error&&<p role="alert" className="rounded-xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">{error}</p>}
-            {message&&<p role="status" className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300">{message}</p>}
-            <button type="submit" disabled={saving||loading} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-300 disabled:opacity-60">{saving?"Saving…":"Save profile"}</button>
-            {profile?.updated_at&&<p className="text-xs text-zinc-600">Last updated: {new Date(profile.updated_at).toLocaleString()}</p>}
-          </form>
-        </Card>
-      </>}
-      {!user&&error&&<p role="alert" className="rounded-xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">{error}</p>}
-    </div>
-  );
+import {useCallback,useEffect,useState} from "react";
+import {PageHeader} from "@/components/ui/PageHeader";
+type Task={id:string;status:string;task:string;result:string|null;created_at:string};
+type Provider={provider:string;updated_at:string};
+export default function DashboardPage(){
+ const [token,setToken]=useState("");const [connected,setConnected]=useState(false);const [connecting,setConnecting]=useState(false);const [error,setError]=useState("");const [message,setMessage]=useState("");
+ const [task,setTask]=useState("");const [tasks,setTasks]=useState<Task[]>([]);const [running,setRunning]=useState(false);const [result,setResult]=useState("");
+ const [provider,setProvider]=useState("openai");const [apiKey,setApiKey]=useState("");const [providers,setProviders]=useState<Provider[]>([]);
+ const api=useCallback(async(path:string,init:RequestInit={})=>fetch(path,{...init,cache:"no-store",headers:{...(init.headers??{}),"x-fs-owner-token":token,...(init.body?{"Content-Type":"application/json"}:{})}}),[token]);
+ const refresh=useCallback(async()=>{
+  const [t,p]=await Promise.all([api("/api/v1/agent/tasks"),api("/api/v1/ai/providers/keys")]);
+  if(!t.ok||!p.ok)throw new Error("Owner access expired. Reconnect with your private token.");
+  const td=await t.json();const pd=await p.json();setTasks(td.tasks??[]);setProviders(pd.providers??[]);
+ },[api]);
+ async function connect(value=token){
+  setConnecting(true);setError("");setMessage("");
+  try{const response=await fetch("/api/v1/tools",{headers:{"x-fs-owner-token":value},cache:"no-store"});if(!response.ok)throw new Error("Token invalid or backend not ready.");sessionStorage.setItem("fs_owner_token",value);setToken(value);setConnected(true);setMessage("Private owner connection established.");}
+  catch(e){setConnected(false);setError(e instanceof Error?e.message:"Could not connect.");}
+  finally{setConnecting(false);}
+ }
+ useEffect(()=>{const saved=sessionStorage.getItem("fs_owner_token");if(saved){setToken(saved);void (async()=>{try{const r=await fetch("/api/v1/tools",{headers:{"x-fs-owner-token":saved},cache:"no-store"});if(r.ok){setConnected(true);}else{sessionStorage.removeItem("fs_owner_token");}}catch{}})();}},[]);
+ useEffect(()=>{if(connected){void refresh().catch(e=>{setError(e.message);setConnected(false);});}},[connected,refresh]);
+ async function runTask(e:React.FormEvent){e.preventDefault();setRunning(true);setError("");setResult("");try{const r=await api("/api/v1/agent/tasks",{method:"POST",body:JSON.stringify({task})});const d=await r.json();if(!r.ok)throw new Error(d.error??"Task failed.");setResult(d.result??"Completed.");setTask("");await refresh();}catch(e){setError(e instanceof Error?e.message:"Task failed.");}finally{setRunning(false);}}
+ async function saveKey(e:React.FormEvent){e.preventDefault();setError("");setMessage("");try{const r=await api("/api/v1/ai/providers/keys",{method:"PUT",body:JSON.stringify({provider,apiKey})});const d=await r.json();if(!r.ok)throw new Error(d.error??"Could not save key.");setApiKey("");setMessage(provider+" key encrypted and saved.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Could not save key.");}}
+ async function removeKey(name:string){if(!window.confirm("Remove saved "+name+" key?"))return;try{const r=await api("/api/v1/ai/providers/keys",{method:"DELETE",body:JSON.stringify({provider:name})});if(!r.ok)throw new Error("Could not remove key.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Could not remove key.");}}
+ function disconnect(){sessionStorage.removeItem("fs_owner_token");setToken("");setConnected(false);setTasks([]);setProviders([]);}
+ return <div className="mx-auto max-w-5xl space-y-6">
+  <PageHeader title="Personal Control Centre" description="Single-owner AI backend · no account registration or sign-in" />
+  <section className="rounded-2xl border border-border bg-zinc-950/60 p-5 space-y-3">
+   <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-white">Private backend access</h2><span className={connected?"text-emerald-400 text-xs":"text-amber-400 text-xs"}>{connected?"Connected":"Not connected"}</span></div>
+   {!connected?<><label className="block text-sm text-zinc-400" htmlFor="owner-token">Owner token (stored only for this browser tab session)</label><input id="owner-token" type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your private owner token" className="w-full rounded-xl border border-border bg-zinc-900 px-4 py-3 text-sm text-white"/><button disabled={connecting||token.length<32} onClick={()=>void connect()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">{connecting?"Connecting…":"Connect securely"}</button></>:<button onClick={disconnect} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Disconnect this session</button>}
+   <p className="text-xs text-zinc-500">Never share this token. API requests require it; browser storage clears when this tab session ends.</p>
+  </section>
+  {connected&&<>
+   <section className="rounded-2xl border border-border bg-zinc-950/60 p-5 space-y-4">
+    <h2 className="font-semibold text-white">AI Agent</h2><p className="text-sm text-zinc-400">Task → validated plan → allow-listed local tools → synthesis → saved task history.</p>
+    <form onSubmit={runTask} className="space-y-3"><textarea value={task} onChange={e=>setTask(e.target.value)} maxLength={4000} rows={4} placeholder="Describe a task… e.g. Count words in this text: Futuristic System backend" className="w-full rounded-xl border border-border bg-zinc-900 px-4 py-3 text-sm text-white"/><button disabled={running||!task.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">{running?"Executing…":"Run agent task"}</button></form>
+    {result&&<pre className="whitespace-pre-wrap rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-200">{result}</pre>}
+   </section>
+   <section className="rounded-2xl border border-border bg-zinc-950/60 p-5 space-y-4">
+    <h2 className="font-semibold text-white">AI Providers</h2><p className="text-sm text-zinc-400">Credentials are encrypted server-side and never returned.</p>
+    <form onSubmit={saveKey} className="grid gap-3 sm:grid-cols-[150px_1fr_auto]"><select value={provider} onChange={e=>setProvider(e.target.value)} className="rounded-xl border border-border bg-zinc-900 px-3 py-3 text-sm text-white"><option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option><option value="anthropic">Anthropic (storage only)</option><option value="google">Google (storage only)</option></select><input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" placeholder="Provider API key" className="rounded-xl border border-border bg-zinc-900 px-3 py-3 text-sm text-white"/><button disabled={!apiKey.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">Save encrypted key</button></form>
+    <div className="space-y-2">{providers.map(p=><div key={p.provider} className="flex items-center justify-between rounded-lg border border-border px-3 py-2"><span className="text-sm capitalize text-zinc-200">{p.provider} · saved</span><button onClick={()=>void removeKey(p.provider)} className="text-xs text-red-300">Remove</button></div>)}{providers.length===0&&<p className="text-xs text-zinc-500">No provider keys saved. Local safe tools still work.</p>}</div>
+   </section>
+   <section className="rounded-2xl border border-border bg-zinc-950/60 p-5 space-y-3">
+    <div className="flex items-center justify-between"><h2 className="font-semibold text-white">Task history</h2><button onClick={()=>void refresh()} className="text-xs text-cyan-300">Refresh</button></div>
+    {tasks.length===0?<p className="text-sm text-zinc-500">No tasks yet.</p>:tasks.map(t=><article key={t.id} className="rounded-xl border border-border p-3"><div className="flex justify-between gap-3"><p className="text-sm text-zinc-200">{t.task}</p><span className="text-xs text-emerald-300">{t.status}</span></div>{t.result&&<pre className="mt-2 whitespace-pre-wrap text-xs text-zinc-400">{t.result}</pre>}<p className="mt-2 text-[10px] text-zinc-600">{new Date(t.created_at).toLocaleString()}</p></article>)}
+   </section>
+  </>}
+  {error&&<p role="alert" className="rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
+  {message&&<p role="status" className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}
+ </div>;
 }
