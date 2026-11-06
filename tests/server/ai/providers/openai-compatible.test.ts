@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { OpenAICompatibleProvider } from "../../../../src/server/ai/providers/openai-compatible";
+import { OpenAICompatibleProvider } from "../../../../src/server/ai/providers/openai-compatible-core";
 import { AIProviderError } from "../../../../src/server/ai/providers/types";
 
 test("sends a chat completion request to the fixed OpenAI endpoint", async () => {
@@ -58,7 +58,7 @@ test("normalizes authentication failures without exposing provider response bodi
   );
 
   await assert.rejects(
-    () => provider.generate({ messages: [{ role: "user", content: "hello" }] }),
+    () => provider.generate({ model: "gpt-test", messages: [{ role: "user", content: "hello" }] }),
     (error: unknown) =>
       error instanceof AIProviderError &&
       error.code === "AUTHENTICATION_FAILED" &&
