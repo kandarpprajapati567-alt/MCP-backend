@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createMockAIProvider } from "@/server/ai/providers/mock";
+import { createRuntimeProviderRegistry } from "@/server/ai/providers/runtime-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +12,9 @@ function privateJson(body: unknown, status = 200) {
 }
 
 /**
- * Authenticated smoke test for the provider adapter contract.
- * This endpoint deliberately uses the mock provider: it does not contact
- * vendors, read stored credentials, or consume provider credits.
+ * Reports provider configuration/readiness for the authenticated user.
+ * This is intentionally a non-billing diagnostic: it never sends a vendor
+ * generation request or exposes credentials.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -25,20 +25,26 @@ export async function GET() {
   }
 
   try {
-    const provider = createMockAIProvider();
-    const result = await provider.generate({
-      messages: [{ role: "user", content: "provider health check" }],
-      maxOutputTokens: 32,
-    });
+    const providers = await createRuntimeProviderRegistry(data.user.id);
+    const entries = Object.entries(providers).map(([id, provider]) => ({
+      id,
+      configured: id === "mock" || id in providers,
+      status: "ready" as const,
+      capabilities: provider.capabilities,
+      checkType: id === "mock" ? "self-test-adapter" : "credential-configured",
+    }));
 
     return privateJson({
-      ok: result.provider === provider.id && result.text.length > 0,
-      provider: provider.id,
-      model: result.model,
-      capabilities: provider.capabilities,
-      requestId: result.requestId,
+      ok: entries.some((entry) => entry.id === "mock"),
+      checkedAt: new Date().toISOString(),
+      billingImpact: "none",
+      vendorConnectivityTested: false,
+      providers: entries,
     });
   } catch {
-    return privateJson({ error: "Provider adapter health check failed." }, 503);
+    return privateJson({
+      ok: false,
+      error: "Provider configuration could not be checked.",
+    }, 503);
   }
 }
