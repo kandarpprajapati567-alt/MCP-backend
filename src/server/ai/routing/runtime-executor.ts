@@ -2,7 +2,7 @@ import "server-only";
 
 import type { AIGenerationRequest } from "../providers/types";
 import { createRuntimeProviderRegistry } from "../providers/runtime-registry";
-import { executeWorkflow } from "./executor";
+import { executeWorkflow, type ProviderAttemptObservation } from "./executor";
 import type { AIWorkflow, ModelRoutePolicy } from "./types";
 
 const WORKFLOW_MODELS = {
@@ -10,14 +10,11 @@ const WORKFLOW_MODELS = {
   openrouter: "openai/gpt-4o-mini",
 } as const;
 
-/**
- * Executes a workflow using credentials belonging to the authenticated user.
- * Provider IDs and model IDs are selected here, never accepted from the client.
- */
 export async function executeUserWorkflow(
   userId: string,
   workflow: AIWorkflow,
   request: AIGenerationRequest,
+  onAttempt?: (observation: ProviderAttemptObservation) => void,
 ) {
   const providers = await createRuntimeProviderRegistry(userId);
   const hasOpenAI = Boolean(providers.openai);
@@ -48,5 +45,5 @@ export async function executeUserWorkflow(
     };
   }
 
-  return executeWorkflow(workflow, policy, providers, request);
+  return executeWorkflow(workflow, policy, providers, request, onAttempt);
 }
