@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npx --yes tsx@4.20.6 --test tests/server/ai/routing/router.test.ts tests/server/ai/providers/openai-compatible.test.ts"
+    "test": "npx --yes tsx@4.20.6 --test tests/server/ai/routing/router.test.ts tests/server/ai/routing/generation-request.test.ts tests/server/ai/providers/openai-compatible.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
