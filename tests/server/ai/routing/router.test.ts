@@ -192,3 +192,45 @@ test("keeps registry keys when fallback provider ids differ", async () => {
   assert.equal(execution.result.text, "registry-key-fallback");
   assert.equal(execution.route.providerId, "backup");
 });
+
+
+test("reports successful provider attempts with measured latency", async () => {
+  const attempts: Array<{ providerId: string; outcome: string; latencyMs: number }> = [];
+  const primary: AIProvider = {
+    id: "primary",
+    capabilities: ["text-generation"],
+    async generate(request) {
+      return { provider: "primary", model: request.model ?? "unknown", text: "ok", finishReason: "stop", requestId: "obs1" };
+    },
+  };
+  await executeWorkflow("planner", { ...policy, fallbackProviders: [] }, { primary }, {
+    messages: [{ role: "user", content: "hello" }],
+  }, (attempt) => attempts.push(attempt));
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].providerId, "primary");
+  assert.equal(attempts[0].outcome, "success");
+  assert.ok(attempts[0].latencyMs >= 0);
+});
+
+test("records retryable primary failure before successful fallback", async () => {
+  const attempts: Array<{ providerId: string; outcome: string; errorCode?: string }> = [];
+  const primary: AIProvider = {
+    id: "primary",
+    capabilities: ["text-generation"],
+    async generate() { throw new AIProviderError("TIMEOUT", "Timed out", true); },
+  };
+  const backup: AIProvider = {
+    id: "backup",
+    capabilities: ["text-generation"],
+    async generate(request) {
+      return { provider: "backup", model: request.model ?? "unknown", text: "fallback", finishReason: "stop", requestId: "obs2" };
+    },
+  };
+  await executeWorkflow("planner", policy, { primary, backup }, {
+    messages: [{ role: "user", content: "hello" }],
+  }, (attempt) => attempts.push(attempt));
+  assert.deepEqual(attempts.map(({ providerId, outcome, errorCode }) => ({ providerId, outcome, errorCode })), [
+    { providerId: "primary", outcome: "failure", errorCode: "TIMEOUT" },
+    { providerId: "backup", outcome: "success", errorCode: undefined },
+  ]);
+});
