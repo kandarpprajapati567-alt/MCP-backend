@@ -28,8 +28,9 @@ test("registry rejects duplicate IDs and unsafe tool definitions", () => {
   const registry = new AgentToolRegistry();
   registry.register(makeTool());
   assert.throws(() => registry.register(makeTool()), /already registered/);
-  assert.throws(() => registry.register(makeTool({ timeoutMs: 31_000 })), /timeout/);
+  assert.throws(() => registry.register(makeTool({ id: "project.timeout", timeoutMs: 31_000 })), /timeout/);
   assert.throws(() => registry.register(makeTool({
+    id: "project.open-schema",
     inputSchema: { type: "object", properties: {}, required: [], additionalProperties: true } as never,
   })), /closed object/);
 });
