@@ -1,24 +1,17 @@
-import "server-only";
-
 import type { AgentToolDefinition } from "./tool-contract";
 
 const TOOL_ID_PATTERN = /^[a-z][a-z0-9_.-]{1,63}$/;
 const MAX_TOOL_TIMEOUT_MS = 30_000;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 
-/**
- * Code-owned allow-list. Never populate this registry from model output,
- * user metadata, remote URLs, or arbitrary executable code.
- */
+/** Code-owned allow-list. Never populate this registry from model output or user metadata. */
 export class AgentToolRegistry {
   private readonly tools = new Map<string, AgentToolDefinition>();
 
   register(tool: AgentToolDefinition): void {
     if (!TOOL_ID_PATTERN.test(tool.id)) throw new Error("Invalid tool ID.");
     if (this.tools.has(tool.id)) throw new Error("Tool ID is already registered.");
-    if (!tool.description.trim() || tool.description.length > 500) {
-      throw new Error("Tool description must be between 1 and 500 characters.");
-    }
+    if (!tool.description.trim() || tool.description.length > 500) throw new Error("Invalid tool description.");
     if (!Number.isInteger(tool.timeoutMs) || tool.timeoutMs < 1 || tool.timeoutMs > MAX_TOOL_TIMEOUT_MS) {
       throw new Error("Tool timeout is outside the allowed range.");
     }
