@@ -98,7 +98,10 @@ export async function POST(request: Request) {
   const maxOutputTokens = input.maxOutputTokens;
   if (
     maxOutputTokens !== undefined &&
-    (!Number.isInteger(maxOutputTokens) || (maxOutputTokens as number) < 1 || (maxOutputTokens as number) > 2_000)
+    (typeof maxOutputTokens !== "number" ||
+      !Number.isInteger(maxOutputTokens) ||
+      maxOutputTokens < 1 ||
+      maxOutputTokens > 2_000)
   ) {
     return privateJson({ error: "maxOutputTokens must be an integer from 1 to 2000." }, 400);
   }
