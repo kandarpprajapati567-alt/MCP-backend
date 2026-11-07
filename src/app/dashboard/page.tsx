@@ -262,14 +262,12 @@ export default function DashboardPage() {
             <div className="mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Model layer</p>
               <h2 className="mt-1 text-lg font-semibold text-white">AI provider credentials</h2>
-              <p className="mt-1 text-sm text-zinc-400">Keys are encrypted on the server and are never returned to the browser.</p>
+              <p className="mt-1 text-sm text-zinc-400">OpenAI and OpenRouter adapters are active. Keys are encrypted on the server and never returned to the browser.</p>
             </div>
             <form onSubmit={saveKey} className="grid gap-3 sm:grid-cols-[160px_1fr_auto]">
               <select value={provider} onChange={(event) => setProvider(event.target.value)} className="rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white">
                 <option value="openai">OpenAI</option>
                 <option value="openrouter">OpenRouter</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google</option>
               </select>
               <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" placeholder="Paste provider API key" className="min-w-0 rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white placeholder:text-zinc-600" />
               <button disabled={!apiKey.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">Save encrypted key</button>
