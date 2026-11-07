@@ -49,7 +49,7 @@ POST /api/v1/devices/jobs/claim
 
     { "deviceId": "vivo-y51a-main", "limit": 5 }
 
-The backend atomically claims up to 10 queued jobs for that device. The response contains job IDs, tool IDs, arguments and status. The Android client must:
+The backend atomically claims up to 10 queued jobs for that device. A job left claimed for more than five minutes can be reclaimed; clients should deduplicate by jobId. The response contains job IDs, tool IDs, arguments and status. The Android client must:
 1. Find the tool in its own local allow-listed registry.
 2. Validate arguments against its local schema.
 3. Check local permission and user consent.
