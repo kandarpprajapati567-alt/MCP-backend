@@ -1,123 +1,221 @@
-# Futuristic System — Personal AI Backend & MCP Server
+<div align="center">
 
-A Next.js 15 / TypeScript backend for the Futuristic System Android app. It provides a remote AI orchestration layer, MCP tools, persistent memory, model routing, and a device-job bridge. Supabase Postgres stores application data.
+# Futuristic System
+### AI Orchestration Backend · MCP Server · Device Bridge
 
-## Deployment layout
+**The coordination layer behind a personal AI system.**
 
-### Production backend — Render
+Connect AI providers, tools, memory, and trusted devices through one modular backend — while keeping device permissions and sensitive local actions under the user's control.
 
-- Service: `MCP-backend`
-- URL: https://mcp-backend-2oyj.onrender.com
-- Repository: `kandarpprajapati567-alt/MCP-backend`
-- Production branch: `main`
-- Auto-deploy: enabled on new commits
-- Runtime: Node.js, Next.js
-- Build: `npm install && npm run build`
-- Start: `npm run start`
+<br/>
 
-Render is the current production API host. Changes on `backend-foundation` are not production until merged into `main`.
+[![Backend](https://img.shields.io/badge/Backend-Next.js%2015-black?logo=next.js)](https://nextjs.org/)
+[![Language](https://img.shields.io/badge/Language-TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Protocol](https://img.shields.io/badge/Protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
+[![Database](https://img.shields.io/badge/Database-Supabase%20Postgres-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com/)
+[![Deployment](https://img.shields.io/badge/Deployment-Render-46E3B7?logo=render&logoColor=black)](https://render.com/)
 
-### Vercel — preview projects
+<br/>
 
-Two Vercel projects are linked to this same repository: `mcp-backend` and `futuristic-mcp-backend`. They are preview/test deployments, not the production API source of truth. Their deployments currently have SSO protection enabled; do not use a protected preview URL as the Android app's production base URL.
+**Project status:** Backend foundation in active development · Android runtime integration pending
 
-## Personal owner mode
+</div>
 
-- No signup, login page, or four-day owner session is required.
-- Private API requests are authenticated with the owner master token using `x-fs-owner-token` or `Authorization: Bearer <FS_OWNER_TOKEN>`.
-- The master token is stored server-side as `FS_OWNER_TOKEN`; never commit it or hardcode it into the Android APK.
-- A device-scoped pairing/token exchange is a separate future integration step. The Android app must use its own revocable device credential before production connection.
-- The backend queues Android/Windows tool requests; it cannot directly read phone files, camera, sensors, apps, or permissions. The device must validate the tool, request local permission/consent, execute locally, and return a bounded result.
+---
+
+## What is Futuristic System?
+
+Futuristic System is being built as a personal AI platform: one system that can understand a task, choose the right AI model, use approved tools, remember useful context, and coordinate work across connected devices.
+
+This repository contains its **backend foundation** — not the Android application itself.
+
+The backend acts as the system's orchestration and integration layer. It provides a common place to manage AI providers, route work by workflow, expose capabilities through the Model Context Protocol (MCP), persist owner memory, and coordinate device-side jobs.
+
+### The problem it solves
+
+AI capabilities are often fragmented:
+- Different tasks need different models and providers.
+- Tools and device capabilities are exposed through different interfaces.
+- Context and task history are difficult to keep consistent.
+- Cloud services should not silently gain access to private device data or permissions.
+
+Futuristic System brings these concerns behind one modular backend, with an explicit boundary between **cloud coordination** and **local device execution**.
+
+## Core design
+
+> **One AI system. Multiple providers. Validated tools. Persistent context. User-controlled devices.**
+
+| Layer | Responsibility |
+| --- | --- |
+| AI orchestration | Plan tasks and coordinate multi-step execution |
+| Provider routing | Select a provider/model for each workflow, with fallback |
+| MCP interface | Expose tools, resources, and prompts through a standard protocol |
+| Tool layer | Validate arguments and execute allow-listed backend capabilities |
+| Memory | Store and retrieve persistent owner context |
+| Device bridge | Register devices, discover capabilities, queue jobs, and receive results |
+| Command Centre | Configure providers, workflow policies, tools, memory, and devices |
+
+## Architecture
+
+The backend is designed to coordinate work without taking over the device.
+
+```mermaid
+flowchart TD
+    A["Futuristic System App"] -->|"Task / request"| B["Backend API"]
+    B --> C["Agent Planner"]
+    C --> D["Workflow Router"]
+    D --> E["AI Provider Adapters"]
+    D --> F["Validated Backend Tools"]
+    D --> G["Device Job Queue"]
+    E --> H["Task Synthesizer"]
+    F --> H
+    G -->|"Approved job"| I["Connected Device"]
+    I -->|"Permission check + local execution"| J["Device Tool Result"]
+    J --> H
+    K[("Supabase Postgres")] <--> B
+    H --> L["Task Result + Event History"]
+```
+
+### Typical task lifecycle
+
+1. **Receive** — accept a task through the backend API or MCP.
+2. **Plan** — break the request into structured steps.
+3. **Route** — select a workflow-specific provider/model or an approved tool.
+4. **Validate** — check tool names and arguments against known schemas.
+5. **Execute** — run backend tools on the server, or queue device work for a connected device.
+6. **Verify and synthesize** — combine returned evidence and execution results.
+7. **Persist** — retain task events and permitted memory for continuity.
+
+The device bridge is a coordination contract: the backend does not directly access a phone's files, camera, sensors, installed apps, or Android permissions.
 
 ## Capabilities
 
-- MCP Streamable HTTP endpoint with JSON-RPC tools, resources, and prompts.
-- Provider adapters: OpenAI-compatible OpenAI, OpenRouter, and deterministic mock.
-- Per-workflow provider/model routing with retryable fallback.
-- Encrypted provider-key storage using AES-256-GCM.
+### AI provider and model routing
+- Provider adapters for OpenAI-compatible APIs, OpenRouter, and a deterministic mock provider.
+- Workflow-specific provider/model policies.
+- Retryable fallback routing.
+- Encrypted provider credential storage using AES-256-GCM.
 - Usage limits and provider health/observability.
-- AI task planner with strict plan and tool-argument validation.
-- Allow-listed backend tools and persistent owner memory.
-- Device registration, capability discovery, queued tool jobs, and result callbacks.
-- Agent task status, event history, and result synthesis.
-- Personal MCP Command Centre for provider keys, workflow routing, tools, memory, and devices.
 
-## API reference
+### Agent execution foundation
+- Structured task planning.
+- Strict validation of plans and tool arguments.
+- Allow-listed backend tools.
+- Task status, event history, and result synthesis.
 
-All private endpoints require the owner token unless explicitly marked public.
+### Model Context Protocol
+- Streamable HTTP JSON-RPC endpoint at `/api/mcp`.
+- Tools, resources, and prompts discovery and invocation.
+- Stateless MCP transport.
+
+### Persistent memory
+- Owner-scoped memory storage and search.
+- Supabase Postgres persistence.
+- Memory management endpoints.
+
+### Device coordination
+- Device registration and capability discovery.
+- Queued device-tool jobs.
+- Job claiming and result callbacks.
+- Task finalization after device results arrive.
+
+### Personal Command Centre
+- Manage provider credentials and workflow routing.
+- Inspect tools, memory, and registered devices.
+
+## Security and trust boundaries
+
+Security is part of the architecture, not an optional add-on.
+
+- **Server secrets stay on the server.** Never embed the owner master token, provider API keys, or Supabase secret key in an Android APK.
+- **Device actions stay local.** The connected app must enforce Android permissions and user consent before executing a device-side action.
+- **Validate before execution.** Tool identifiers and arguments must match registered capabilities and schemas.
+- **Use scoped device credentials.** A dedicated pairing flow and revocable per-device credentials are required before production Android integration.
+- **Keep data access explicit.** A backend job request is not permission to read private files, camera frames, sensors, or other local data.
+
+Current private API access uses the server-side owner token. This is a personal owner-mode foundation, not a public multi-user authentication system.
+
+## API overview
+
+All private endpoints require owner-token authentication unless marked public.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/api/mcp` | Stateless MCP Streamable HTTP JSON-RPC |
-| GET | `/api/v1/health` | Public service health |
-| GET | `/api/v1/tools` | Registered tool catalog |
-| GET, POST | `/api/v1/agent/tasks` | List tasks / submit a task |
-| GET | `/api/v1/agent/tasks/:taskId` | Task, events, and remote jobs |
-| POST | `/api/v1/ai/generate` | Provider-routed text generation |
-| GET, PUT, DELETE | `/api/v1/ai/providers/keys` | Manage encrypted provider credentials |
-| GET | `/api/v1/ai/providers/health` | Provider readiness and health metrics |
-| POST | `/api/v1/ai/providers/mock/test` | Test mock provider |
-| GET | `/api/v1/ai/usage` | Usage status and limits |
-| GET, PUT, DELETE | `/api/v1/ai/policies` | Per-workflow model policies |
-| GET, POST, DELETE | `/api/v1/memory` | Search, store, and delete owner memory |
-| GET, POST, DELETE | `/api/v1/devices` | List, register/update, and remove devices |
-| POST | `/api/v1/devices/jobs` | Queue a device tool job |
-| POST | `/api/v1/devices/jobs/claim` | Device claims queued jobs |
-| POST | `/api/v1/devices/jobs/result` | Device submits execution result |
-| GET | `/api/v1/profile` | Read owner profile |
-| PATCH | `/api/v1/profile` | Update owner profile |
+| POST | `/api/mcp` | MCP Streamable HTTP |
+| GET | `/api/v1/health` | Public health check |
+| GET | `/api/v1/tools` | Tool catalog |
+| GET, POST | `/api/v1/agent/tasks` | List and submit tasks |
+| GET | `/api/v1/agent/tasks/:taskId` | Task status, events, and jobs |
+| POST | `/api/v1/ai/generate` | Routed text generation |
+| GET, PUT, DELETE | `/api/v1/ai/providers/keys` | Provider credentials |
+| GET | `/api/v1/ai/providers/health` | Provider health |
+| GET | `/api/v1/ai/usage` | Usage and limits |
+| GET, PUT, DELETE | `/api/v1/ai/policies` | Workflow routing policies |
+| GET, POST, DELETE | `/api/v1/memory` | Owner memory |
+| GET, POST, DELETE | `/api/v1/devices` | Device registration and management |
+| POST | `/api/v1/devices/jobs` | Queue device job |
+| POST | `/api/v1/devices/jobs/claim` | Claim queued job |
+| POST | `/api/v1/devices/jobs/result` | Submit device result |
+| GET, PATCH | `/api/v1/profile` | Owner profile |
 
-### MCP connection
+### MCP connection details
 
-- Endpoint: `https://mcp-backend-2oyj.onrender.com/api/mcp`
-- Method: `POST`
-- Content-Type: `application/json`
-- Accept: `application/json, text/event-stream`
-- Authorization: `Bearer <FS_OWNER_TOKEN>`
-- The endpoint is stateless; it does not issue MCP session IDs.
+- **Production endpoint:** `https://mcp-backend-2oyj.onrender.com/api/mcp`
+- **Method:** `POST`
+- **Content-Type:** `application/json`
+- **Accept:** `application/json, text/event-stream`
+- **Authorization:** `Bearer <FS_OWNER_TOKEN>`
 
 Supported protocol methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 
-Registered tools:
+Current registered MCP tools include `text.word_count`, `text.extract_keywords`, `text.text_stats`, `memory.search`, `memory.store`, `device.list`, `device.dispatch_tool`, `agent.submit_task`, and `agent.task_status`.
 
-- `text.word_count`
-- `text.extract_keywords`
-- `text.text_stats`
-- `memory.search`
-- `memory.store`
-- `device.list`
-- `device.dispatch_tool`
-- `agent.submit_task`
-- `agent.task_status`
+## Deployment
 
-## Android device bridge
+| Environment | Role | Details |
+| --- | --- | --- |
+| Render | Production backend | [mcp-backend-2oyj.onrender.com](https://mcp-backend-2oyj.onrender.com) |
+| GitHub `main` | Production source branch | Render auto-deploys from this branch |
+| GitHub `backend-foundation` | Integration/development branch | Changes here are not production until merged |
+| Vercel | Preview/build validation | Two linked projects; SSO protection is enabled |
 
-See [docs/android-device-bridge.md](docs/android-device-bridge.md) for the device registration payload, capability schemas, job polling/claiming, result callbacks, and permission boundary.
+The Render service is the production API host. Vercel preview deployments are not the Android app's production base URL.
 
-Important: the backend contract is implemented, but the Android app has not yet been connected and runtime-tested against it. Do not put the owner master token in the APK. Device pairing and revocable device credentials are still required before app integration.
+## Run locally
 
-## Environment variables
+### Requirements
+- Node.js 22 or later
+- npm
+- Supabase project and server-side credentials
 
-Copy `.env.example` and configure these on the server:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SECRET_KEY` — server only
-- `AI_PROVIDER_ENCRYPTION_KEY` — stable 32-byte base64 key; required to decrypt stored provider keys
-- `FS_OWNER_TOKEN` — long random owner master token; server only
-
-Never prefix secrets with `NEXT_PUBLIC_`. Never commit real keys or tokens.
-
-## Local development
-
-Requirements: Node.js 22 or later.
+### Setup
 
 ```bash
+git clone https://github.com/kandarpprajapati567-alt/MCP-backend.git
+cd MCP-backend
 npm install
+cp .env.example .env.local
+```
+
+Add the required environment variables to `.env.local`:
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key |
+| `SUPABASE_SECRET_KEY` | Server-only Supabase secret |
+| `AI_PROVIDER_ENCRYPTION_KEY` | Stable 32-byte base64 encryption key |
+| `FS_OWNER_TOKEN` | Long random owner master token |
+
+Never commit real credentials. Never expose server secrets through a `NEXT_PUBLIC_` variable.
+
+### Start development server
+
+```bash
 npm run dev
 ```
 
-Validation commands:
+### Validate changes
 
 ```bash
 npm run typecheck
@@ -125,13 +223,60 @@ npm run test
 npm run build
 ```
 
-GitHub Actions runs typecheck, tests, and a production build. The `backend-foundation` branch is the integration/development branch; `main` is the Render production branch.
+GitHub Actions runs typecheck, tests, and a production build.
 
-## Not implemented yet
+## Android integration status
 
-- Android app connection and on-device runtime validation.
-- Device pairing and revocable per-device credentials.
-- Web search and YouTube/transcript research.
-- Local GGUF model runtime.
-- Handwritten-notes generation pipeline.
-- Public multi-user release and signup.
+The backend includes the device registration and job-bridge contracts, but the Android app has **not yet been connected and runtime-tested** against this service.
+
+Before production app integration, the next required pieces are:
+1. Secure device pairing and revocable device-scoped credentials.
+2. Android API client and authenticated device registration.
+3. Background job polling/claiming with reconnect and retry handling.
+4. Local permission checks, execution, and bounded result callbacks.
+5. End-to-end tests using the actual Android app.
+
+See [Android Device Bridge](docs/android-device-bridge.md) for the current payloads and protocol contract.
+
+## Roadmap
+
+- [x] MCP Streamable HTTP foundation
+- [x] Workflow-based AI provider routing
+- [x] Encrypted provider-key storage
+- [x] Agent task planning and validation foundation
+- [x] Persistent owner memory
+- [x] Device registration and job-bridge contracts
+- [ ] Secure device pairing and revocable credentials
+- [ ] Android app integration and runtime validation
+- [ ] Web search and research workflows
+- [ ] YouTube/transcript research integration
+- [ ] Local GGUF model runtime
+- [ ] Handwritten-notes generation pipeline
+- [ ] Public multi-user authentication and release
+
+Roadmap items describe intended work, not completed features.
+
+## Repository structure
+
+```
+app/          Next.js application and API routes
+docs/         Architecture and integration documentation
+public/       Static assets
+```
+
+The codebase is evolving; consult the source tree for the current module-level structure.
+
+## Contributing and project direction
+
+This repository is the backend foundation for the wider Futuristic System project. Changes should preserve modular provider routing, validated tool execution, explicit security boundaries, and compatibility with the Android device bridge.
+
+Issues and focused pull requests are welcome. Please do not submit real API keys, tokens, personal data, or production secrets.
+
+---
+
+<div align="center">
+
+**Futuristic System**  
+*Building a coordinated, user-controlled personal AI platform.*
+
+</div>
