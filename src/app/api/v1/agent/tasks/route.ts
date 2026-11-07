@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     const status = result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
     return json(result, status);
   } catch (cause) {
-    return json({ error: cause instanceof Error ? cause.message : "Unable to submit task." }, 400);
+    const message = cause instanceof Error ? cause.message : "Unable to submit task.";
+    return json({ error: message }, message.startsWith("Task must") ? 400 : 503);
   }
 }
