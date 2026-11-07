@@ -129,7 +129,7 @@ function dispatch(method: string, params: JsonRecord, id: JsonRpcId, version: st
 
   if (method === "tools/list") {
     return rpcResult(
-      id,
+      requestId,
       {
         tools: TOOL_CATALOG.map((tool) => ({
           name: tool.id,
@@ -249,8 +249,9 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     return rpcError(null, -32600, "Requests must include a string or numeric id.", 400, version);
   }
 
+  const requestId = message.id as JsonRpcId;
   const params = message.params === undefined ? {} : message.params;
-  if (!isRecord(params)) return rpcError(id, -32602, "params must be an object.", 200, version);
+  if (!isRecord(params)) return rpcError(requestId, -32602, "params must be an object.", 200, version);
 
   if (method === "initialize") {
     const requested = typeof params.protocolVersion === "string" ? params.protocolVersion : "";
@@ -273,5 +274,5 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     );
   }
 
-  return dispatch(method, params, id, version);
+  return dispatch(method, params, requestId, version);
 }
