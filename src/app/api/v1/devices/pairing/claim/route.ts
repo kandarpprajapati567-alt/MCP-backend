@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDeviceRegistration } from "@/server/agent/device-contract";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
-import { hashDeviceSecret } from "@/server/security/device-auth";
+import { hashDeviceSecret } from "@/server/security/device-token";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store", "Pragma": "no-cache" };
