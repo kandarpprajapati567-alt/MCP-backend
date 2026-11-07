@@ -60,8 +60,9 @@ export function parseDeviceRegistration(value: unknown):
   const seen = new Set<string>();
   const capabilities: DeviceCapability[] = [];
   for (const item of value.capabilities) {
+    const expectedPrefix = String(value.platform) + ".";
     if (!isRecord(item) || !boundedString(item.id, 2, 160) ||
-        !/^[a-z][a-z0-9_.-]+$/.test(item.id) || seen.has(item.id)) {
+        !/^[a-z][a-z0-9_.-]+$/.test(item.id) || !item.id.startsWith(expectedPrefix) || seen.has(item.id)) {
       return { ok: false, error: "Every capability needs a unique namespaced id." };
     }
     if (!boundedString(item.description, 1, 500) ||
