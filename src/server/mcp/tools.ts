@@ -56,6 +56,7 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
         !isRecord(metadata) || Buffer.byteLength(JSON.stringify(metadata), "utf8") > 8000) {
       throw new Error("Invalid memory.store metadata, namespace or importance.");
     }
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data, error } = await admin.from("agent_memories").upsert({
       owner_id: PERSONAL_OWNER_ID,
@@ -74,6 +75,7 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
 
   if (name === "device.list") {
     if (Object.keys(args).length) throw new Error("device.list does not accept arguments.");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data, error } = await admin.from("agent_devices")
       .select("device_id,display_name,platform,app_version,capabilities,status,last_seen_at")
@@ -87,6 +89,7 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
     const parsed = parseDeviceJobDispatch(args);
     if (!parsed.ok) throw new Error(parsed.error);
     const input = parsed.value;
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data: device, error: deviceError } = await admin.from("agent_devices")
       .select("device_id,capabilities")
