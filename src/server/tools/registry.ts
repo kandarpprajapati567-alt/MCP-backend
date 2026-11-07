@@ -5,7 +5,9 @@ export type RegisteredToolId =
   | "memory.search"
   | "memory.store"
   | "device.list"
-  | "device.dispatch_tool";
+  | "device.dispatch_tool"
+  | "agent.submit_task"
+  | "agent.task_status";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
@@ -109,6 +111,32 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
       additionalProperties: false,
     },
     annotations: deviceDispatch,
+  },
+  {
+    id: "agent.submit_task",
+    description: "Submit a task to the backend planner, execute registered tools and synthesize a result.",
+    permission: "agent.task.execute",
+    sideEffect: true,
+    inputSchema: {
+      type: "object",
+      properties: { task: { type: "string", minLength: 1, maxLength: 4000 } },
+      required: ["task"],
+      additionalProperties: false,
+    },
+    annotations: deviceDispatch,
+  },
+  {
+    id: "agent.task_status",
+    description: "Read an agent task, its execution events and any remote device jobs.",
+    permission: "agent.task.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: { taskId: { type: "string", minLength: 36, maxLength: 36 } },
+      required: ["taskId"],
+      additionalProperties: false,
+    },
+    annotations: readOnly,
   },
 ];
 
