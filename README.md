@@ -130,14 +130,14 @@ Security is part of the architecture, not an optional add-on.
 - **Server secrets stay on the server.** Never embed the owner master token, provider API keys, or Supabase secret key in an Android APK.
 - **Device actions stay local.** The connected app must enforce Android permissions and user consent before executing a device-side action.
 - **Validate before execution.** Tool identifiers and arguments must match registered capabilities and schemas.
-- **Use scoped device credentials.** A dedicated pairing flow and revocable per-device credentials are required before production Android integration.
+- **Use scoped device credentials.** Device pairing codes are single-use and short-lived; device tokens are stored as hashes and can be revoked independently.
 - **Keep data access explicit.** A backend job request is not permission to read private files, camera frames, sensors, or other local data.
 
 Current private API access uses the server-side owner token. This is a personal owner-mode foundation, not a public multi-user authentication system.
 
 ## API overview
 
-All private endpoints require owner-token authentication unless marked public.
+Owner APIs require the owner master token. Device pairing-claim and device-work endpoints use a device-scoped bearer token; the Android APK never receives the owner master token.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -152,10 +152,13 @@ All private endpoints require owner-token authentication unless marked public.
 | GET | `/api/v1/ai/usage` | Usage and limits |
 | GET, PUT, DELETE | `/api/v1/ai/policies` | Workflow routing policies |
 | GET, POST, DELETE | `/api/v1/memory` | Owner memory |
-| GET, POST, DELETE | `/api/v1/devices` | Device registration and management |
+| GET, POST, DELETE | `/api/v1/devices` | Owner-side device listing and management |
+| POST | `/api/v1/devices/pairing` | Create a 5-minute, single-use pairing code (owner token) |
+| POST | `/api/v1/devices/pairing/claim` | Exchange pairing code for a device-scoped token |
+| PUT | `/api/v1/devices` | Refresh this device's manifest (device token) |
 | POST | `/api/v1/devices/jobs` | Queue device job |
-| POST | `/api/v1/devices/jobs/claim` | Claim queued job |
-| POST | `/api/v1/devices/jobs/result` | Submit device result |
+| POST | `/api/v1/devices/jobs/claim` | Claim queued job (device token) |
+| POST | `/api/v1/devices/jobs/result` | Submit device result (device token) |
 | GET, PATCH | `/api/v1/profile` | Owner profile |
 
 ### MCP connection details
@@ -246,7 +249,7 @@ See [Android Device Bridge](docs/android-device-bridge.md) for the current paylo
 - [x] Agent task planning and validation foundation
 - [x] Persistent owner memory
 - [x] Device registration and job-bridge contracts
-- [ ] Secure device pairing and revocable credentials
+- [x] Secure device pairing and revocable device-scoped credentials
 - [ ] Android app integration and runtime validation
 - [ ] Web search and research workflows
 - [ ] YouTube/transcript research integration
