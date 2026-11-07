@@ -129,7 +129,7 @@ function dispatch(method: string, params: JsonRecord, id: JsonRpcId, version: st
 
   if (method === "tools/list") {
     return rpcResult(
-      requestId,
+      id,
       {
         tools: TOOL_CATALOG.map((tool) => ({
           name: tool.id,
@@ -259,7 +259,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
       ? requested
       : SUPPORTED_PROTOCOL_VERSIONS[0];
     return rpcResult(
-      id,
+      requestId,
       {
         protocolVersion: selected,
         capabilities: {
