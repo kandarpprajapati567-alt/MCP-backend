@@ -81,12 +81,26 @@ export function parseDeviceRegistration(value: unknown):
     if (propertyEntries.length > 32) return { ok: false, error: "A capability may define at most 32 input properties." };
     for (const [name, property] of propertyEntries) {
       if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name) || !isRecord(property) ||
-          !["string", "number", "integer", "boolean", "object", "array"].includes(String(property.type))) {
+          !["string", "number", "integer", "boolean"].includes(String(property.type)) ||
+          (property.description !== undefined && (typeof property.description !== "string" || property.description.length > 200))) {
         return { ok: false, error: "Capability input properties must use supported JSON Schema types." };
       }
       if (property.maxLength !== undefined &&
           (typeof property.maxLength !== "number" || !Number.isInteger(property.maxLength) || property.maxLength < 1 || property.maxLength > 20000)) {
         return { ok: false, error: "Schema maxLength must be between 1 and 20000." };
+      }
+      if (property.minLength !== undefined &&
+          (typeof property.minLength !== "number" || !Number.isInteger(property.minLength) || property.minLength < 0 || property.minLength > 20000)) {
+        return { ok: false, error: "Schema minLength must be between 0 and 20000." };
+      }
+      if (property.minimum !== undefined && (typeof property.minimum !== "number" || !Number.isFinite(property.minimum))) {
+        return { ok: false, error: "Schema minimum must be a finite number." };
+      }
+      if (property.maximum !== undefined && (typeof property.maximum !== "number" || !Number.isFinite(property.maximum))) {
+        return { ok: false, error: "Schema maximum must be a finite number." };
+      }
+      if (typeof property.minimum === "number" && typeof property.maximum === "number" && property.minimum > property.maximum) {
+        return { ok: false, error: "Schema minimum cannot exceed maximum." };
       }
     }
     const required = item.inputSchema.required === undefined ? [] : item.inputSchema.required;
