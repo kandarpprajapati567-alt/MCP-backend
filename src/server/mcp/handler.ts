@@ -1,5 +1,3 @@
-import "server-only";
-
 import { verifyOwnerRequest } from "../security/owner-auth";
 import { TOOL_CATALOG } from "../tools/registry";
 import { executeMcpTool } from "./tools";
