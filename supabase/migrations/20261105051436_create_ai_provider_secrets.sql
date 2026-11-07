@@ -11,8 +11,6 @@ create table if not exists public.ai_provider_secrets (
   constraint ai_provider_secrets_user_id_provider_key unique (user_id, provider)
 );
 
-create unique index if not exists ai_provider_secrets_user_id_provider_key
-  on public.ai_provider_secrets(user_id, provider);
 alter table public.ai_provider_secrets enable row level security;
 revoke all on public.ai_provider_secrets from public, anon, authenticated;
 grant select, insert, update, delete on public.ai_provider_secrets to service_role;
