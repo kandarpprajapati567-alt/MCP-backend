@@ -16,7 +16,7 @@ export type AIGenerationParseResult =
   | { ok: true; value: AIGenerationInput }
   | { ok: false; status: 400 | 413; error: string };
 
-const WORKFLOWS = ["planner", "coding", "research", "summarization"] as const;
+const WORKFLOWS = ["planner", "coding", "research", "summarization", "chat", "notes"] as const;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 4_000;
 const MAX_TOTAL_LENGTH = 12_000;
@@ -27,10 +27,7 @@ export function parseAIGenerationInput(body: unknown): AIGenerationParseResult {
   }
 
   const input = body as Record<string, unknown>;
-  if (
-    typeof input.workflow !== "string" ||
-    !WORKFLOWS.includes(input.workflow as (typeof WORKFLOWS)[number])
-  ) {
+  if (typeof input.workflow !== "string" || !WORKFLOWS.includes(input.workflow as (typeof WORKFLOWS)[number])) {
     return { ok: false, status: 400, error: "A supported workflow is required." };
   }
 
@@ -53,32 +50,20 @@ export function parseAIGenerationInput(body: unknown): AIGenerationParseResult {
       return { ok: false, status: 400, error: "A message has an invalid role or content." };
     }
     totalLength += message.content.length;
-    messages.push({
-      role: message.role as AIGenerationMessage["role"],
-      content: message.content,
-    });
+    messages.push({ role: message.role as AIGenerationMessage["role"], content: message.content });
   }
 
-  if (totalLength > MAX_TOTAL_LENGTH) {
-    return { ok: false, status: 413, error: "Request content is too large." };
-  }
+  if (totalLength > MAX_TOTAL_LENGTH) return { ok: false, status: 413, error: "Request content is too large." };
 
   const temperature = input.temperature;
-  if (
-    temperature !== undefined &&
-    (typeof temperature !== "number" || !Number.isFinite(temperature) || temperature < 0 || temperature > 2)
-  ) {
+  if (temperature !== undefined && (typeof temperature !== "number" || !Number.isFinite(temperature) || temperature < 0 || temperature > 2)) {
     return { ok: false, status: 400, error: "Temperature must be between 0 and 2." };
   }
 
   const maxOutputTokens = input.maxOutputTokens;
-  if (
-    maxOutputTokens !== undefined &&
-    (typeof maxOutputTokens !== "number" ||
-      !Number.isInteger(maxOutputTokens) ||
-      maxOutputTokens < 1 ||
-      maxOutputTokens > 2_000)
-  ) {
+  if (maxOutputTokens !== undefined && (
+    typeof maxOutputTokens !== "number" || !Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 2_000
+  )) {
     return { ok: false, status: 400, error: "maxOutputTokens must be an integer from 1 to 2000." };
   }
 

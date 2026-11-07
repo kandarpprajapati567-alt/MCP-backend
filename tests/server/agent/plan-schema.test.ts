@@ -9,3 +9,25 @@ test("rejects duplicate or invalid step IDs",()=>{const duplicate={...validPlan,
 test("rejects empty and oversized step text",()=>{assert.equal(parseAgentPlan({...validPlan,goal:""}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[{...validPlan.steps[0],objective:" "}]}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[{...validPlan.steps[0],expectedOutcome:"x".repeat(301)}]}).ok,false);});
 test("rejects unregistered or malformed tool calls",()=>{assert.equal(parseAgentPlan({...validPlan,toolCalls:[{id:"call-1",toolId:"shell.exec",arguments:{command:"ls"}}]}).ok,false);assert.equal(parseAgentPlan({...validPlan,toolCalls:[{id:"call-1",toolId:"text.word_count",arguments:{text:"abc",extra:true}}]}).ok,false);});
 test("accepts a bounded registered text tool",()=>{const result=parseAgentPlan({...validPlan,toolCalls:[{id:"call-1",toolId:"text.word_count",arguments:{text:"one two"}}]});assert.equal(result.ok,true);});
+
+test("validates dynamic device tools against their advertised input schema", () => {
+  const available = [{
+    id: "android.device.battery",
+    inputSchema: {
+      type: "object" as const,
+      properties: { includeHealth: { type: "boolean" } },
+      required: [],
+      additionalProperties: false,
+    },
+  }];
+  const plan = {
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "android.device.battery", arguments: { includeHealth: true } }],
+  };
+  assert.equal(parseAgentPlan(plan, available).ok, true);
+  assert.equal(parseAgentPlan({
+    ...plan,
+    toolCalls: [{ id: "call-1", toolId: "android.device.battery", arguments: { includeHealth: true, unsafe: true } }],
+  }, available).ok, false);
+  assert.equal(parseAgentPlan(plan).ok, false);
+});

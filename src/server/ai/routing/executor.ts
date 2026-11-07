@@ -32,13 +32,19 @@ export async function executeWorkflow(
   const orderedRoutes: ModelRoute[] = [firstRoute];
 
   if (!firstRoute.isFallback) {
-    for (const providerId of policy.fallbackProviders) {
+    for (let index = 0; index < policy.fallbackProviders.length; index += 1) {
+      const providerId = policy.fallbackProviders[index];
       const provider = providers[providerId];
       if (!provider || !compatible(provider, policy)) continue;
+      const defaultModel = providerId === "openai"
+        ? "gpt-4o-mini"
+        : providerId === "openrouter"
+          ? "openai/gpt-4o-mini"
+          : "mock-v1";
       orderedRoutes.push({
         workflow,
         providerId,
-        model: policy.fallbackModel ?? policy.primaryModel,
+        model: index === 0 && policy.fallbackModel ? policy.fallbackModel : defaultModel,
         isFallback: true,
       });
     }

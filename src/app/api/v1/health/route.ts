@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 type ServiceStatus = "ok" | "not_configured" | "unavailable";
+type AuthenticationStatus = "not_required";
 
 export async function GET() {
   const timestamp = new Date().toISOString();
@@ -20,7 +21,7 @@ export async function GET() {
         version,
         services: {
           database: "not_configured" satisfies ServiceStatus,
-          authentication: "not_configured" satisfies ServiceStatus,
+          authentication: "not_required" satisfies AuthenticationStatus,
         },
       },
       { headers: { "Cache-Control": "no-store" } },
@@ -42,7 +43,7 @@ export async function GET() {
         version,
         services: {
           database,
-          authentication: "ok" satisfies ServiceStatus,
+          authentication: "not_required" satisfies AuthenticationStatus,
         },
       },
       { headers: { "Cache-Control": "no-store" } },

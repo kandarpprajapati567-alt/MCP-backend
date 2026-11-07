@@ -1,18 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy";
 
-export async function middleware(request: NextRequest) {
-  // Keep the scaffold usable before deployment secrets are configured.
-  if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  ) {
-    return NextResponse.next();
-  }
-
-  // Refresh sessions, but do not globally block public routes.
-  // Protected handlers must independently validate claims and authorization.
-  return updateSession(request);
+// This backend uses a private owner master token for server API routes.
+// Supabase Auth sessions are intentionally not refreshed or required.
+export function middleware(_request: NextRequest) {
+  return NextResponse.next();
 }
 
 export const config = {
