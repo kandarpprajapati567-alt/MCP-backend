@@ -5,6 +5,10 @@ const tools = [
   { name: "text.word_count", detail: "Count words in a supplied text block." },
   { name: "text.extract_keywords", detail: "Extract frequent meaningful keywords." },
   { name: "text.text_stats", detail: "Return character, word and sentence statistics." },
+  { name: "memory.search", detail: "Search persistent owner memory." },
+  { name: "memory.store", detail: "Save or update persistent memory." },
+  { name: "device.list", detail: "List registered devices and advertised capabilities." },
+  { name: "device.dispatch_tool", detail: "Queue a client-side device tool execution." },
 ];
 
 export default function McpPage() {
@@ -40,7 +44,7 @@ export default function McpPage() {
         </div>
       </Card>
       <Card>
-        <CardHeader title="Registered tools" description="Read-only and bounded tools currently available over MCP." />
+        <CardHeader title="Registered tools" description="Bounded text, persistent memory and remote device-bridge tools." />
         <div className="space-y-2">
           {tools.map((tool) => (
             <div key={tool.name} className="rounded-lg border border-border p-3">
