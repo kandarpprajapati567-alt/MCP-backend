@@ -39,7 +39,7 @@ POST /api/v1/devices
 
 Rules:
 - Android tool IDs must start with android.; Windows tools must start with windows.
-- At most 100 capabilities per device and 32 properties per capability.
+- At most 100 capabilities per device and 32 properties per capability. Input properties use bounded string, number, integer or boolean types.
 - Capability metadata contains schemas only; it never contains executable code.
 - Re-registering the same owner/device ID updates its display name, version and capabilities.
 
