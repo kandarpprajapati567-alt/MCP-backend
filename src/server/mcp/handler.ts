@@ -1,7 +1,8 @@
 import "server-only";
 
 import { verifyOwnerRequest } from "../security/owner-auth";
-import { executeRegisteredTool, TOOL_CATALOG } from "../tools/registry";
+import { TOOL_CATALOG } from "../tools/registry";
+import { executeMcpTool } from "./tools";
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2026-07-28", "2025-11-25"] as const;
 const SERVER_INFO = { name: "futuristic-system-mcp", version: "0.2.0" };
@@ -124,7 +125,7 @@ function getPrompt(name: string, args: JsonRecord) {
   throw new Error("Prompt not found.");
 }
 
-function dispatch(method: string, params: JsonRecord, id: JsonRpcId, version: string): Response {
+async function dispatch(method: string, params: JsonRecord, id: JsonRpcId, version: string): Promise<Response> {
   if (method === "ping") return rpcResult(id, {}, version);
 
   if (method === "tools/list") {
@@ -147,7 +148,7 @@ function dispatch(method: string, params: JsonRecord, id: JsonRpcId, version: st
     const args = params.arguments === undefined ? {} : params.arguments;
     if (!isRecord(args)) return rpcError(id, -32602, "params.arguments must be an object.", 200, version);
     try {
-      const result = executeRegisteredTool(params.name, args);
+      const result = await executeMcpTool(params.name, args);
       return rpcResult(
         id,
         { content: [{ type: "text", text: JSON.stringify(result) }], isError: false },
