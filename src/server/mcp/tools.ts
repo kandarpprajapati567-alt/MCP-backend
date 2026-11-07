@@ -1,6 +1,3 @@
-import "server-only";
-
-import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { parseDeviceJobDispatch } from "@/server/agent/device-contract";
 import { executeRegisteredTool } from "@/server/tools/registry";
@@ -30,6 +27,7 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
         typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 50) {
       throw new Error("Invalid memory.search arguments.");
     }
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     let builder = admin.from("agent_memories")
       .select("id,namespace,memory_key,content,metadata,source,importance,created_at,updated_at")
