@@ -2,8 +2,8 @@ import {NextResponse} from "next/server";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {PERSONAL_OWNER_ID,verifyOwnerRequest} from "@/server/security/owner-auth";
 import {createAgentPlan} from "@/server/agent/planner";
-import {createRuntimeProviderRegistry} from "@/server/ai/providers/runtime-registry";
 import {executeRegisteredTool} from "@/server/tools/registry";
+import {executeUserWorkflow} from "@/server/ai/routing/runtime-executor";
 export const dynamic="force-dynamic";
 const headers={"Cache-Control":"private, no-store"};
 function json(body:unknown,status=200){return NextResponse.json(body,{status,headers});}
@@ -30,14 +30,15 @@ export async function POST(request:Request){
  const id=created.id as string;
  try{
   await event(admin,id,"task.created");await setTask(admin,id,{status:"planning"});await event(admin,id,"task.planning");
-  const providers=await createRuntimeProviderRegistry(PERSONAL_OWNER_ID);const realProvider=providers.openai??providers.openrouter;
-  const plan=realProvider?await createAgentPlan(realProvider,task):localPlan(task);
-  await setTask(admin,id,{plan,status:"executing"});await event(admin,id,"task.plan_ready",{steps:plan.steps.length,toolCalls:plan.toolCalls.length,planner:realProvider?.id??"local-safe-planner"});await event(admin,id,"task.executing");
+  const planned=await createAgentPlan(PERSONAL_OWNER_ID,task);
+  const plan=planned??localPlan(task);
+  await setTask(admin,id,{plan,status:"executing"});await event(admin,id,"task.plan_ready",{steps:plan.steps.length,toolCalls:plan.toolCalls.length,planner:planned?"configured-workflow-policy":"local-safe-planner"});await event(admin,id,"task.executing");
   const results:Array<{callId:string;toolId:string;result:unknown}>=[];
   for(const call of plan.toolCalls){const result=executeRegisteredTool(call.toolId,call.arguments);results.push({callId:call.id,toolId:call.toolId,result});await event(admin,id,"tool.completed",{callId:call.id,toolId:call.toolId});}
   await setTask(admin,id,{status:"synthesizing",tool_results:results});await event(admin,id,"task.synthesizing");
   let result:string;
-  if(realProvider){const synthesis=await realProvider.generate({messages:[{role:"system",content:"Synthesize the outcome using only the task, plan and tool results. Do not claim unperformed actions."},{role:"user",content:JSON.stringify({task,plan,toolResults:results})}],temperature:0.2,maxOutputTokens:1200});result=synthesis.text;}
+  const synthesis=await executeUserWorkflow(PERSONAL_OWNER_ID,"summarization",{messages:[{role:"system",content:"Synthesize the outcome using only the task, plan and tool results. Do not claim unperformed actions."},{role:"user",content:JSON.stringify({task,plan,toolResults:results})}],temperature:0.2,maxOutputTokens:1200});
+  if(synthesis.route.providerId!=="mock"){result=synthesis.result.text;}
   else if(results.length){result="Task completed using "+results.length+" registered local tool(s).\n"+JSON.stringify(results,null,2);}
   else{result="Task planned successfully. No registered local tool was required.\nGoal: "+plan.goal+"\nSteps: "+plan.steps.map(s=>s.objective).join("; ")+"\nConfigure an AI provider to enable model-based planning and synthesis.";}
   await setTask(admin,id,{status:"completed",result,completed_at:new Date().toISOString()});await event(admin,id,"task.completed");
