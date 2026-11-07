@@ -75,9 +75,9 @@ When every job for an agent task reaches a terminal state, the backend resumes s
 
 MCP endpoint: POST /api/mcp
 
-- tools/list includes device.list and device.dispatch_tool.
+- tools/list includes agent.submit_task, agent.task_status, device.list and device.dispatch_tool.
 - device.list returns registered devices and capabilities.
-- device.dispatch_tool queues a validated device tool job.
+- device.dispatch_tool queues a validated device tool job.\n- agent.submit_task runs the full planner → tools → synthesis pipeline.\n- agent.task_status returns the task, event timeline and device job state.
 - The planner may also select an advertised android.* or windows.* capability directly when that device has checked in within the last five minutes.
 
 ## Current limitations
