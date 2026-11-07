@@ -74,7 +74,9 @@ export function parseDeviceRegistration(value: unknown):
         !isRecord(item.inputSchema.properties)) {
       return { ok: false, error: "Capability metadata or input schema is invalid." };
     }
-    const propertyEntries = Object.entries(item.inputSchema.properties);
+    const schema = item.inputSchema as Record<string, unknown>;
+    const properties = schema.properties as Record<string, unknown>;
+    const propertyEntries = Object.entries(properties);
     if (propertyEntries.length > 32) return { ok: false, error: "A capability may define at most 32 input properties." };
     for (const [name, property] of propertyEntries) {
       if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name) || !isRecord(property) ||
@@ -88,7 +90,7 @@ export function parseDeviceRegistration(value: unknown):
     }
     const required = item.inputSchema.required === undefined ? [] : item.inputSchema.required;
     if (!Array.isArray(required) || required.length > propertyEntries.length ||
-        required.some((key) => typeof key !== "string" || !Object.prototype.hasOwnProperty.call(item.inputSchema.properties, key))) {
+        required.some((key) => typeof key !== "string" || !Object.prototype.hasOwnProperty.call(properties, key))) {
       return { ok: false, error: "Schema required keys must reference declared properties." };
     }
     seen.add(item.id);
@@ -99,7 +101,7 @@ export function parseDeviceRegistration(value: unknown):
       sideEffect: item.sideEffect,
       inputSchema: {
         type: "object",
-        properties: item.inputSchema.properties as DeviceCapability["inputSchema"]["properties"],
+        properties: properties as DeviceCapability["inputSchema"]["properties"],
         required: required as string[],
         additionalProperties: false,
       },
