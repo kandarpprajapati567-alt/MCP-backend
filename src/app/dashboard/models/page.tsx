@@ -149,9 +149,10 @@ export default function ModelsPage() {
       });
       if (!response.ok) throw new Error("Policy could not be reset.");
       setPolicies((current) => current.filter((item) => item.workflow !== workflow));
-      setPrimaryProvider("mock");
-      setPrimaryModel(models.mock);
-      setFallbackProvider("none");
+      const automatic = availableProviders.includes("openai") ? "openai" : availableProviders.includes("openrouter") ? "openrouter" : "mock";
+      setPrimaryProvider(automatic);
+      setPrimaryModel(models[automatic] ?? "mock-v1");
+      setFallbackProvider(automatic === "openai" && availableProviders.includes("openrouter") ? "openrouter" : "none");
       setFallbackModel("");
       setEnabled(true);
       setMessage("Default automatic routing restored for " + workflow + ".");
