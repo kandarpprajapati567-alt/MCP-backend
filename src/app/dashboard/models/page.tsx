@@ -55,8 +55,25 @@ export default function ModelsPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Backend access was rejected.");
-      setAvailableProviders(data.availableProviders ?? []);
-      setPolicies(data.policies ?? []);
+      const available = data.availableProviders ?? [];
+      const savedPolicies = data.policies ?? [];
+      setAvailableProviders(available);
+      setPolicies(savedPolicies);
+      const initial = savedPolicies.find((item: Policy) => item.workflow === workflow);
+      if (initial) {
+        setPrimaryProvider(initial.primary_provider);
+        setPrimaryModel(initial.primary_model);
+        setFallbackProvider(initial.fallback_providers[0] ?? "none");
+        setFallbackModel(initial.fallback_model ?? "");
+        setEnabled(initial.enabled);
+      } else {
+        const automatic = available.includes("openai") ? "openai" : available.includes("openrouter") ? "openrouter" : "mock";
+        setPrimaryProvider(automatic);
+        setPrimaryModel(models[automatic] ?? "mock-v1");
+        setFallbackProvider(automatic === "openai" && available.includes("openrouter") ? "openrouter" : "none");
+        setFallbackModel("");
+        setEnabled(true);
+      }
       setConnected(true);
       setMessage("AI routing configuration loaded.");
     } catch (cause) {
@@ -77,9 +94,10 @@ export default function ModelsPage() {
       setFallbackModel(saved.fallback_model ?? "");
       setEnabled(saved.enabled);
     } else {
-      setPrimaryProvider("mock");
-      setPrimaryModel(models.mock);
-      setFallbackProvider("none");
+      const automatic = availableProviders.includes("openai") ? "openai" : availableProviders.includes("openrouter") ? "openrouter" : "mock";
+      setPrimaryProvider(automatic);
+      setPrimaryModel(models[automatic] ?? "mock-v1");
+      setFallbackProvider(automatic === "openai" && availableProviders.includes("openrouter") ? "openrouter" : "none");
       setFallbackModel("");
       setEnabled(true);
     }
