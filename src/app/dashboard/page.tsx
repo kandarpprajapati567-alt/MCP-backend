@@ -24,6 +24,9 @@ export default function DashboardPage() {
   const [provider, setProvider] = useState("openai");
   const [apiKey, setApiKey] = useState("");
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingExpiresAt, setPairingExpiresAt] = useState("");
+  const [pairingBusy, setPairingBusy] = useState(false);
 
   const api = useCallback(
     async (path: string, init: RequestInit = {}) =>
@@ -102,6 +105,26 @@ export default function DashboardPage() {
       setError(cause instanceof Error ? cause.message : "Could not connect.");
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function createPairingCode() {
+    setPairingBusy(true);
+    setError("");
+    setMessage("");
+    setPairingCode("");
+    setPairingExpiresAt("");
+    try {
+      const response = await api("/api/v1/devices/pairing", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not create a pairing code.");
+      setPairingCode(data.pairingCode);
+      setPairingExpiresAt(data.expiresAt);
+      setMessage("One-time device pairing code created. It expires in five minutes.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create a pairing code.");
+    } finally {
+      setPairingBusy(false);
     }
   }
 
@@ -235,6 +258,26 @@ export default function DashboardPage() {
         )}
         <p className="mt-3 text-xs text-zinc-500">The master token remains in page memory only; it is not written to browser storage. Set or rotate it later in Render environment variables.</p>
       </section>
+
+      {connected && (
+        <section className="rounded-2xl border border-cyan-900/50 bg-zinc-950/70 p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Secure device pairing</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">Connect your Android phone once</h2>
+          <p className="mt-1 text-sm text-zinc-400">Create a one-time code here, enter it in Futuristic System on your phone, and the app will keep its device credential securely for automatic reconnection.</p>
+          <button type="button" disabled={pairingBusy} onClick={() => void createPairingCode()} className="mt-4 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">
+            {pairingBusy ? "Creating code…" : pairingCode ? "Generate a new code" : "Generate pairing code"}
+          </button>
+          {pairingCode && (
+            <div className="mt-4 rounded-xl border border-border bg-black/40 p-4">
+              <p className="text-xs text-zinc-400">One-time code · expires {new Date(pairingExpiresAt).toLocaleTimeString()}</p>
+              <p className="mt-2 break-all font-mono text-sm text-white select-all">{pairingCode}</p>
+              <button type="button" onClick={() => void navigator.clipboard.writeText(pairingCode)} className="mt-3 rounded-lg border border-border px-3 py-2 text-xs text-zinc-200">Copy pairing code</button>
+              <button type="button" onClick={() => { setPairingCode(""); setPairingExpiresAt(""); }} className="ml-2 rounded-lg border border-border px-3 py-2 text-xs text-zinc-400">Hide code</button>
+              <p className="mt-3 text-xs text-amber-300">Treat this code like a password. Use it only in your own app. It can be used once.</p>
+            </div>
+          )}
+        </section>
+      )}
 
       {connected && (
         <>
