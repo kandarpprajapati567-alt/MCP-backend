@@ -22,7 +22,7 @@ There is no signup or sign-in. The owner authenticates with a private master tok
 - `POST /api/mcp` — MCP Streamable HTTP JSON-RPC endpoint.
 - `GET /api/v1/health` — public service health.
 - `GET /api/v1/tools` — authenticated tool catalog.
-- `GET/POST /api/v1/agent/tasks` — task history and execution.
+- `GET/POST /api/v1/agent/tasks` — task history and execution.\n- `GET /api/v1/agent/tasks/:taskId` — task detail, events and remote tool jobs.
 - `GET /api/v1/agent/tasks/:taskId` — task detail/events.
 - `POST /api/v1/ai/generate` — provider-routed generation.
 - `GET/PUT/DELETE /api/v1/ai/providers/keys` — encrypted credentials.
@@ -41,7 +41,7 @@ There is no signup or sign-in. The owner authenticates with a private master tok
 
 Supported methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`.
 
-Current tools: `text.word_count`, `text.extract_keywords`, `text.text_stats`, `memory.search`, `memory.store`, `device.list`, `device.dispatch_tool`.
+Current tools: `text.word_count`, `text.extract_keywords`, `text.text_stats`, `memory.search`, `memory.store`, `device.list`, `device.dispatch_tool`, `agent.submit_task`, `agent.task_status`.
 
 ## Server environment
 
