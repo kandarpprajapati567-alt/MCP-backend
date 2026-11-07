@@ -4,6 +4,7 @@ import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-a
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
 import { executeMcpTool } from "@/server/mcp/tools";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
+import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -184,14 +185,25 @@ export async function POST(request: Request) {
 
     if (pendingJobs.length) {
       await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
+      // A fast device may have completed before the task entered waiting_for_device.
+      // Re-check after the state transition so that early callbacks cannot strand the task.
+      try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
+      const { data: latest } = await admin.from("agent_tasks")
+        .select("status,result")
+        .eq("owner_id", PERSONAL_OWNER_ID)
+        .eq("id", id)
+        .maybeSingle();
+      const completed = latest?.status === "completed";
       return json({
         taskId: id,
-        status: "waiting_for_device",
+        status: latest?.status ?? "waiting_for_device",
         plan,
         toolResults: results,
         pendingJobs,
-        message: "Waiting for a connected device to execute its registered tools.",
-      }, 202);
+        ...(completed ? { result: latest.result } : {
+          message: "Waiting for a connected device to execute its registered tools.",
+        }),
+      }, completed ? 201 : 202);
     }
 
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
