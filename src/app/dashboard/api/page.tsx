@@ -8,7 +8,7 @@ const endpoints = [
   { method: "GET", path: "/api/v1/agent/tasks/:taskId", description: "Read a task, event timeline and remote device jobs." },
   { method: "GET / PUT / DELETE", path: "/api/v1/ai/policies", description: "Configure provider and model routing per workflow." },
   { method: "GET / POST / DELETE", path: "/api/v1/memory", description: "Search, store and delete persistent memory." },
-  { method: "GET / POST / DELETE", path: "/api/v1/devices", description: "Owner device management; PUT refreshes the authenticated device manifest." },
+  { method: "GET / POST / PUT / DELETE", path: "/api/v1/devices", description: "Owner device management; PUT refreshes the authenticated device manifest." },
   { method: "POST", path: "/api/v1/devices/pairing", description: "Owner-only: create a five-minute single-use pairing code." },
   { method: "POST", path: "/api/v1/devices/pairing/claim", description: "Exchange a pairing code for a one-time device-scoped bearer token." },
   { method: "POST", path: "/api/v1/devices/jobs", description: "Queue a validated tool request for a connected device." },
