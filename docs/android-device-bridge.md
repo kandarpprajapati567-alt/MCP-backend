@@ -1,20 +1,47 @@
 # Android Device Bridge Contract
 
-This contract is implemented by the MCP backend. The Android app can be connected later without changing the server-side task model.
+This contract lets Futuristic System coordinate local Android work without granting the backend direct access to phone data or permissions.
 
-## Identity and security boundary
+## Security boundary
 
-- Current private API requests use the owner master token in Authorization: Bearer FS_OWNER_TOKEN or x-fs-owner-token.
-- **Do not hardcode FS_OWNER_TOKEN into the Android APK.** It is a temporary owner-only integration credential.
-- Before a real Android connection, add a device-pairing exchange that issues a device-scoped credential and can revoke one device independently.
-- The backend only queues tool requests. It does not directly access Android files, camera, sensors, apps or permissions.
-- Android must check the local permission and any required user consent immediately before execution.
+- The owner master token stays on the server and must never be embedded in the APK.
+- Pairing is initiated by an owner-authenticated request and produces a short-lived, single-use pairing code (5 minutes).
+- The device exchanges that code once and receives a random device-scoped bearer token.
+- Only a SHA-256 hash of the pairing code and device token is persisted. Plaintext device tokens are returned once.
+- A device token can access only its own registration update, job-claim and result-callback routes. It cannot call owner APIs or act as another device.
+- Owner-side device deletion/revocation invalidates all active credentials for that device.
+- Device tokens should be stored using Android Keystore-backed encrypted storage. Do not log them or include them in analytics/crash reports.
+- Android checks its local allow-list, permissions and user consent immediately before executing any device-side action.
 
-## 1. Register a device
+The backend only queues and tracks work. It does not directly access Android files, camera, sensors, apps or permissions.
 
-POST /api/v1/devices
+## 1. Start pairing (owner only)
+
+POST /api/v1/devices/pairing
+
+Authorization: Bearer <FS_OWNER_TOKEN>
+
+No request body is required.
+
+Response (201):
 
     {
+      "ok": true,
+      "pairingCode": "<one-time-secret>",
+      "expiresAt": "<ISO-8601>",
+      "expiresInSeconds": 300
+    }
+
+Show the code as a QR code or transfer it over a trusted local channel. Do not put it in logs or public URLs. Generate a fresh code if it expires. The backend stores only its SHA-256 hash.
+
+## 2. Claim pairing (device, no owner token)
+
+POST /api/v1/devices/pairing/claim
+
+The device submits the code together with its registration manifest:
+
+    {
+      "pairingCode": "<one-time-secret>",
       "deviceId": "vivo-y51a-main",
       "displayName": "Futuristic System Android",
       "platform": "android",
@@ -37,28 +64,52 @@ POST /api/v1/devices
       ]
     }
 
-Rules:
-- Android tool IDs must start with android.; Windows tools must start with windows.
-- At most 100 capabilities per device and 32 properties per capability. Input properties use bounded string, number, integer or boolean types.
-- Capability metadata contains schemas only; it never contains executable code.
-- Re-registering the same owner/device ID updates its display name, version and capabilities.
+Response (201):
 
-## 2. Poll and claim work
+    {
+      "ok": true,
+      "device": { "deviceId": "vivo-y51a-main", "status": "online" },
+      "deviceToken": "fsd_<one-time-secret>",
+      "tokenType": "Bearer"
+    }
+
+The device token is shown only once. Store it securely using Android Keystore-backed encrypted storage. If the response is lost, revoke/re-pair the device; the server cannot recover the plaintext token.
+
+Pairing codes expire after five minutes and are single-use. Invalid, expired or consumed codes are rejected. A new successful pairing replaces previous active credentials for that same device ID.
+
+## 3. Refresh registration (device scoped)
+
+PUT /api/v1/devices
+
+Authorization: Bearer <deviceToken>
+
+The request uses the same registration shape as the claim request, without pairingCode. The authenticated device ID must match the body deviceId. This updates only that device's display name, app version and capability manifest.
+
+Owner-only administration:
+- GET /api/v1/devices lists devices.
+- POST /api/v1/devices performs trusted owner-side registration.
+- DELETE /api/v1/devices with {"deviceId":"..."} revokes all credentials for that device and marks it offline.
+
+## 4. Poll and claim work (device scoped)
 
 POST /api/v1/devices/jobs/claim
 
+Authorization: Bearer <deviceToken>
+
     { "deviceId": "vivo-y51a-main", "limit": 5 }
 
-The backend atomically claims up to 10 queued jobs for that device. A job left claimed for more than five minutes can be reclaimed; clients should deduplicate by jobId. The response contains job IDs, tool IDs, arguments and status. The Android client must:
+The authenticated device ID must match deviceId. The backend atomically claims up to 10 queued jobs. A job left claimed for more than five minutes can be reclaimed; clients should deduplicate by jobId. The Android client must:
 1. Find the tool in its own local allow-listed registry.
 2. Validate arguments against its local schema.
 3. Check local permission and user consent.
 4. Execute locally.
 5. Submit a bounded result.
 
-## 3. Return a result
+## 5. Return a result (device scoped)
 
 POST /api/v1/devices/jobs/result
+
+Authorization: Bearer <deviceToken>
 
     {
       "jobId": "11111111-1111-4111-8111-111111111111",
@@ -67,21 +118,23 @@ POST /api/v1/devices/jobs/result
       "result": { "batteryPercent": 84, "charging": false }
     }
 
-For failures, use status: failed and a short errorCode. Results are limited to 32 KB. Only the device that owns a claimed job can complete it.
+For failures, use status: failed and a short errorCode. Results are limited to 32 KB. Only the authenticated device that owns a claimed job can complete it.
 
 When every job for an agent task reaches a terminal state, the backend resumes synthesis and changes the task from waiting_for_device to completed.
 
-## 4. MCP discovery and dispatch
+## 6. MCP discovery and dispatch (owner only)
 
 MCP endpoint: POST /api/mcp
 
 - tools/list includes agent.submit_task, agent.task_status, device.list and device.dispatch_tool.
 - device.list returns registered devices and capabilities.
-- device.dispatch_tool queues a validated device tool job.\n- agent.submit_task runs the full planner → tools → synthesis pipeline.\n- agent.task_status returns the task, event timeline and device job state.
-- The planner may also select an advertised android.* or windows.* capability directly when that device has checked in within the last five minutes.
+- device.dispatch_tool queues a validated device tool job.
+- agent.submit_task runs the full planner → tools → synthesis pipeline.
+- agent.task_status returns the task, event timeline and device job state.
+- The planner may select an advertised android.* or windows.* capability directly when that device has checked in within the last five minutes.
 
-## Current limitations
+## Remaining integration work
 
-- Device pairing tokens are not implemented yet; the master token must not be embedded in an APK.
-- The Android app has not been connected or runtime-tested against this contract yet.
-- The backend queues and tracks remote jobs; device-side permission UI and execution are the Android app's responsibility.
+- The backend pairing and device-authentication endpoints are implemented on the development branch; apply the matching Supabase migration before deployment.
+- The Android app has not yet been connected or runtime-tested against this contract.
+- Android-side QR scanning/display, Keystore token storage, background polling, reconnect behavior, local permission UI and execution remain to be implemented and tested.
