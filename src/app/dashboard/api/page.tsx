@@ -5,6 +5,7 @@ const endpoints = [
   { method: "POST", path: "/api/mcp", description: "MCP Streamable HTTP JSON-RPC endpoint." },
   { method: "GET", path: "/api/v1/health", description: "Public backend and database health." },
   { method: "GET / POST", path: "/api/v1/agent/tasks", description: "Create agent tasks and read execution history." },
+  { method: "GET", path: "/api/v1/agent/tasks/:taskId", description: "Read a task, event timeline and remote device jobs." },
   { method: "GET / PUT / DELETE", path: "/api/v1/ai/policies", description: "Configure provider and model routing per workflow." },
   { method: "GET / POST / DELETE", path: "/api/v1/memory", description: "Search, store and delete persistent memory." },
   { method: "GET / POST / DELETE", path: "/api/v1/devices", description: "Register devices and advertise local capabilities." },
