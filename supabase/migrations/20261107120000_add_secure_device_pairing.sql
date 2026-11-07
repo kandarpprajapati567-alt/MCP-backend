@@ -41,7 +41,7 @@ create or replace function public.claim_agent_device_pairing(
   p_token_hash text
 ) returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
