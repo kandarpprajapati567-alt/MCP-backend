@@ -9,6 +9,8 @@ const tools = [
   { name: "memory.store", detail: "Save or update persistent memory." },
   { name: "device.list", detail: "List registered devices and advertised capabilities." },
   { name: "device.dispatch_tool", detail: "Queue a client-side device tool execution." },
+  { name: "agent.submit_task", detail: "Submit and execute a complete agent task." },
+  { name: "agent.task_status", detail: "Read task state, events and remote job results." },
 ];
 
 export default function McpPage() {
