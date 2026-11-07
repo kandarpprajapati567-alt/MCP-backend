@@ -1,6 +1,6 @@
 import type { AIProviderCapability } from "../providers/types";
 
-export type AIWorkflow = "planner" | "coding" | "research" | "summarization";
+export type AIWorkflow = "planner" | "coding" | "research" | "summarization" | "chat" | "notes";
 
 export interface ModelRoutePolicy {
   primaryProvider: string;
