@@ -12,10 +12,10 @@ There is no signup or sign-in. The owner authenticates with a private master tok
 - AES-256-GCM encrypted server-side provider credential storage.
 - Workflow routing, retryable fallback, request quotas, provider observations.
 - AI planner with strict JSON plan validation.
-- Allow-listed, bounded text tools: word count, keyword extraction, text statistics.
+- Allow-listed text tools, persistent memory search/store and device-tool dispatch.
 - Stateless Streamable HTTP MCP endpoint with tools, resources and prompts.
 - Agent task lifecycle, persisted task history and execution events.
-- Personal MCP Command Centre for provider keys, tool discovery and task management.
+- Personal MCP Command Centre for provider keys, workflow routing, tool discovery, memory and device management.
 
 ## API
 
@@ -27,7 +27,7 @@ There is no signup or sign-in. The owner authenticates with a private master tok
 - `POST /api/v1/ai/generate` — provider-routed generation.
 - `GET/PUT/DELETE /api/v1/ai/providers/keys` — encrypted credentials.
 - `GET /api/v1/ai/providers/health` — provider readiness/passive metrics.
-- `GET /api/v1/ai/usage` — usage status.
+- `GET /api/v1/ai/usage` — usage status.\n- `GET/POST/DELETE /api/v1/memory` — owner-scoped persistent memory.\n- `GET/POST/DELETE /api/v1/devices` — device registration and status.\n- `POST /api/v1/devices/jobs` — queue a remote device tool.\n- `POST /api/v1/devices/jobs/claim` — claim queued jobs.\n- `POST /api/v1/devices/jobs/result` — submit device execution results.\n- `GET/PUT/DELETE /api/v1/ai/policies` — per-workflow model routing.
 
 ### MCP connection
 
@@ -41,7 +41,7 @@ There is no signup or sign-in. The owner authenticates with a private master tok
 
 Supported methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`.
 
-Current tools: `text.word_count`, `text.extract_keywords`, `text.text_stats`.
+Current tools: `text.word_count`, `text.extract_keywords`, `text.text_stats`, `memory.search`, `memory.store`, `device.list`, `device.dispatch_tool`.
 
 ## Server environment
 
@@ -63,4 +63,4 @@ npm run build
 
 ## Explicitly deferred
 
-Web search, YouTube/transcript research, handwritten notes, local GGUF runtime, Android device bridge, phone permissions, multi-user accounts and public release readiness.
+Web search, YouTube/transcript research, handwritten notes, local GGUF runtime, automatic agent-to-device task continuation, phone permissions and public release readiness.
