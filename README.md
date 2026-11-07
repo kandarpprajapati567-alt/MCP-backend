@@ -233,8 +233,8 @@ GitHub Actions runs typecheck, tests, and a production build.
 The backend includes the device registration and job-bridge contracts, but the Android app has **not yet been connected and runtime-tested** against this service.
 
 Before production app integration, the next required pieces are:
-1. Secure device pairing and revocable device-scoped credentials.
-2. Android API client and authenticated device registration.
+1. Android API client and secure token storage (Android Keystore).
+2. QR pairing UI and authenticated device registration.
 3. Background job polling/claiming with reconnect and retry handling.
 4. Local permission checks, execution, and bounded result callbacks.
 5. End-to-end tests using the actual Android app.
