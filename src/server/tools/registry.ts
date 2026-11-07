@@ -1,5 +1,3 @@
-import "server-only";
-
 export type RegisteredToolId =
   | "text.word_count"
   | "text.extract_keywords"
