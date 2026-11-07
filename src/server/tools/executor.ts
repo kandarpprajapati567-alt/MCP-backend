@@ -1,4 +1,3 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { parseDeviceJobDispatch } from "@/server/agent/device-contract";
 import { executeRegisteredTool } from "@/server/tools/registry";
@@ -28,6 +27,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
         typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 50) {
       throw new Error("Invalid memory.search arguments.");
     }
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     let builder = admin.from("agent_memories")
       .select("id,namespace,memory_key,content,metadata,source,importance,created_at,updated_at")
@@ -56,6 +56,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
         !isRecord(metadata) || Buffer.byteLength(JSON.stringify(metadata), "utf8") > 8000) {
       throw new Error("Invalid memory.store metadata, namespace or importance.");
     }
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data, error } = await admin.from("agent_memories").upsert({
       owner_id: PERSONAL_OWNER_ID,
@@ -74,6 +75,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
 
   if (name === "device.list") {
     if (Object.keys(args).length) throw new Error("device.list does not accept arguments.");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data, error } = await admin.from("agent_devices")
       .select("device_id,display_name,platform,app_version,capabilities,status,last_seen_at")
@@ -87,6 +89,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
     const parsed = parseDeviceJobDispatch(args);
     if (!parsed.ok) throw new Error(parsed.error);
     const input = parsed.value;
+    const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data: device, error: deviceError } = await admin.from("agent_devices")
       .select("device_id,capabilities")
