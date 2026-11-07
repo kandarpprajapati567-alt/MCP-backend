@@ -152,7 +152,7 @@ Owner APIs require the owner master token. Device pairing-claim and device-work 
 | GET | `/api/v1/ai/usage` | Usage and limits |
 | GET, PUT, DELETE | `/api/v1/ai/policies` | Workflow routing policies |
 | GET, POST, DELETE | `/api/v1/memory` | Owner memory |
-| GET, POST, DELETE | `/api/v1/devices` | Owner-side device listing and management |
+| GET, POST, PUT, DELETE | `/api/v1/devices` | Owner management and paired-device manifest refresh |
 | POST | `/api/v1/devices/pairing` | Create a 5-minute, single-use pairing code (owner token) |
 | POST | `/api/v1/devices/pairing/claim` | Exchange pairing code for a device-scoped token |
 | PUT | `/api/v1/devices` | Refresh this device's manifest (device token) |
