@@ -61,6 +61,6 @@ npm run test
 npm run build
 ```
 
-## Explicitly deferred
+Android integration contract: see [docs/android-device-bridge.md](docs/android-device-bridge.md) for registration, tool schemas, job polling, result callbacks and the local permission boundary.\n\n## Explicitly deferred
 
 Web search, YouTube/transcript research, handwritten notes, local GGUF runtime, automatic agent-to-device task continuation, phone permissions and public release readiness.
