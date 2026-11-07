@@ -8,10 +8,12 @@ const endpoints = [
   { method: "GET", path: "/api/v1/agent/tasks/:taskId", description: "Read a task, event timeline and remote device jobs." },
   { method: "GET / PUT / DELETE", path: "/api/v1/ai/policies", description: "Configure provider and model routing per workflow." },
   { method: "GET / POST / DELETE", path: "/api/v1/memory", description: "Search, store and delete persistent memory." },
-  { method: "GET / POST / DELETE", path: "/api/v1/devices", description: "Register devices and advertise local capabilities." },
+  { method: "GET / POST / PUT / DELETE", path: "/api/v1/devices", description: "Owner device management; PUT refreshes the authenticated device manifest." },
+  { method: "POST", path: "/api/v1/devices/pairing", description: "Owner-only: create a five-minute single-use pairing code." },
+  { method: "POST", path: "/api/v1/devices/pairing/claim", description: "Exchange a pairing code for a one-time device-scoped bearer token." },
   { method: "POST", path: "/api/v1/devices/jobs", description: "Queue a validated tool request for a connected device." },
-  { method: "POST", path: "/api/v1/devices/jobs/claim", description: "Device polls and atomically claims pending jobs." },
-  { method: "POST", path: "/api/v1/devices/jobs/result", description: "Device returns execution results." },
+  { method: "POST", path: "/api/v1/devices/jobs/claim", description: "Device-token authenticated polling and atomic job claiming." },
+  { method: "POST", path: "/api/v1/devices/jobs/result", description: "Device-token authenticated result callback." },
   { method: "GET / PUT / DELETE", path: "/api/v1/ai/providers/keys", description: "Manage encrypted provider credentials." },
   { method: "POST", path: "/api/v1/ai/generate", description: "Run a provider-routed generation workflow." },
 ];
@@ -21,7 +23,7 @@ export default function ApiPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader title="API Management" description="Versioned HTTPS API surface for Futuristic System and future connected clients." />
       <Card>
-        <CardHeader title="Live API catalogue" description="All private endpoints require the owner master token. Health is public." />
+        <CardHeader title="Live API catalogue" description="Owner APIs use the master token; paired-device endpoints use revocable device-scoped tokens. Health is public." />
         <div className="space-y-2">
           {endpoints.map((item) => (
             <div key={item.path} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[150px_1fr]">
