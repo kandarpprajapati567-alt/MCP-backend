@@ -20,7 +20,7 @@ export async function createAgentPlan(
   }
 
   const backendTools: AgentAvailableTool[] = TOOL_CATALOG
-    .filter((tool) => tool.id !== "device.dispatch_tool")
+    .filter((tool) => tool.id !== "device.dispatch_tool" && !tool.id.startsWith("agent."))
     .map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description }));
   const availableTools = [...backendTools, ...deviceTools.slice(0, 8)];
   const toolManifest = availableTools.map((tool) => ({
