@@ -11,7 +11,7 @@ const PROMPT = [
   "Only use a tool when directly useful. Never claim that a tool has run.",
   "Tool arguments must follow the registered input schema and use only information supplied in the task.",
   "Available tools:",
-  ...TOOL_CATALOG.map((tool) => tool.id + ": " + tool.description),
+  ...TOOL_CATALOG.filter((tool) => tool.id.startsWith("text.")).map((tool) => tool.id + ": " + tool.description),
   "No shell, arbitrary code, unrestricted network, or filesystem access is available.",
 ].join("\n");
 
