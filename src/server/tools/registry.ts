@@ -1,6 +1,13 @@
 import "server-only";
 
-export type RegisteredToolId = "text.word_count" | "text.extract_keywords" | "text.text_stats";
+export type RegisteredToolId =
+  | "text.word_count"
+  | "text.extract_keywords"
+  | "text.text_stats"
+  | "memory.search"
+  | "memory.store"
+  | "device.list"
+  | "device.dispatch_tool";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
@@ -9,8 +16,8 @@ export type ToolDefinition = {
   sideEffect: boolean;
   inputSchema: {
     type: "object";
-    properties: { text: { type: "string"; maxLength: number; description: string } };
-    required: ["text"];
+    properties: Record<string, unknown>;
+    required: string[];
     additionalProperties: false;
   };
   annotations: {
@@ -25,59 +32,90 @@ const STOP_WORDS = new Set([
   "the","and","for","that","with","this","from","are","was","were","you","your","have","has","had","not","but","into","about","what","when","where","which","who","how","why","can","could","should","would","will","shall","a","an","of","to","in","on","at","by","is","it","as","or","be","if","we","they","he","she","i","me","my","our","their",
 ]);
 
-const textInputSchema = {
-  type: "object" as const,
+const textInputSchema: ToolDefinition["inputSchema"] = {
+  type: "object",
   properties: {
-    text: {
-      type: "string" as const,
-      maxLength: 12000,
-      description: "Text to process. Maximum 12,000 characters.",
-    },
+    text: { type: "string", maxLength: 12000, description: "Text to process. Maximum 12,000 characters." },
   },
-  required: ["text"] as ["text"],
-  additionalProperties: false as const,
+  required: ["text"],
+  additionalProperties: false,
 };
 
-const safeReadOnly = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-};
+const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const writeIdempotent = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const deviceDispatch = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
 export const TOOL_CATALOG: readonly ToolDefinition[] = [
+  { id: "text.word_count", description: "Count words in supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
+  { id: "text.extract_keywords", description: "Extract frequent meaningful keywords from supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
+  { id: "text.text_stats", description: "Return character, word, and sentence counts for supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
   {
-    id: "text.word_count",
-    description: "Count words in supplied text.",
-    permission: "local_text_read",
+    id: "memory.search",
+    description: "Search the owner's persistent memory by namespace and text.",
+    permission: "memory.read",
     sideEffect: false,
-    inputSchema: textInputSchema,
-    annotations: safeReadOnly,
+    inputSchema: {
+      type: "object",
+      properties: {
+        namespace: { type: "string", maxLength: 80, description: "Memory namespace. Defaults to default." },
+        query: { type: "string", maxLength: 160, description: "Optional text search query." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Maximum records to return." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    annotations: readOnly,
   },
   {
-    id: "text.extract_keywords",
-    description: "Extract frequent meaningful keywords from supplied text.",
-    permission: "local_text_read",
-    sideEffect: false,
-    inputSchema: textInputSchema,
-    annotations: safeReadOnly,
+    id: "memory.store",
+    description: "Create or update a keyed persistent memory record.",
+    permission: "memory.write",
+    sideEffect: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        namespace: { type: "string", maxLength: 80 },
+        key: { type: "string", minLength: 1, maxLength: 160 },
+        content: { type: "string", minLength: 1, maxLength: 12000 },
+        importance: { type: "integer", minimum: 1, maximum: 5 },
+        metadata: { type: "object" },
+      },
+      required: ["key", "content"],
+      additionalProperties: false,
+    },
+    annotations: writeIdempotent,
   },
   {
-    id: "text.text_stats",
-    description: "Return character, word, and sentence counts for supplied text.",
-    permission: "local_text_read",
+    id: "device.list",
+    description: "List registered connected devices and their advertised tool capabilities.",
+    permission: "device.registry.read",
     sideEffect: false,
-    inputSchema: textInputSchema,
-    annotations: safeReadOnly,
+    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    id: "device.dispatch_tool",
+    description: "Queue a registered Android or Windows device tool for client-side permission checks and execution.",
+    permission: "device.tool.dispatch",
+    sideEffect: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        deviceId: { type: "string", minLength: 1, maxLength: 128 },
+        toolId: { type: "string", minLength: 2, maxLength: 160 },
+        toolCallId: { type: "string", minLength: 1, maxLength: 80 },
+        taskId: { type: "string", description: "Optional task UUID." },
+        arguments: { type: "object" },
+      },
+      required: ["deviceId", "toolId", "toolCallId", "arguments"],
+      additionalProperties: false,
+    },
+    annotations: deviceDispatch,
   },
 ];
 
 function readText(args: Record<string, unknown>): string {
-  if (
-    Object.keys(args).length !== 1 ||
-    typeof args.text !== "string" ||
-    args.text.length > 12000
-  ) {
+  if (Object.keys(args).length !== 1 || typeof args.text !== "string" || args.text.length > 12000) {
     throw new Error("Tool arguments must contain only text (maximum 12000 characters).");
   }
   return args.text;
@@ -88,7 +126,6 @@ export function executeRegisteredTool(toolId: string, args: Record<string, unkno
     const text = readText(args);
     return { wordCount: text.trim() ? text.trim().split(/\s+/u).length : 0 };
   }
-
   if (toolId === "text.extract_keywords") {
     const text = readText(args);
     const counts = new Map<string, number>();
@@ -103,7 +140,6 @@ export function executeRegisteredTool(toolId: string, args: Record<string, unkno
         .map(([keyword, count]) => ({ keyword, count })),
     };
   }
-
   if (toolId === "text.text_stats") {
     const text = readText(args);
     return {
@@ -113,6 +149,5 @@ export function executeRegisteredTool(toolId: string, args: Record<string, unkno
       sentences: (text.match(/[.!?]+(?=\s|$)/gu) ?? []).length,
     };
   }
-
-  throw new Error("Tool is not registered.");
+  throw new Error("Tool is not registered as a synchronous text tool.");
 }
