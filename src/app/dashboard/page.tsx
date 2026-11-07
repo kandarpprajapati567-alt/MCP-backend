@@ -117,7 +117,9 @@ export default function DashboardPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Task execution failed.");
-      setResult(data.result ?? "Task completed.");
+      setResult(data.status === "waiting_for_device"
+        ? data.message ?? "Task is waiting for a connected device."
+        : data.result ?? "Task completed.");
       setTask("");
       await refresh();
     } catch (cause) {
