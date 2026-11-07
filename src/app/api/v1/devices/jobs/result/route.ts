@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDeviceJobResult } from "@/server/agent/device-contract";
+import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
           ...(input.errorCode ? { errorCode: input.errorCode } : {}),
         },
       });
+    }
+    if (job.task_id) {
+      try { await finalizeAgentTaskIfReady(job.task_id); } catch { /* The result remains persisted; task recovery can retry finalization. */ }
     }
     return json({ ok: true, jobId: job.id, status: job.status });
   } catch {
