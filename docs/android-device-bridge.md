@@ -21,6 +21,8 @@ POST /api/v1/devices/pairing
 
 Authorization: Bearer <FS_OWNER_TOKEN>
 
+Alternatively, the private `/pairing` page accepts the server-only `FS_PAIRING_ADMIN_KEY` and calls this same endpoint with `x-fs-pairing-admin-key`. Configure a random value of at least 32 characters in the Render environment. This key is not part of the Android app. The existing owner-token authorization remains supported.
+
 No request body is required.
 
 Response (201):
