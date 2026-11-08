@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Futuristic System — Control Centre",
-  description: "Online control centre for Futuristic System platform",
+  title: {
+    default: "Futuristic System — AI Control Centre",
+    template: "%s · Futuristic System",
+  },
+  description: "A private AI orchestration control centre for model providers, validated tools, persistent memory and trusted devices.",
+  applicationName: "Futuristic System",
+  themeColor: "#070b12",
 };
 
 export default function RootLayout({
