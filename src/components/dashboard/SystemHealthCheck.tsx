@@ -47,7 +47,7 @@ export function SystemHealthCheck({ connected, token }: Props) {
     if (backend.status === "fulfilled" && backend.value.data?.reachable) {
       const body = backend.value.data.body;
       const service = body?.services ?? {};
-      results.push({ id: "render", label: "Render backend", status: body?.status === "ok" ? "ok" : "warning", detail: `HTTP ${backend.value.data.httpStatus} · status: ${body?.status ?? "responding"}` });
+      results.push({ id: "render", label: "Render backend", status: body?.status === "ok" ? "ok" : "warning", detail: `HTTP ${backend.value.data.httpStatus} · status: ${body?.status ?? "responding"} · DB: ${service.database ?? "not reported"}` });
     } else {
       results.push({ id: "render", label: "Render backend", status: "failed", detail: backend.status === "fulfilled" ? backend.value.data?.error ?? "Backend returned an error" : "Backend health request timed out" });
     }
