@@ -79,7 +79,7 @@ button:disabled { cursor: not-allowed; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, .12);
   backdrop-filter: blur(12px);
 }
-.dashboard-page > section:first-of-type { background: transparent !important; box-shadow: none; }
+
 .dashboard-page input:not([type="checkbox"]):not([type="range"]),
 .dashboard-page select,
 .dashboard-page textarea,
@@ -130,4 +130,36 @@ button:disabled { cursor: not-allowed; }
   .app-topbar { min-height: 58px; }
   .app-main { padding: 16px !important; }
   .dashboard-page { gap: 16px !important; }
+}
+
+/* Shared component treatment across every dashboard route */
+.app-main .rounded-2xl.border,
+.app-main [data-card] {
+  border-color: rgba(71, 91, 118, .42) !important;
+  background-color: rgba(12, 20, 33, .82);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .14);
+  backdrop-filter: blur(12px);
+}
+.app-main input:not([type="checkbox"]):not([type="range"]),
+.app-main select,
+.app-main textarea {
+  border-color: rgba(91, 112, 140, .45);
+  background-color: rgba(5, 11, 20, .72);
+  color: #e8eef8;
+}
+.app-main input::placeholder,
+.app-main textarea::placeholder { color: #718096; }
+.app-main input:focus,
+.app-main select:focus,
+.app-main textarea:focus {
+  border-color: rgba(94, 234, 212, .65);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, .08);
+  outline: none;
+}
+.pairing-page {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 50% 10%, rgba(45, 212, 191, .12), transparent 70%),
+    linear-gradient(rgba(148, 163, 184, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, .035) 1px, transparent 1px);
+  background-size: auto, 42px 42px, 42px 42px;
 }
