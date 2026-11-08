@@ -17,7 +17,9 @@ function verifyPairingAdminRequest(request: Request): boolean {
 }
 
 export async function POST(request: Request) {
-  if (!verifyOwnerRequest(request) && !verifyPairingAdminRequest(request)) {
+  let ownerAuthorized = false;
+  try { ownerAuthorized = Boolean(verifyOwnerRequest(request)); } catch { ownerAuthorized = false; }
+  if (!ownerAuthorized && !verifyPairingAdminRequest(request)) {
     return json({ error: "Unauthorized. Configure the pairing admin key or connect as owner." }, 401);
   }
 
