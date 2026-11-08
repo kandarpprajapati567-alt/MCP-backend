@@ -54,10 +54,10 @@ export default function DevicePairingPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-xl items-center px-4 py-12">
-      <section className="w-full rounded-2xl border border-cyan-900/50 bg-zinc-950/80 p-6 shadow-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Futuristic System · Device setup</p>
-        <h1 className="mt-3 text-2xl font-semibold text-white">Generate Android pairing code</h1>
+    <main className="pairing-page relative mx-auto flex min-h-[82vh] max-w-xl items-center px-4 py-12">
+      <section className="relative w-full rounded-[28px] border border-teal-300/15 bg-slate-950/90 p-6 shadow-[0_30px_100px_rgba(0,0,0,.45)] sm:p-8">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-teal-300">Futuristic System · Device setup</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Generate Android pairing code</h1>
         <p className="mt-2 text-sm text-zinc-400">Enter the private pairing admin key configured on the backend. The key is used only in this page and is not saved in browser storage.</p>
 
         <label htmlFor="pairing-admin-key" className="mt-6 block text-sm text-zinc-300">Pairing admin key</label>
@@ -68,7 +68,7 @@ export default function DevicePairingPage() {
           value={adminKey}
           onChange={(event) => setAdminKey(event.target.value)}
           placeholder="Enter FS_PAIRING_ADMIN_KEY"
-          className="mt-2 w-full rounded-xl border border-border bg-black/40 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
+          className="mt-2 w-full rounded-xl border border-border bg-slate-900/80 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
         />
         <button
           type="button"

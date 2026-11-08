@@ -20,19 +20,19 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/25">
-          <svg className="h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+      <div className="flex min-h-[88px] items-center gap-3 border-b border-border px-5">
+        <div className="sidebar-brand flex h-10 w-10 items-center justify-center rounded-2xl text-teal-200">
+          <svg className="h-5 w-5 text-teal-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
         </div>
-        <div className="min-w-0"><p className="truncate text-sm font-semibold text-zinc-100">Futuristic System</p><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">Control Centre</p></div>
+        <div className="min-w-0"><p className="truncate text-[14px] font-bold tracking-wide text-zinc-100">Futuristic System</p><p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-teal-300/70">Control Centre</p></div>
       </div>
-      <ul className="flex-1 space-y-0.5 overflow-y-auto p-2.5">
+      <div className="px-5 pb-2 pt-5 text-[9px] font-bold uppercase tracking-[0.22em] text-zinc-600">Workspace</div>\n      <ul className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {navItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          return <li key={item.href}><Link href={item.href} onClick={onNavigate} className={cn("group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all", active ? "bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200")}><span className={cn("shrink-0", active ? "text-cyan-400" : "text-zinc-500 group-hover:text-zinc-400")}>{iconMap[item.icon]}</span><span className="truncate">{item.label}</span></Link></li>;
+          return <li key={item.href}><Link href={item.href} onClick={onNavigate} className={cn("sidebar-link group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all", active ? "bg-teal-300/[0.10] text-teal-200 ring-1 ring-teal-300/20 shadow-[inset_3px_0_0_0_rgba(94,234,212,.8)]" : "text-slate-400 hover:bg-white/[0.045] hover:text-zinc-100")}><span className={cn("shrink-0", active ? "text-teal-200" : "text-slate-500 group-hover:text-slate-300")}>{iconMap[item.icon]}</span><span className="truncate">{item.label}</span></Link></li>;
         })}
       </ul>
-      <div className="border-t border-border p-3"><div className="rounded-lg bg-zinc-900/60 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Phase</p><p className="mt-0.5 text-xs text-zinc-400">Auth + Providers live</p></div></div>
+      <div className="border-t border-border p-4"><div className="sidebar-footer rounded-2xl px-3.5 py-3"><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">Phase</p><p className="mt-1 text-xs font-medium text-teal-200">Private owner mode</p></div></div>
     </nav>
   );
 }
