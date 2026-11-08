@@ -1,6 +1,7 @@
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { parseDeviceJobDispatch } from "@/server/agent/device-contract";
 import { executeRegisteredTool } from "@/server/tools/registry";
+import { getProviderAdapter, listProviderAdapters } from "@/server/models/catalog";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -15,6 +16,27 @@ function escapeLike(value: string) {
 }
 
 export async function executeBackendTool(name: string, args: Record<string, unknown>) {
+  if (name === "models.list_providers") {
+    if (Object.keys(args).length) throw new Error("models.list_providers does not accept arguments.");
+    const providers = listProviderAdapters();
+    return {
+      providers,
+      configuredCount: providers.filter((provider) => provider.configured).length,
+      note: "Provider discovery only. A configured adapter still needs a model-specific execution adapter before inference is enabled.",
+    };
+  }
+
+  if (name === "models.provider_info") {
+    if (!onlyKeys(args, ["providerId"]) || typeof args.providerId !== "string" ||
+        !args.providerId.trim() || args.providerId.length > 80) {
+      throw new Error("models.provider_info requires a valid providerId.");
+    }
+    const provider = getProviderAdapter(args.providerId);
+    if (!provider) throw new Error("Provider adapter is not registered.");
+    const { endpointEnv: _endpointEnv, apiKeyEnv: _apiKeyEnv, ...safeProvider } = provider;
+    return safeProvider;
+  }
+
   if (name.startsWith("text.")) return executeRegisteredTool(name, args);
 
   if (name === "memory.search") {

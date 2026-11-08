@@ -43,7 +43,9 @@ test("tools/list exposes registered tools with JSON input schemas", async () => 
   const response = await handleMcpRequest(request({ jsonrpc: "2.0", id: 2, method: "tools/list" }, "2026-07-28"));
   const body = await result(response);
   const tools = body.result?.tools as Array<{ name: string; inputSchema: { additionalProperties: boolean } }>;
-  assert.equal(tools.length, 9);
+  assert.equal(tools.length, 11);
+  assert.equal(tools.some((tool) => tool.name === "models.list_providers"), true);
+  assert.equal(tools.some((tool) => tool.name === "models.provider_info"), true);
   assert.equal(tools[0].name, "text.word_count");
   assert.equal(tools[0].inputSchema.additionalProperties, false);
 });
