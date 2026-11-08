@@ -7,7 +7,9 @@ export type RegisteredToolId =
   | "device.list"
   | "device.dispatch_tool"
   | "agent.submit_task"
-  | "agent.task_status";
+  | "agent.task_status"
+  | "models.list_providers"
+  | "models.provider_info";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
@@ -124,6 +126,27 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
       additionalProperties: false,
     },
     annotations: deviceDispatch,
+  },
+  {
+    id: "models.list_providers",
+    description: "List supported model provider adapters, modalities, capabilities and configuration status without exposing secrets.",
+    permission: "models.registry.read",
+    sideEffect: false,
+    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    id: "models.provider_info",
+    description: "Describe one registered model provider adapter and its supported modalities and capabilities.",
+    permission: "models.registry.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: { providerId: { type: "string", minLength: 1, maxLength: 80 } },
+      required: ["providerId"],
+      additionalProperties: false,
+    },
+    annotations: readOnly,
   },
   {
     id: "agent.task_status",
