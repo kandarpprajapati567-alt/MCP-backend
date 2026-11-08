@@ -11,7 +11,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_PROMPT_LENGTH = 8_000;
-const MAX_REQUEST_BYTES = 16_000;
+const MAX_REQUEST_BYTES = 9_000;
 
 export function parseMediaGenerationRequest(body: unknown): MediaRequestParseResult {
   if (!isRecord(body)) return { ok: false, status: 400, error: "A JSON object is required." };
