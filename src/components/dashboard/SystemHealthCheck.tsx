@@ -6,7 +6,7 @@ type Check = { id: string; label: string; status: "ok" | "warning" | "failed" | 
 type Props = { connected: boolean; token: string };
 
 function statusFrom(value: unknown): Check["status"] {
-  return value === "ok" ? "ok" : value === "not_configured" ? "warning" : "failed";
+  return value === "ok" || value === "not_required" ? "ok" : value === "not_configured" ? "warning" : "failed";
 }
 
 export function SystemHealthCheck({ connected, token }: Props) {
