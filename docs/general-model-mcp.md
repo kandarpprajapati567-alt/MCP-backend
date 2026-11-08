@@ -24,7 +24,7 @@ Initial adapter targets:
 A catalog entry is not proof that every model in that family is implemented. Provider status must be ready before inference can be routed.
 
 ## MCP connection
-The existing /api/mcp Streamable HTTP endpoint remains the single MCP entry point. It exposes discovery tools for provider adapters and capabilities. Existing planner/workflow routing remains in place for LLM tasks. Image/video/audio generation uses queued workers because it may take minutes and requires binary assets.
+The existing /api/mcp Streamable HTTP endpoint remains the single MCP entry point. It exposes models.list_providers and models.provider_info for provider discovery. Existing planner/workflow routing remains in place for LLM tasks. Image/video/audio generation uses queued workers because it may take minutes and requires binary assets.
 
 ## Execution pipeline
 MCP client -> owner authentication -> planner/tool policy -> model registry -> capability check -> provider adapter -> immediate response or queued job -> worker -> private object storage -> result event.
