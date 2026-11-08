@@ -230,16 +230,18 @@ GitHub Actions runs typecheck, tests, and a production build.
 
 ## Android integration status
 
-The backend includes the device registration and job-bridge contracts, but the Android app has **not yet been connected and runtime-tested** against this service.
+The Android app has successfully completed **secure device pairing** with the production Render backend. The one-time pairing code is exchanged for a device-scoped credential; the owner master token remains server-side and is never embedded in the APK.
 
-Before production app integration, the next required pieces are:
-1. Android API client and secure token storage (Android Keystore).
-2. QR pairing UI and authenticated device registration.
-3. Background job polling/claiming with reconnect and retry handling.
-4. Local permission checks, execution, and bounded result callbacks.
-5. End-to-end tests using the actual Android app.
+The backend health endpoint has also been verified, with the API and Supabase database reporting healthy. **A device-authenticated API request from the Android app has not yet been runtime-verified**, so pairing must not be treated as proof that the full device bridge is operational.
 
-See [Android Device Bridge](docs/android-device-bridge.md) for the current payloads and protocol contract.
+Next integration steps:
+1. Add an authenticated connection-test action in the Android app using its stored device credential.
+2. Verify device authentication and manifest refresh against the production backend.
+3. Implement device job polling/claiming, reconnect, and retry handling.
+4. Enforce Android-side permission checks before local tool execution.
+5. Submit bounded device results and verify the complete task lifecycle end to end.
+
+The current pairing flow uses a manually entered, short-lived, single-use code—not QR scanning. See [Android Device Bridge](docs/android-device-bridge.md) for payloads and protocol contracts.
 
 ## Roadmap
 
@@ -250,7 +252,10 @@ See [Android Device Bridge](docs/android-device-bridge.md) for the current paylo
 - [x] Persistent owner memory
 - [x] Device registration and job-bridge contracts
 - [x] Secure device pairing and revocable device-scoped credentials
-- [ ] Android app integration and runtime validation
+- [ ] Android authenticated connection test
+- [ ] Device manifest refresh and authenticated API validation
+- [ ] Device job polling/claiming, reconnect, and retry handling
+- [ ] End-to-end Android device-job execution and result verification
 - [ ] Web search and research workflows
 - [ ] YouTube/transcript research integration
 - [ ] Local GGUF model runtime
@@ -258,6 +263,12 @@ See [Android Device Bridge](docs/android-device-bridge.md) for the current paylo
 - [ ] Public multi-user authentication and release
 
 Roadmap items describe intended work, not completed features.
+
+## Current project scope
+
+The current priority is the core personal AI platform: secure Android-to-backend connectivity, AI provider routing, validated agent/tool execution, persistent memory, research workflows, and local device control with explicit user permission.
+
+A standalone generative-video model or video-generation platform is intentionally **out of scope** for the current roadmap. This keeps development focused on capabilities that can be built and tested within the project's available device, infrastructure, and budget constraints.
 
 ## Repository structure
 
