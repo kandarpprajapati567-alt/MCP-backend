@@ -189,10 +189,10 @@ export default function DashboardPage() {
   const backendStatus = health.status ?? "checking";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="dashboard-page mx-auto max-w-6xl space-y-6">
       <PageHeader
-        title="MCP Command Centre"
-        description="Futuristic System · Central AI infrastructure, tool orchestration and persistent task layer"
+        title="System Overview"
+        description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
