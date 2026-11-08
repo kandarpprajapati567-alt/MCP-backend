@@ -1,15 +1,25 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
+import { isSameOriginRequest, PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 import { hashDeviceSecret } from "@/server/security/device-token";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store", "Pragma": "no-cache" };
 function json(body: unknown, status = 200) { return NextResponse.json(body, { status, headers }); }
 
+function verifyPairingAdminRequest(request: Request): boolean {
+  const expected = process.env.FS_PAIRING_ADMIN_KEY;
+  const supplied = request.headers.get("x-fs-pairing-admin-key") ?? "";
+  if (!expected || expected.length < 32 || supplied.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(supplied, "utf8"), Buffer.from(expected, "utf8"))
+    && isSameOriginRequest(request);
+}
+
 export async function POST(request: Request) {
-  if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
+  if (!verifyOwnerRequest(request) && !verifyPairingAdminRequest(request)) {
+    return json({ error: "Unauthorized. Configure the pairing admin key or connect as owner." }, 401);
+  }
 
   try {
     const admin = createAdminClient();
