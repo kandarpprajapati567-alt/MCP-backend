@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SystemHealthCheck } from "@/components/dashboard/SystemHealthCheck";
 
 type Task = { id: string; status: string; task: string; result: string | null; created_at: string };
 type Provider = { provider: string; updated_at: string };
@@ -194,6 +195,8 @@ export default function DashboardPage() {
         title="System Overview"
         description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
+
+      <SystemHealthCheck connected={connected} token={token} />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
