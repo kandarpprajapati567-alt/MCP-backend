@@ -94,10 +94,21 @@ export default function DashboardPage() {
         headers: { "x-fs-owner-token": masterKey },
         cache: "no-store",
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Owner token rejected.");
+      const raw = await response.text();
+      let data: { error?: string; tools?: Tool[] } = {};
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw) as { error?: string; tools?: Tool[] };
+        } catch {
+          throw new Error(`Backend returned an invalid response (HTTP ${response.status}). Refresh the page and try again; if it continues, check the Vercel deployment.`);
+        }
+      } else {
+        throw new Error(`Backend returned an empty response (HTTP ${response.status}). Refresh the page and try again.`);
+      }
+      if (!response.ok) throw new Error(data.error ?? `Connection failed (HTTP ${response.status}). Check the owner token.`);
+      if (!Array.isArray(data.tools)) throw new Error("Backend response is missing the tool registry. Please retry.");
       setToken(masterKey);
-      setTools(data.tools ?? []);
+      setTools(data.tools);
       setConnected(true);
       setMasterKey("");
       setMessage("Connected to MCP backend. No four-day session is created.");
