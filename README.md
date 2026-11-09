@@ -230,12 +230,16 @@ GitHub Actions runs typecheck, tests, and a production build.
 
 ## Android integration status
 
-The Android app has successfully completed **secure device pairing** with the production Render backend. The one-time pairing code is exchanged for a device-scoped credential; the owner master token remains server-side and is never embedded in the APK.
+**Secure Android-to-Render device pairing is complete.** On 2026-11-08, the Android app successfully paired with the production Render backend using a fresh, short-lived pairing code. The resulting device-scoped token is stored encrypted with Android Keystore; the owner master token remains server-side and is never embedded in the APK.
 
-The backend health endpoint has also been verified, with the API and Supabase database reporting healthy. **A device-authenticated API request from the Android app has not yet been runtime-verified**, so pairing must not be treated as proof that the full device bridge is operational.
+The Render-hosted Command Centre's **Connect** action has also succeeded after the pairing-admin configuration was corrected. This confirms that the dashboard can connect to its backend; it is a separate check from the Android device bridge.
+
+The public backend health endpoint has been verified separately: HTTP 200 with `status: "ok"` and the Supabase database reporting `ok`. The health endpoint's authentication field is `not_required`; this is expected for the public health check and does not prove device-token authentication.
+
+**Still pending:** the Android app's authenticated **Test Connection** request and manifest refresh have not yet been runtime-verified. Successful pairing and secure token storage do not, by themselves, prove that authenticated device API calls or the complete device-job lifecycle work.
 
 Next integration steps:
-1. Add an authenticated connection-test action in the Android app using its stored device credential.
+1. Run the Android app's authenticated connection test using its stored device credential.
 2. Verify device authentication and manifest refresh against the production backend.
 3. Implement device job polling/claiming, reconnect, and retry handling.
 4. Enforce Android-side permission checks before local tool execution.
