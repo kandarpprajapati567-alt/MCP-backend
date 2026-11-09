@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readBoundedJson } from "@/server/http/read-bounded-json";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 import { submitAgentTask } from "@/server/agent/task-service";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
+const MAX_TASK_BODY_BYTES = 16_000;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers });
@@ -24,11 +26,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
-  const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > 16000) return json({ error: "Request body too large." }, 413);
 
-  let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
+  const parsed = await readBoundedJson(request, MAX_TASK_BODY_BYTES);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const body = parsed.value;
   if (!body || typeof body !== "object" || Array.isArray(body) ||
       typeof (body as Record<string, unknown>).task !== "string") {
     return json({ error: "task is required." }, 400);
