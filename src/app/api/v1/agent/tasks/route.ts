@@ -14,13 +14,22 @@ function json(body: unknown, status = 200) {
 export async function GET(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   const admin = createAdminClient();
-  const { data, error } = await admin.from("agent_tasks")
+  const primary = await admin.from("agent_tasks")
     .select("id,status,task,plan,tool_results,result,error_code,agent_definition_id,agent_snapshot,created_at,updated_at,completed_at")
     .eq("owner_id", PERSONAL_OWNER_ID)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) return json({ error: "Unable to load task history." }, 500);
-  return json({ tasks: data ?? [] });
+  if (!primary.error) return json({ tasks: primary.data ?? [] });
+  if (!/agent_snapshot|agent_definition_id|column .* does not exist/i.test(primary.error.message)) {
+    return json({ error: "Unable to load task history." }, 500);
+  }
+  const legacy = await admin.from("agent_tasks")
+    .select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (legacy.error) return json({ error: "Unable to load task history." }, 500);
+  return json({ tasks: legacy.data ?? [] });
 }
 
 export async function POST(request: Request) {
