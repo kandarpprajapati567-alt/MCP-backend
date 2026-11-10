@@ -56,6 +56,9 @@ export async function POST(request: Request) {
     return json(result, status);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Unable to submit task.";
-    return json({ error: message }, message.startsWith("Task must") ? 400 : 503);
+    const status = message.startsWith("Task must") || message.includes("valid agent ID") ? 400
+      : message.includes("does not exist") ? 404
+        : message.includes("disabled") ? 409 : 503;
+    return json({ error: message }, status);
   }
 }
