@@ -18,12 +18,20 @@ export type AgentDefinitionParseResult =
   | { ok: true; value: AgentDefinitionInput }
   | { ok: false; error: string };
 
+const AGENT_DEFINITION_FIELDS = new Set([
+  "name", "description", "role", "instructions", "providerPreference",
+  "modelPreference", "allowedTools", "maxSteps", "maxToolCalls", "enabled",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function parseAgentDefinition(value: unknown): AgentDefinitionParseResult {
   if (!isRecord(value)) return { ok: false, error: "A JSON object is required." };
+  if (Object.keys(value).some((key) => !AGENT_DEFINITION_FIELDS.has(key))) {
+    return { ok: false, error: "Agent definition contains unsupported fields." };
+  }
 
   const name = typeof value.name === "string" ? value.name.trim() : "";
   const description = value.description === undefined ? "" : value.description;
