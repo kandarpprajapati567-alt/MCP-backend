@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   const admin = createAdminClient();
   const { data, error } = await admin.from("agent_tasks")
-    .select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
+    .select("id,status,task,plan,tool_results,result,error_code,agent_definition_id,agent_snapshot,created_at,updated_at,completed_at")
     .eq("owner_id", PERSONAL_OWNER_ID)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -34,8 +34,14 @@ export async function POST(request: Request) {
     return json({ error: "task is required." }, 400);
   }
 
+  const input = body as { task: string; agentId?: unknown };
+  if (input.agentId !== undefined && (typeof input.agentId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.agentId))) {
+    return json({ error: "agentId must be a valid Agent UUID." }, 400);
+  }
+
   try {
-    const result = await submitAgentTask((body as { task: string }).task);
+    const result = await submitAgentTask(input.task, input.agentId as string | undefined);
     const status = result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
     return json(result, status);
   } catch (cause) {
