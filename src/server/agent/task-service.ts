@@ -54,7 +54,7 @@ async function loadAgentDefinition(
   return { id: data.id, ...parsed.value };
 }
 
-function localPlan(task: string, allowedTools?: readonly string[]) {
+function localPlan(task: string, agent?: AgentDefinitionInput) {
   const lower = task.toLowerCase();
   const toolId = lower.includes("word count") || lower.includes("count words")
     ? "text.word_count"
@@ -63,7 +63,7 @@ function localPlan(task: string, allowedTools?: readonly string[]) {
       : lower.includes("text stats") || lower.includes("character count")
         ? "text.text_stats"
         : null;
-  if (toolId && allowedTools && !allowedTools.includes(toolId)) {
+  if (toolId && agent && (!agent.allowedTools.includes(toolId) || agent.maxToolCalls === 0)) {
     return {
       version: 1 as const,
       goal: task.slice(0, 500),
@@ -152,7 +152,11 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
-    const plan = planned ?? localPlan(task, agent?.allowedTools);
+    const plan = planned ?? localPlan(task, agent);
+    if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
+        plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
+      throw new Error("Agent execution policy rejected the generated plan.");
+    }
     await setTask(admin, id, { plan, status: "executing" });
     await event(admin, id, "task.plan_ready", {
       steps: plan.steps.length,
