@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AIGenerationRequest, AIProviderCapability } from "../providers/types";
+import type { AgentProviderPreference } from "@/server/agent/definition-schema";
 import { createRuntimeProviderRegistry } from "../providers/runtime-registry";
 import { executeWorkflow, type ProviderAttemptObservation } from "./executor";
 import type { AIWorkflow, ModelRoutePolicy, ProviderRegistry } from "./types";
@@ -75,5 +76,36 @@ export async function executeUserWorkflow(
 ) {
   const providers = await createRuntimeProviderRegistry(userId);
   const policy = await getUserWorkflowPolicy(userId, workflow, providers);
+  return executeWorkflow(workflow, policy, providers, request, onAttempt);
+}
+
+
+export async function executeAgentWorkflow(
+  userId: string,
+  workflow: AIWorkflow,
+  request: AIGenerationRequest,
+  preferences: { providerPreference: AgentProviderPreference; modelPreference: string | null },
+  onAttempt?: (observation: ProviderAttemptObservation) => void,
+) {
+  const providers = await createRuntimeProviderRegistry(userId);
+  const basePolicy = await getUserWorkflowPolicy(userId, workflow, providers);
+  const providerId = preferences.providerPreference === "auto"
+    ? basePolicy.primaryProvider
+    : preferences.providerPreference;
+  if (!providers[providerId]) {
+    throw new Error("The Agent's selected AI provider is not configured.");
+  }
+
+  const fallbackProviders = [...new Set([
+    ...basePolicy.fallbackProviders.filter((id) => id !== providerId),
+    ...(providerId === "mock" ? [] : ["mock"]),
+  ])];
+  const policy: ModelRoutePolicy = {
+    ...basePolicy,
+    primaryProvider: providerId,
+    primaryModel: preferences.modelPreference?.trim() ||
+      (providerId === basePolicy.primaryProvider ? basePolicy.primaryModel : DEFAULT_MODELS[providerId]),
+    fallbackProviders,
+  };
   return executeWorkflow(workflow, policy, providers, request, onAttempt);
 }
