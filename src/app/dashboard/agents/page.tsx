@@ -18,6 +18,7 @@ type Agent = {
   created_at: string;
   updated_at: string;
 };
+type Tool = { id: string; description: string; sideEffect: boolean };
 
 type Draft = {
   name: string;
@@ -29,6 +30,7 @@ type Draft = {
   maxSteps: number;
   maxToolCalls: number;
   enabled: boolean;
+  allowedTools: string[];
 };
 
 const emptyDraft: Draft = {
@@ -41,12 +43,14 @@ const emptyDraft: Draft = {
   maxSteps: 8,
   maxToolCalls: 4,
   enabled: true,
+  allowedTools: [],
 };
 
 export default function AgentsPage() {
   const [token, setToken] = useState("");
   const [connected, setConnected] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -67,10 +71,16 @@ export default function AgentsPage() {
   }
 
   async function loadAgents() {
-    const response = await request("/api/v1/agents");
+    const [response, toolResponse] = await Promise.all([
+      request("/api/v1/agents"),
+      request("/api/v1/tools"),
+    ]);
     const data = await response.json();
+    const toolData = await toolResponse.json();
     if (!response.ok) throw new Error(data.error ?? "Could not load agents.");
+    if (!toolResponse.ok) throw new Error(toolData.error ?? "Could not load registered tools.");
     setAgents(data.agents ?? []);
+    setTools((toolData.tools ?? []).filter((tool: Tool) => tool.id !== "device.dispatch_tool" && !tool.id.startsWith("agent.")));
   }
 
   async function connect() {
@@ -108,6 +118,7 @@ export default function AgentsPage() {
       maxSteps: agent.max_steps,
       maxToolCalls: agent.max_tool_calls,
       enabled: agent.enabled,
+      allowedTools: agent.allowed_tools ?? [],
     });
     setShowEditor(true);
     setError("");
@@ -127,7 +138,7 @@ export default function AgentsPage() {
           body: JSON.stringify({
             ...draft,
             modelPreference: draft.modelPreference.trim() || null,
-            allowedTools: editingId ? agents.find((agent) => agent.id === editingId)?.allowed_tools ?? [] : [],
+            allowedTools: draft.allowedTools,
           }),
         },
       );
@@ -267,6 +278,28 @@ export default function AgentsPage() {
                   </select>
                 </label>
               </div>
+              <fieldset className="space-y-2 rounded-xl border border-border p-3">
+                <legend className="px-1 text-xs text-zinc-400">Allowed tools</legend>
+                <p className="text-xs text-zinc-500">Only selected registered tools can be proposed by this Agent. No selection means tool-free execution.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {tools.map((tool) => (
+                    <label key={tool.id} className="flex items-start gap-2 rounded-lg border border-border/70 p-2 text-xs text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={draft.allowedTools.includes(tool.id)}
+                        onChange={(event) => setDraft({
+                          ...draft,
+                          allowedTools: event.target.checked
+                            ? [...draft.allowedTools, tool.id]
+                            : draft.allowedTools.filter((id) => id !== tool.id),
+                        })}
+                        className="mt-0.5 h-4 w-4 accent-cyan-400"
+                      />
+                      <span><span className="block text-cyan-200">{tool.id}</span><span className="mt-1 block text-zinc-500">{tool.description}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <label className="flex items-center gap-2 text-sm text-zinc-300">
                 <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
                 Agent enabled
