@@ -2,6 +2,7 @@ import "server-only";
 
 import { executeAgentWorkflow, executeUserWorkflow } from "../ai/routing/runtime-executor";
 import type { AgentDefinitionInput } from "./definition-schema";
+import type { AIGenerationRequest } from "../ai/providers/types";
 import { TOOL_CATALOG } from "../tools/registry";
 import { parseAgentPlan, type AgentAvailableTool, type AgentPlan } from "./plan-schema";
 
@@ -55,7 +56,7 @@ export async function createAgentPlan(
     JSON.stringify(toolManifest),
   ].join("\n");
 
-  const request = {
+  const request: AIGenerationRequest = {
     messages: [
       { role: "system", content: prompt },
       { role: "user", content: task.trim() },
