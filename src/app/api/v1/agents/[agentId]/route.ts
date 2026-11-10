@@ -7,6 +7,10 @@ import { readJsonBody } from "@/server/http/read-json";
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
 const columns = "id,name,description,role,instructions,provider_preference,model_preference,allowed_tools,max_steps,max_tool_calls,enabled,created_at,updated_at";
+const mutableFields = new Set([
+  "name", "description", "role", "instructions", "providerPreference",
+  "modelPreference", "allowedTools", "maxSteps", "maxToolCalls", "enabled",
+]);
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers });
@@ -29,6 +33,12 @@ export async function PATCH(request: Request, context: Context) {
   const body = parsedBody.value;
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "A JSON object is required." }, 400);
 
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((key) => !mutableFields.has(key))) {
+    return json({ error: "Agent definition contains unsupported fields." }, 400);
+  }
+  if (Object.keys(input).length === 0) return json({ error: "At least one Agent field is required." }, 400);
+
   try {
     const admin = createAdminClient();
     const { data: existing, error: readError } = await admin.from("agent_definitions")
@@ -36,7 +46,6 @@ export async function PATCH(request: Request, context: Context) {
     if (readError) return json({ error: "Agent could not be loaded." }, 503);
     if (!existing) return json({ error: "Agent not found." }, 404);
 
-    const input = body as Record<string, unknown>;
     const merged = {
       name: input.name ?? existing.name,
       description: input.description ?? existing.description,
