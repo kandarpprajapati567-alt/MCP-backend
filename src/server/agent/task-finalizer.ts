@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
+import type { AIGenerationRequest } from "@/server/ai/providers/types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -69,7 +70,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
 
   let result: string;
   try {
-    const synthesisRequest = {
+    const synthesisRequest: AIGenerationRequest = {
       messages: [
         { role: "system" as const, content: systemPrompt },
         { role: "user", content: JSON.stringify({ task: task.task, plan: task.plan, toolResults }) },
