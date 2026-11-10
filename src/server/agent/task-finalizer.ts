@@ -13,12 +13,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean> {
   const admin = createAdminClient();
   const { data: task, error: taskError } = await admin.from("agent_tasks")
-    .select("id,status,task,plan,tool_results,agent_snapshot")
+    .select("id,status,task,plan,tool_results")
     .eq("owner_id", PERSONAL_OWNER_ID)
     .eq("id", taskId)
     .maybeSingle();
   if (taskError) throw new Error("Task state could not be loaded.");
   if (!task || task.status !== "waiting_for_device") return false;
+  const { data: snapshotRow, error: snapshotError } = await admin.from("agent_tasks")
+    .select("agent_snapshot").eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle();
+  const agentSnapshot: unknown = snapshotError ? null : snapshotRow?.agent_snapshot;
 
   const { data: jobs, error: jobsError } = await admin.from("agent_tool_jobs")
     .select("id,device_id,tool_call_id,tool_id,status,result,error_code")
@@ -58,7 +61,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     payload: { deviceJobs: jobs.length },
   });
 
-  const snapshot = isRecord(task.agent_snapshot) ? task.agent_snapshot : null;
+  const snapshot = isRecord(agentSnapshot) ? agentSnapshot : null;
   const providerPreference = snapshot && typeof snapshot.providerPreference === "string" &&
     AGENT_PROVIDERS.includes(snapshot.providerPreference as AgentProviderPreference)
     ? snapshot.providerPreference as AgentProviderPreference : "auto";
