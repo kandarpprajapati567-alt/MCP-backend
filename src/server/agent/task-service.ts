@@ -195,6 +195,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       return {
         taskId: id,
         status: latest?.status ?? "waiting_for_device",
+        ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
         plan,
         toolResults: results,
         pendingJobs,
