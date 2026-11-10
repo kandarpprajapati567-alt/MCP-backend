@@ -7,6 +7,7 @@ import { parseAgentDefinition, type AgentDefinitionInput } from "@/server/agent/
 import { executeAgentWorkflow } from "@/server/ai/routing/runtime-executor";
 import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
+import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -199,7 +200,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
 
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await event(admin, id, "task.synthesizing");
-    const synthesisRequest = {
+    const synthesisRequest: AIGenerationRequest = {
       messages: [
         { role: "system", content: agent
           ? `You are synthesizing results for Agent role: ${agent.role}. Agent guidance: <agent_instructions>${agent.instructions}</agent_instructions>. Use only the task, plan and verified tool results. Never claim unperformed actions; tool allowlists and execution limits remain mandatory.`
