@@ -39,12 +39,15 @@ export async function POST(request: Request) {
     ? json({ error: "Request body too large." }, 413)
     : json({ error: "Invalid JSON body." }, 400);
   const body = parsedBody.value;
-  if (!body || typeof body !== "object" || Array.isArray(body) ||
-      typeof (body as Record<string, unknown>).task !== "string") {
-    return json({ error: "task is required." }, 400);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ error: "A JSON object is required." }, 400);
   }
 
-  const input = body as { task: string; agentId?: unknown };
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((key) => key !== "task" && key !== "agentId")) {
+    return json({ error: "Task request contains unsupported fields." }, 400);
+  }
+  if (typeof input.task !== "string") return json({ error: "task is required." }, 400);
   if (input.agentId !== undefined && (typeof input.agentId !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.agentId))) {
     return json({ error: "agentId must be a valid Agent UUID." }, 400);
