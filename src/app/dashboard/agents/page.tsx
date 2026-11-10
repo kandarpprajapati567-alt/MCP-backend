@@ -295,7 +295,7 @@ export default function AgentsPage() {
                         })}
                         className="mt-0.5 h-4 w-4 accent-cyan-400"
                       />
-                      <span><span className="block text-cyan-200">{tool.id}</span><span className="mt-1 block text-zinc-500">{tool.description}</span></span>
+                      <span><span className="block text-cyan-200">{tool.id}</span><span className="mt-1 block text-zinc-500">{tool.description}</span><span className={tool.sideEffect ? "mt-1 block text-amber-300" : "mt-1 block text-emerald-300"}>{tool.sideEffect ? "Can change data" : "Read-only"}</span></span>
                     </label>
                   ))}
                 </div>
