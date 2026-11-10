@@ -103,7 +103,8 @@ export async function executeAgentWorkflow(
   const policy: ModelRoutePolicy = {
     ...basePolicy,
     primaryProvider: providerId,
-    primaryModel: preferences.modelPreference?.trim() ||
+    primaryModel: providerId === "mock" ? DEFAULT_MODELS.mock :
+      preferences.modelPreference?.trim() ||
       (providerId === basePolicy.primaryProvider ? basePolicy.primaryModel : DEFAULT_MODELS[providerId]),
     fallbackProviders,
   };
