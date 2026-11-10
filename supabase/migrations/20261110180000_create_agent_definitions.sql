@@ -32,3 +32,15 @@ drop trigger if exists agent_definitions_set_updated_at on public.agent_definiti
 create trigger agent_definitions_set_updated_at
   before update on public.agent_definitions
   for each row execute function private.set_updated_at();
+
+
+-- Keep the selected Agent attached to task history without losing the
+-- execution configuration if the Agent definition is later edited or deleted.
+alter table public.agent_tasks
+  add column if not exists agent_definition_id uuid
+    references public.agent_definitions(id) on delete set null;
+alter table public.agent_tasks
+  add column if not exists agent_snapshot jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(agent_snapshot) = 'object');
+create index if not exists agent_tasks_owner_agent_created_idx
+  on public.agent_tasks(owner_id, agent_definition_id, created_at desc);
