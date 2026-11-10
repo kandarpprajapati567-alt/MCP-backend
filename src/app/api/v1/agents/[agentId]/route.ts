@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 import { parseAgentDefinition } from "@/server/agent/definition-schema";
+import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -21,8 +22,11 @@ export async function PATCH(request: Request, context: Context) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   const { agentId } = await context.params;
   if (!isUuid(agentId)) return json({ error: "A valid agent ID is required." }, 400);
-  let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
+  const parsedBody = await readJsonBody(request, 20000);
+  if (!parsedBody.ok) return parsedBody.reason === "too_large"
+    ? json({ error: "Request body too large." }, 413)
+    : json({ error: "Invalid JSON body." }, 400);
+  const body = parsedBody.value;
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "A JSON object is required." }, 400);
 
   try {
