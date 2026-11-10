@@ -33,3 +33,10 @@ test("enforces execution limits and duplicate tool rejection", () => {
   assert.equal(parseAgentDefinition({ ...valid, maxToolCalls: -1 }).ok, false);
   assert.equal(parseAgentDefinition({ ...valid, allowedTools: ["text.word_count", "text.word_count"] }).ok, false);
 });
+
+test("rejects unknown fields instead of silently ignoring misspelled policy", () => {
+  assert.deepEqual(parseAgentDefinition({ ...valid, maxToolCall: 0 }), {
+    ok: false,
+    error: "Agent definition contains unsupported fields.",
+  });
+});
