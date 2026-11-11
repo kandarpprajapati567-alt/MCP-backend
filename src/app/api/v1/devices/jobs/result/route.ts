@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDeviceJobResult } from "@/server/agent/device-contract";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { verifyDeviceRequest } from "@/server/security/device-auth";
+import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -11,8 +12,11 @@ function json(body: unknown, status = 200) { return NextResponse.json(body, { st
 export async function POST(request: Request) {
   const authenticated = await verifyDeviceRequest(request);
   if (!authenticated) return json({ error: "Device authentication required." }, 401);
-  let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
+  const parsedBody = await readJsonBody(request, 40000);
+  if (!parsedBody.ok) return parsedBody.reason === "too_large"
+    ? json({ error: "Request body too large." }, 413)
+    : json({ error: "Invalid JSON body." }, 400);
+  const body = parsedBody.value;
   const parsed = parseDeviceJobResult(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
   const input = parsed.value;
