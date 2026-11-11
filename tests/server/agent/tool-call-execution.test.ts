@@ -1,26 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { executeToolCallSafely } from "../../../src/server/agent/tool-call-execution";
+import {
+  executeToolCallsSequentially,
+} from "../../../src/server/agent/tool-call-execution";
 import { safeAgentFailureMessage } from "../../../src/server/agent/failure-diagnostics";
 
-test("captures one tool failure without preventing a later tool call", async () => {
+test("continues through the planned sequence after an earlier tool fails", async () => {
   const calls: string[] = [];
-  const first = await executeToolCallSafely(async () => {
-    calls.push("missing-file");
-    throw new Error("GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.");
-  });
-  const second = await executeToolCallSafely(async () => {
-    calls.push("package-json");
-    return { content: '{"dependencies":{"next":"15.5.28"}}' };
-  });
+  const outcomes = await executeToolCallsSequentially(
+    ["missing-file", "package-json"],
+    async (tool) => {
+      calls.push(tool);
+      if (tool === "missing-file") {
+        throw new Error(
+          "GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.",
+        );
+      }
+      return { content: '{"dependencies":{"next":"15.5.28"}}' };
+    },
+  );
 
   assert.deepEqual(calls, ["missing-file", "package-json"]);
-  assert.deepEqual(first, {
-    ok: false,
-    error: "GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.",
+  assert.equal(outcomes.length, 2);
+  assert.deepEqual(outcomes[0], {
+    call: "missing-file",
+    execution: {
+      ok: false,
+      error:
+        "GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.",
+    },
   });
-  assert.equal(second.ok, true);
-  if (second.ok) assert.match(JSON.stringify(second.result), /15\.5\.28/);
+  assert.equal(outcomes[1].call, "package-json");
+  assert.equal(outcomes[1].execution.ok, true);
+  if (outcomes[1].execution.ok) {
+    assert.match(JSON.stringify(outcomes[1].execution.result), /15\.5\.28/);
+  }
 });
 
 test("keeps unknown internal exceptions sanitized", () => {
