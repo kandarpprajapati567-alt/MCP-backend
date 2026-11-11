@@ -50,3 +50,30 @@ test("keeps agent instructions inside the provider system-message limit", () => 
   assert.ok(prompt.length <= 4_000);
   assert.match(prompt, /Agent guidance \(truncated when necessary\)/);
 });
+
+test("preserves file metadata and beginning, middle, and end evidence", () => {
+  const content = buildSynthesisUserContent(
+    "Read two source files and compare their contents",
+    { goal: "inspect files" },
+    [
+      { callId: "call-1", toolId: "github.read_file", result: {
+        path: "package.json", size: 2_000,
+        content: "PACKAGE_BEGIN " + "a".repeat(900) + " PACKAGE_MIDDLE " + "b".repeat(900) + " PACKAGE_END",
+      } },
+      { callId: "call-2", toolId: "github.read_file", result: {
+        path: "README.md", size: 4_000,
+        content: "README_BEGIN " + "c".repeat(1_800) + " README_MIDDLE " + "d".repeat(1_800) + " README_END",
+      } },
+    ],
+  );
+  assert.ok(content.length <= 3_500);
+  const parsed = JSON.parse(content);
+  assert.equal(parsed.toolResults.length, 2);
+  for (const item of parsed.toolResults) {
+    const excerpt = JSON.parse(item.resultExcerpt);
+    assert.ok(typeof excerpt.path === "string");
+    assert.ok(excerpt.contentTruncated);
+    assert.ok(excerpt.contentPreview.includes("_BEGIN"));
+    assert.ok(excerpt.contentPreview.includes("_END"));
+  }
+});
