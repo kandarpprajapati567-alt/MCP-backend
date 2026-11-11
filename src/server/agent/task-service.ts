@@ -152,7 +152,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
-    const plan = planned ?? localPlan(task, agent);
+    const plan = planned ?? localPlan(task, agent ?? undefined);
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
         plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
       throw new Error("Agent execution policy rejected the generated plan.");
