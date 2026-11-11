@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
+import { buildLocalAgentPlan } from "@/server/agent/local-plan";
 import { parseAgentDefinition, type AgentDefinitionInput } from "@/server/agent/definition-schema";
 import { executeAgentWorkflow } from "@/server/ai/routing/runtime-executor";
 import { executeBackendTool } from "@/server/tools/executor";
@@ -57,30 +58,6 @@ async function loadAgentDefinition(
   return { id: data.id, ...parsed.value };
 }
 
-function localPlan(task: string, agent?: AgentDefinitionInput) {
-  const lower = task.toLowerCase();
-  const toolId = lower.includes("word count") || lower.includes("count words")
-    ? "text.word_count"
-    : lower.includes("keyword")
-      ? "text.extract_keywords"
-      : lower.includes("text stats") || lower.includes("character count")
-        ? "text.text_stats"
-        : null;
-  if (toolId && agent && (!agent.allowedTools.includes(toolId) || agent.maxToolCalls === 0)) {
-    return {
-      version: 1 as const,
-      goal: task.slice(0, 500),
-      steps: [{ id: "step-1", objective: "Complete the request without using tools outside the Agent allowlist.", expectedOutcome: "A bounded result with execution evidence." }],
-      toolCalls: [],
-    };
-  }
-  return {
-    version: 1 as const,
-    goal: task.slice(0, 500),
-    steps: [{ id: "step-1", objective: "Interpret the request and complete the available safe operation.", expectedOutcome: "A bounded result with execution evidence." }],
-    toolCalls: toolId ? [{ id: "call-1", toolId, arguments: { text: task } }] : [],
-  };
-}
 
 async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClient>): Promise<AvailableDeviceTool[]> {
   const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -156,7 +133,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
-    const plan = planned ?? localPlan(task, agent ?? undefined);
+    const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
     failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
         plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
