@@ -61,6 +61,7 @@ test("lists commits and repository files with bounded results", async () => {
 
   mockResponse({ truncated: false, tree: [
     { path: "src/index.ts", type: "blob", size: 100 },
+    { path: "src/lib", type: "tree" },
     { path: "src/lib/helper.ts", type: "blob", size: 50 },
     { path: "README.md", type: "blob", size: 20 },
     { path: "src", type: "tree" },
