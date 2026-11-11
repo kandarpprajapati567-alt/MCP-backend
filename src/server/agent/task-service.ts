@@ -9,7 +9,7 @@ import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { executeToolCallSafely } from "@/server/agent/tool-call-execution";
+import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 
@@ -186,7 +186,9 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
         await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
       } else {
-        const execution = await executeToolCallSafely(() => executeBackendTool(call.toolId, call.arguments));
+        const [{ execution }] = await executeToolCallsSequentially([call], (plannedCall) =>
+          executeBackendTool(plannedCall.toolId, plannedCall.arguments),
+        );
         if (execution.ok) {
           results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
           await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
