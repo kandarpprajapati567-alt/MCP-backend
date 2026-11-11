@@ -9,7 +9,11 @@ export type RegisteredToolId =
   | "agent.submit_task"
   | "agent.task_status"
   | "models.list_providers"
-  | "models.provider_info"\n  | "github.list_branches"\n  | "github.list_commits"\n  | "github.list_files"\n  | "github.read_file";
+  | "models.provider_info"
+  | "github.list_branches"
+  | "github.list_commits"
+  | "github.list_files"
+  | "github.read_file";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
