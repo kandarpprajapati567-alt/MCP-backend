@@ -82,11 +82,13 @@ export async function POST(request: Request, context: Context) {
       ...(bot.model_preference ? { modelPreference: bot.model_preference } : {}),
       ...(Array.isArray(bot.allowed_tools) && bot.allowed_tools.length ? { allowedTools: bot.allowed_tools } : {}),
     });
-    const assistantContent = result.status === "completed"
-      ? result.result ?? "Task completed."
-      : result.status === "waiting_for_device"
-        ? result.message ?? "Waiting for the assigned Agent to finish."
-        : "I couldn't complete that task. Check the execution details and try again.";
+    const assistantContent = "result" in result && typeof result.result === "string"
+      ? result.result
+      : "message" in result && typeof result.message === "string"
+        ? result.message
+        : result.status === "completed"
+          ? "Task completed."
+          : "I could not complete that task. Check the execution details and try again.";
     const { data: assistantMessage, error: assistantError } = await admin.from("bot_messages").insert({
       owner_id: PERSONAL_OWNER_ID,
       conversation_id: conversationId,
