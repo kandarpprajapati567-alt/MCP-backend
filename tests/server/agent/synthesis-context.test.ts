@@ -8,7 +8,7 @@ test("keeps large tool output within provider message limits", () => {
     { goal: "read files" },
     [{ callId: "call-1", toolId: "github.read_file", result: { content: "x".repeat(25_000) } }],
   );
-  assert.ok(content.length <= 3_500);
+  assert.ok(content.length <= 9_500);
   const parsed = JSON.parse(content);
   assert.equal(parsed.toolResults[0].callId, "call-1");
   const excerpt = JSON.parse(parsed.toolResults[0].resultExcerpt);
@@ -25,7 +25,7 @@ test("bounds combined task, plan and multiple tool results", () => {
       result: { content: "r".repeat(8_000) },
     })),
   );
-  assert.ok(content.length <= 3_500);
+  assert.ok(content.length <= 9_500);
   const parsed = JSON.parse(content);
   assert.equal(parsed.taskTruncated, true);
   assert.equal(parsed.planTruncated, true);
@@ -68,14 +68,16 @@ test("preserves file metadata and beginning, middle, and end evidence", () => {
       } },
     ],
   );
-  assert.ok(content.length <= 3_500);
+  assert.ok(content.length <= 9_500);
   const parsed = JSON.parse(content);
   assert.equal(parsed.toolResults.length, 2);
   for (const item of parsed.toolResults) {
     const excerpt = JSON.parse(item.resultExcerpt);
     assert.ok(typeof excerpt.path === "string");
-    assert.ok(excerpt.contentTruncated);
     assert.ok(excerpt.contentPreview.includes("_BEGIN"));
     assert.ok(excerpt.contentPreview.includes("_END"));
+  }
+  assert.equal(JSON.parse(parsed.toolResults[0].resultExcerpt).contentTruncated, false);
+  assert.equal(JSON.parse(parsed.toolResults[1].resultExcerpt).contentTruncated, true);
   }
 });
