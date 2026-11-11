@@ -30,7 +30,7 @@ test("bounds combined task, plan and multiple tool results", () => {
   assert.equal(parsed.taskTruncated, true);
   assert.equal(parsed.planTruncated, true);
   assert.ok(parsed.toolResults.length > 0);
-  assert.ok(parsed.omittedToolResults > 0);
+  assert.ok(parsed.toolResults.some((item: { resultTruncated: boolean }) => item.resultTruncated));
 });
 
 test("preserves small synthesis context without truncation", () => {
@@ -79,7 +79,6 @@ test("preserves file metadata and beginning, middle, and end evidence", () => {
   }
   assert.equal(JSON.parse(parsed.toolResults[0].resultExcerpt).contentTruncated, false);
   assert.equal(JSON.parse(parsed.toolResults[1].resultExcerpt).contentTruncated, true);
-  }
 });
 
 test("keeps complete synthesis request below the provider aggregate limit", () => {
