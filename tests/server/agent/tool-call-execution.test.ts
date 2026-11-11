@@ -5,8 +5,9 @@ import {
 } from "../../../src/server/agent/tool-call-execution";
 import { safeAgentFailureMessage } from "../../../src/server/agent/failure-diagnostics";
 
-test("continues through the planned sequence after an earlier tool fails", async () => {
+test("continues through planned calls after a tool failure and persists each outcome in order", async () => {
   const calls: string[] = [];
+  const persisted: string[] = [];
   const outcomes = await executeToolCallsSequentially(
     ["missing-file", "package-json"],
     async (tool) => {
@@ -18,9 +19,14 @@ test("continues through the planned sequence after an earlier tool fails", async
       }
       return { content: '{"dependencies":{"next":"15.5.28"}}' };
     },
+    () => true,
+    async (tool, execution) => {
+      persisted.push(tool + ":" + (execution.ok ? "completed" : "failed"));
+    },
   );
 
   assert.deepEqual(calls, ["missing-file", "package-json"]);
+  assert.deepEqual(persisted, ["missing-file:failed", "package-json:completed"]);
   assert.equal(outcomes.length, 2);
   assert.deepEqual(outcomes[0], {
     call: "missing-file",
@@ -33,7 +39,7 @@ test("continues through the planned sequence after an earlier tool fails", async
   assert.equal(outcomes[1].call, "package-json");
   assert.equal(outcomes[1].execution.ok, true);
   if (outcomes[1].execution.ok) {
-    assert.match(JSON.stringify(outcomes[1].execution.result), /15\.5\.28/);
+    assert.match(JSON.stringify(outcomes[1].execution.result), /15\\.5\\.28/);
   }
 });
 
@@ -44,7 +50,7 @@ test("keeps unknown internal exceptions sanitized", () => {
   );
 });
 
-test("does not convert device or persistence failures into tool errors", async () => {
+test("does not convert device-job infrastructure failures into tool errors", async () => {
   await assert.rejects(
     executeToolCallsSequentially(
       ["device-tool"],
@@ -55,4 +61,23 @@ test("does not convert device or persistence failures into tool errors", async (
     ),
     /Device tool job could not be queued/,
   );
+});
+
+test("stops when persisting a tool outcome fails instead of silently losing task history", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    executeToolCallsSequentially(
+      ["first", "second"],
+      async (call) => {
+        calls.push(call);
+        return { ok: true };
+      },
+      () => true,
+      async () => {
+        throw new Error("Unable to persist task event.");
+      },
+    ),
+    /Unable to persist task event/,
+  );
+  assert.deepEqual(calls, ["first"]);
 });
