@@ -70,13 +70,21 @@ export async function POST(request: Request, context: Context) {
     conversationId = conversation.id;
   }
 
+  const { data: historyRows, error: historyError } = await admin.from("bot_messages")
+    .select("role,content").eq("owner_id", PERSONAL_OWNER_ID).eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false }).limit(8);
+  if (historyError) return json({ error: "Conversation context could not be loaded." }, 503);
+  const historyBudget = Math.max(0, 4000 - input.content.trim().length - 48);
+  const priorContext = (historyRows ?? []).reverse()
+    .map((row: { role: string; content: string }) => row.role + ": " + row.content.slice(0, 700))
+    .join("\n").slice(-historyBudget);
   const { error: userMessageError } = await admin.from("bot_messages").insert({
     owner_id: PERSONAL_OWNER_ID, conversation_id: conversationId, role: "user", content: input.content.trim(),
   });
   if (userMessageError) return json({ error: "User message could not be saved." }, 503);
 
   try {
-    const result = await submitAgentTask(input.content, selectedAgentId, {
+    const taskInput = priorContext\n      ? "Prior conversation:\\n" + priorContext + "\\n\\nCurrent user message:\\n" + input.content.trim()\n      : input.content.trim();\n    const result = await submitAgentTask(taskInput, selectedAgentId, {
       personaInstructions: bot.persona_instructions,
       providerPreference: bot.provider_preference,
       ...(bot.model_preference ? { modelPreference: bot.model_preference } : {}),
