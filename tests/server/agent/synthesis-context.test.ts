@@ -11,7 +11,8 @@ test("keeps large tool output within provider message limits", () => {
   assert.ok(content.length <= 3_500);
   const parsed = JSON.parse(content);
   assert.equal(parsed.toolResults[0].callId, "call-1");
-  assert.equal(parsed.toolResults[0].resultTruncated, true);
+  const excerpt = JSON.parse(parsed.toolResults[0].resultExcerpt);
+  assert.equal(excerpt.contentTruncated, true);
 });
 
 test("bounds combined task, plan and multiple tool results", () => {
