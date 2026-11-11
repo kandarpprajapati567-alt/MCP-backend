@@ -110,16 +110,20 @@ export async function listGitHubFiles(args: JsonRecord) {
     throw new Error("github.list_files accepts only ref, path and limit.");
   }
   const ref = validateRef(args.ref);
-  const path = args.path === undefined ? "" : validatePath(args.path);
+  const path = args.path === undefined || args.path === "" ? "" : validatePath(args.path);
   const limit = positiveLimit(args.limit, 60, 100);
   const data = await githubGet("/git/trees/" + encodeURIComponent(ref) + "?recursive=1");
   if (!isRecord(data) || !Array.isArray(data.tree)) throw new Error("GitHub returned an unexpected repository tree.");
   const prefix = path ? path + "/" : "";
-  const files = data.tree.filter(isRecord).filter((item) =>
-    item.type === "blob" && typeof item.path === "string" &&
-    (!path || item.path === path || item.path.startsWith(prefix)),
-  ).map((item) => ({
+  const files = data.tree.filter(isRecord).filter((item) => {
+    if ((item.type !== "blob" && item.type !== "tree") || typeof item.path !== "string") return false;
+    const relativePath = path
+      ? item.path.startsWith(prefix) ? item.path.slice(prefix.length) : ""
+      : item.path;
+    return relativePath.length > 0 && !relativePath.includes("/");
+  }).map((item) => ({
     path: item.path as string,
+    type: item.type === "tree" ? "directory" as const : "file" as const,
     size: typeof item.size === "number" ? item.size : null,
   })).sort((a, b) => a.path.localeCompare(b.path));
   return {
