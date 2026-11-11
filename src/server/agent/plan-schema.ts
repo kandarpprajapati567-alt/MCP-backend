@@ -94,7 +94,17 @@ const DEFAULT_TOOLS: AgentAvailableTool[] = [
   },
 ];
 
-export function parseAgentPlan(value: unknown, allowedTools: readonly AgentAvailableTool[] = DEFAULT_TOOLS): PlanParseResult {
+export function parseAgentPlan(
+  value: unknown,
+  allowedTools: readonly AgentAvailableTool[] = DEFAULT_TOOLS,
+  limits: { maxSteps?: number; maxToolCalls?: number } = {},
+): PlanParseResult {
+  const maxSteps = limits.maxSteps ?? 8;
+  const maxToolCalls = limits.maxToolCalls ?? 4;
+  if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 8 ||
+      !Number.isInteger(maxToolCalls) || maxToolCalls < 0 || maxToolCalls > 4) {
+    return { ok: false, error: "Agent execution limits are invalid." };
+  }
   if (!isRecord(value) || !hasExactKeys(value, ["version", "goal", "steps", "toolCalls"])) {
     return { ok: false, error: "Plan must contain only version, goal, steps, and toolCalls." };
   }
@@ -102,8 +112,8 @@ export function parseAgentPlan(value: unknown, allowedTools: readonly AgentAvail
   if (typeof value.goal !== "string" || !value.goal.trim() || value.goal.length > 500) {
     return { ok: false, error: "Plan goal must be between 1 and 500 characters." };
   }
-  if (!Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > 8) {
-    return { ok: false, error: "Plan must contain between 1 and 8 steps." };
+  if (!Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > maxSteps) {
+    return { ok: false, error: "Plan must contain between 1 and " + maxSteps + " steps." };
   }
 
   const seen = new Set<string>();
@@ -126,8 +136,8 @@ export function parseAgentPlan(value: unknown, allowedTools: readonly AgentAvail
     steps.push({ id, objective, expectedOutcome });
   }
 
-  if (!Array.isArray(value.toolCalls) || value.toolCalls.length > 4) {
-    return { ok: false, error: "Plan may contain at most 4 registered tool calls." };
+  if (!Array.isArray(value.toolCalls) || value.toolCalls.length > maxToolCalls) {
+    return { ok: false, error: "Plan may contain at most " + maxToolCalls + " registered tool calls." };
   }
   const callIds = new Set<string>();
   const toolCalls: AgentToolCall[] = [];

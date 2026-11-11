@@ -3,8 +3,11 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
+import { parseAgentDefinition, type AgentDefinitionInput } from "@/server/agent/definition-schema";
+import { executeAgentWorkflow } from "@/server/ai/routing/runtime-executor";
 import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
+import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -22,7 +25,36 @@ async function setTask(admin: ReturnType<typeof createAdminClient>, id: string, 
   if (error) throw new Error("Unable to update task.");
 }
 
-function localPlan(task: string) {
+async function loadAgentDefinition(
+  admin: ReturnType<typeof createAdminClient>,
+  agentId: string,
+): Promise<{ id: string } & AgentDefinitionInput> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(agentId)) {
+    throw new Error("A valid agent ID is required.");
+  }
+  const { data, error } = await admin.from("agent_definitions")
+    .select("id,name,description,role,instructions,provider_preference,model_preference,allowed_tools,max_steps,max_tool_calls,enabled")
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("id", agentId).maybeSingle();
+  if (error) throw new Error("Agent definitions are unavailable. Apply the Agent Manager migration before selecting an Agent.");
+  if (!data) throw new Error("The selected Agent does not exist.");
+  const parsed = parseAgentDefinition({
+    name: data.name,
+    description: data.description,
+    role: data.role,
+    instructions: data.instructions,
+    providerPreference: data.provider_preference,
+    modelPreference: data.model_preference,
+    allowedTools: data.allowed_tools,
+    maxSteps: data.max_steps,
+    maxToolCalls: data.max_tool_calls,
+    enabled: data.enabled,
+  });
+  if (!parsed.ok) throw new Error("The selected Agent definition is invalid.");
+  if (!parsed.value.enabled) throw new Error("The selected Agent is disabled.");
+  return { id: data.id, ...parsed.value };
+}
+
+function localPlan(task: string, agent?: AgentDefinitionInput) {
   const lower = task.toLowerCase();
   const toolId = lower.includes("word count") || lower.includes("count words")
     ? "text.word_count"
@@ -31,6 +63,14 @@ function localPlan(task: string) {
       : lower.includes("text stats") || lower.includes("character count")
         ? "text.text_stats"
         : null;
+  if (toolId && agent && (!agent.allowedTools.includes(toolId) || agent.maxToolCalls === 0)) {
+    return {
+      version: 1 as const,
+      goal: task.slice(0, 500),
+      steps: [{ id: "step-1", objective: "Complete the request without using tools outside the Agent allowlist.", expectedOutcome: "A bounded result with execution evidence." }],
+      toolCalls: [],
+    };
+  }
   return {
     version: 1 as const,
     goal: task.slice(0, 500),
@@ -76,14 +116,30 @@ async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClien
   return tools.slice(0, 40);
 }
 
-export async function submitAgentTask(taskInput: string) {
+export async function submitAgentTask(taskInput: string, agentId?: string) {
   if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
     throw new Error("Task must be 1–4000 characters.");
   }
   const task = taskInput.trim();
   const admin = createAdminClient();
+  const agent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const agentSnapshot = agent ? {
+    name: agent.name,
+    role: agent.role,
+    instructions: agent.instructions,
+    providerPreference: agent.providerPreference,
+    modelPreference: agent.modelPreference,
+    allowedTools: agent.allowedTools,
+    maxSteps: agent.maxSteps,
+    maxToolCalls: agent.maxToolCalls,
+  } : null;
   const { data: created, error: createError } = await admin.from("agent_tasks")
-    .insert({ owner_id: PERSONAL_OWNER_ID, status: "queued", task }).select("id").single();
+    .insert({
+      owner_id: PERSONAL_OWNER_ID,
+      status: "queued",
+      task,
+      ...(agent ? { agent_definition_id: agent.id, agent_snapshot: agentSnapshot } : {}),
+    }).select("id").single();
   if (createError || !created) throw new Error("Unable to create task.");
   const id = created.id as string;
 
@@ -93,14 +149,21 @@ export async function submitAgentTask(taskInput: string) {
     await event(admin, id, "task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
-    const planned = await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
-    const plan = planned ?? localPlan(task);
+    const planned = agent
+      ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
+      : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
+    const plan = planned ?? localPlan(task, agent ?? undefined);
+    if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
+        plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
+      throw new Error("Agent execution policy rejected the generated plan.");
+    }
     await setTask(admin, id, { plan, status: "executing" });
     await event(admin, id, "task.plan_ready", {
       steps: plan.steps.length,
       toolCalls: plan.toolCalls.length,
       deviceToolsAvailable: deviceTools.length,
       planner: planned ? "configured-workflow-policy" : "local-safe-planner",
+      ...(agent ? { agentId: agent.id, agentName: agent.name, maxSteps: agent.maxSteps, maxToolCalls: agent.maxToolCalls } : {}),
     });
     await event(admin, id, "task.executing");
 
@@ -132,6 +195,7 @@ export async function submitAgentTask(taskInput: string) {
       return {
         taskId: id,
         status: latest?.status ?? "waiting_for_device",
+        ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
         plan,
         toolResults: results,
         pendingJobs,
@@ -141,14 +205,22 @@ export async function submitAgentTask(taskInput: string) {
 
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await event(admin, id, "task.synthesizing");
-    const synthesis = await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", {
+    const synthesisRequest: AIGenerationRequest = {
       messages: [
-        { role: "system", content: "Synthesize the outcome using only the task, plan and verified tool results. Do not claim unperformed actions." },
+        { role: "system", content: agent
+          ? `You are synthesizing results for Agent role: ${agent.role}. Agent guidance: <agent_instructions>${agent.instructions}</agent_instructions>. Use only the task, plan and verified tool results. Never claim unperformed actions; tool allowlists and execution limits remain mandatory.`
+          : "Synthesize the outcome using only the task, plan and verified tool results. Do not claim unperformed actions." },
         { role: "user", content: JSON.stringify({ task, plan, toolResults: results }) },
       ],
       temperature: 0.2,
       maxOutputTokens: 1200,
-    });
+    };
+    const synthesis = agent
+      ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
+          providerPreference: agent.providerPreference,
+          modelPreference: agent.modelPreference,
+        })
+      : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     const result = synthesis.route.providerId !== "mock"
       ? synthesis.result.text
       : results.length
@@ -158,7 +230,14 @@ export async function submitAgentTask(taskInput: string) {
           "\nConfigure an AI provider to enable model-based planning and synthesis.";
     await setTask(admin, id, { status: "completed", result, completed_at: new Date().toISOString() });
     await event(admin, id, "task.completed");
-    return { taskId: id, status: "completed", plan, toolResults: results, result };
+    return {
+      taskId: id,
+      status: "completed",
+      ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
+      plan,
+      toolResults: results,
+      result,
+    };
   } catch (error) {
     const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";

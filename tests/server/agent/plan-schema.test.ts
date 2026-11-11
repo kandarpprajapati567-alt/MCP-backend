@@ -31,3 +31,19 @@ test("validates dynamic device tools against their advertised input schema", () 
   }, available).ok, false);
   assert.equal(parseAgentPlan(plan).ok, false);
 });
+
+
+test("enforces Agent-specific maximum step and tool-call counts", () => {
+  const tooManySteps = {
+    ...validPlan,
+    steps: [validPlan.steps[0], validPlan.steps[1]],
+  };
+  assert.equal(parseAgentPlan(tooManySteps, undefined, { maxSteps: 1 }).ok, false);
+
+  const withToolCall = {
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "text.word_count", arguments: { text: "one two" } }],
+  };
+  assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 0 }).ok, false);
+  assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 1 }).ok, true);
+});

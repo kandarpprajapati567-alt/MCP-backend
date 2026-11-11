@@ -121,7 +121,10 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
     sideEffect: true,
     inputSchema: {
       type: "object",
-      properties: { task: { type: "string", minLength: 1, maxLength: 4000 } },
+      properties: {
+        task: { type: "string", minLength: 1, maxLength: 4000 },
+        agentId: { type: "string", minLength: 36, maxLength: 36, description: "Optional Agent definition UUID. When omitted, the default planner is used." },
+      },
       required: ["task"],
       additionalProperties: false,
     },

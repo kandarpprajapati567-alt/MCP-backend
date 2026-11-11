@@ -6,12 +6,14 @@ function onlyKeys(args: Record<string, unknown>, allowed: string[]) {
 
 export async function executeMcpTool(name: string, args: Record<string, unknown>) {
   if (name === "agent.submit_task") {
-    if (!onlyKeys(args, ["task"]) || typeof args.task !== "string" ||
-        !args.task.trim() || args.task.length > 4000) {
-      throw new Error("agent.submit_task requires a task between 1 and 4000 characters.");
+    if (!onlyKeys(args, ["task", "agentId"]) || typeof args.task !== "string" ||
+        !args.task.trim() || args.task.length > 4000 ||
+        (args.agentId !== undefined && (typeof args.agentId !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(args.agentId)))) {
+      throw new Error("agent.submit_task requires a task between 1 and 4000 characters and an optional valid agentId.");
     }
     const { submitAgentTask } = await import("@/server/agent/task-service");
-    return submitAgentTask(args.task);
+    return submitAgentTask(args.task, args.agentId as string | undefined);
   }
 
   if (name === "agent.task_status") {

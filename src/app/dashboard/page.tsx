@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SystemHealthCheck } from "@/components/dashboard/SystemHealthCheck";
 
-type Task = { id: string; status: string; task: string; result: string | null; created_at: string };
+type Task = { id: string; status: string; task: string; result: string | null; created_at: string; agent_snapshot?: { name?: string } | null };
+type Agent = { id: string; name: string; enabled: boolean };
 type Provider = { provider: string; updated_at: string };
 type Health = { status?: string; services?: { database?: string; authentication?: string } };
 type Tool = { id: string; description: string; permission: string; sideEffect: boolean };
@@ -20,6 +21,9 @@ export default function DashboardPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [task, setTask] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [agentCatalogAvailable, setAgentCatalogAvailable] = useState(true);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState("");
   const [provider, setProvider] = useState("openai");
@@ -47,6 +51,9 @@ export default function DashboardPage() {
     setToken("");
     setConnected(false);
     setTasks([]);
+    setAgents([]);
+    setSelectedAgentId("");
+    setAgentCatalogAvailable(true);
     setProviders([]);
     setTools([]);
     setResult("");
@@ -54,12 +61,13 @@ export default function DashboardPage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [taskResponse, providerResponse, toolResponse] = await Promise.all([
+    const [taskResponse, providerResponse, toolResponse, agentResponse] = await Promise.all([
       api("/api/v1/agent/tasks"),
       api("/api/v1/ai/providers/keys"),
       api("/api/v1/tools"),
+      api("/api/v1/agents"),
     ]);
-    if ([taskResponse, providerResponse, toolResponse].some((response) => response.status === 401)) {
+    if ([taskResponse, providerResponse, toolResponse, agentResponse].some((response) => response.status === 401)) {
       disconnect();
       throw new Error("Owner master token was rejected. Connect again.");
     }
@@ -70,9 +78,22 @@ export default function DashboardPage() {
     const providerData = await providerResponse.json();
     const toolData = await toolResponse.json();
     setTasks(taskData.tasks ?? []);
+    if (agentResponse.ok) {
+      const agentData = await agentResponse.json();
+      const nextAgents = Array.isArray(agentData.agents) ? agentData.agents : [];
+      setAgents(nextAgents);
+      setAgentCatalogAvailable(true);
+      if (selectedAgentId && !nextAgents.some((agent: Agent) => agent.id === selectedAgentId && agent.enabled)) {
+        setSelectedAgentId("");
+      }
+    } else {
+      setAgents([]);
+      setSelectedAgentId("");
+      setAgentCatalogAvailable(false);
+    }
     setProviders(providerData.providers ?? []);
     setTools(toolData.tools ?? []);
-  }, [api, disconnect]);
+  }, [api, disconnect, selectedAgentId]);
 
   useEffect(() => {
     fetch("/api/v1/health", { cache: "no-store" })
@@ -148,7 +169,7 @@ export default function DashboardPage() {
     try {
       const response = await api("/api/v1/agent/tasks", {
         method: "POST",
-        body: JSON.stringify({ task }),
+        body: JSON.stringify({ task, ...(selectedAgentId ? { agentId: selectedAgentId } : {}) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Task execution failed.");
@@ -302,6 +323,24 @@ export default function DashboardPage() {
               <p className="mt-1 text-sm text-zinc-400">Task → planner → registered tools → synthesis → persistent history.</p>
             </div>
             <form onSubmit={runTask} className="space-y-3">
+              <label className="block space-y-2 text-sm text-zinc-300">
+                <span>Execution profile</span>
+                <select
+                  value={selectedAgentId}
+                  onChange={(event) => setSelectedAgentId(event.target.value)}
+                  disabled={!agentCatalogAvailable || agents.length === 0 || running}
+                  className="w-full rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white disabled:opacity-50"
+                >
+                  <option value="">Default planner (existing workflow)</option>
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id} disabled={!agent.enabled}>
+                      {agent.name}{agent.enabled ? "" : " (disabled)"}
+                    </option>
+                  ))}
+                </select>
+                {!agentCatalogAvailable && <span className="block text-xs text-amber-300">Agent definitions are unavailable until the Agent Manager database migration is applied.</span>}
+                {agentCatalogAvailable && agents.length === 0 && <span className="block text-xs text-zinc-500">No Agent definitions yet. Create one in Agent Manager.</span>}
+              </label>
               <textarea
                 value={task}
                 onChange={(event) => setTask(event.target.value)}
@@ -359,6 +398,7 @@ export default function DashboardPage() {
                       <span className="text-xs text-emerald-300">{item.status}</span>
                     </div>
                     {item.result && <pre className="mt-2 whitespace-pre-wrap text-xs text-zinc-400">{item.result}</pre>}
+                    {item.agent_snapshot?.name && <p className="mt-2 text-[10px] text-cyan-300">Agent: {item.agent_snapshot.name}</p>}
                     <p className="mt-2 text-[10px] text-zinc-600">{new Date(item.created_at).toLocaleString()}</p>
                   </article>
                 ))}
