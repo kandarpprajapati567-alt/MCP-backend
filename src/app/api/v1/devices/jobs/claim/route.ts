@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyDeviceRequest } from "@/server/security/device-auth";
+import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -10,8 +11,11 @@ export async function POST(request: Request) {
   const authenticated = await verifyDeviceRequest(request);
   if (!authenticated) return json({ error: "Device authentication required." }, 401);
 
-  let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
+  const parsedBody = await readJsonBody(request, 4096);
+  if (!parsedBody.ok) return parsedBody.reason === "too_large"
+    ? json({ error: "Request body too large." }, 413)
+    : json({ error: "Invalid JSON body." }, 400);
+  const body = parsedBody.value;
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "A JSON object is required." }, 400);
   const input = body as Record<string, unknown>;
   if (typeof input.deviceId !== "string" || input.deviceId !== authenticated.deviceId) {

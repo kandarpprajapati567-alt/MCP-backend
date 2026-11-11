@@ -43,10 +43,17 @@ function boundedString(value: unknown, min: number, max: number): value is strin
   return typeof value === "string" && value.trim().length >= min && value.length <= max;
 }
 
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
 export function parseDeviceRegistration(value: unknown):
   | { ok: true; value: DeviceRegistration }
   | { ok: false; error: string } {
   if (!isRecord(value)) return { ok: false, error: "A JSON object is required." };
+  if (!onlyKeys(value, ["deviceId", "displayName", "platform", "appVersion", "capabilities"])) {
+    return { ok: false, error: "Device registration contains unsupported fields." };
+  }
   if (!boundedString(value.deviceId, 1, 128)) return { ok: false, error: "deviceId must be 1–128 characters." };
   if (!boundedString(value.displayName, 1, 120)) return { ok: false, error: "displayName must be 1–120 characters." };
   if (!["android", "windows", "web", "other"].includes(String(value.platform))) return { ok: false, error: "Unsupported device platform." };
@@ -61,7 +68,8 @@ export function parseDeviceRegistration(value: unknown):
   const capabilities: DeviceCapability[] = [];
   for (const item of value.capabilities) {
     const expectedPrefix = String(value.platform) + ".";
-    if (!isRecord(item) || !boundedString(item.id, 2, 160) ||
+    if (!isRecord(item) || !onlyKeys(item, ["id", "description", "permission", "sideEffect", "inputSchema"]) ||
+        !boundedString(item.id, 2, 160) ||
         !/^[a-z][a-z0-9_.-]+$/.test(item.id) || !item.id.startsWith(expectedPrefix) || seen.has(item.id)) {
       return { ok: false, error: "Every capability needs a unique namespaced id." };
     }
@@ -70,6 +78,7 @@ export function parseDeviceRegistration(value: unknown):
         !/^[a-z][a-z0-9_.:-]*$/.test(item.permission) ||
         typeof item.sideEffect !== "boolean" ||
         !isRecord(item.inputSchema) ||
+        !onlyKeys(item.inputSchema, ["type", "properties", "required", "additionalProperties"]) ||
         item.inputSchema.type !== "object" ||
         item.inputSchema.additionalProperties !== false ||
         !isRecord(item.inputSchema.properties)) {
@@ -81,6 +90,7 @@ export function parseDeviceRegistration(value: unknown):
     if (propertyEntries.length > 32) return { ok: false, error: "A capability may define at most 32 input properties." };
     for (const [name, property] of propertyEntries) {
       if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name) || !isRecord(property) ||
+          !onlyKeys(property, ["type", "description", "maxLength", "minLength", "minimum", "maximum"]) ||
           !["string", "number", "integer", "boolean"].includes(String(property.type)) ||
           (property.description !== undefined && (typeof property.description !== "string" || property.description.length > 200))) {
         return { ok: false, error: "Capability input properties must use supported JSON Schema types." };
@@ -139,6 +149,9 @@ export function parseDeviceJobDispatch(value: unknown):
   | { ok: true; value: DeviceJobDispatch }
   | { ok: false; error: string } {
   if (!isRecord(value)) return { ok: false, error: "A JSON object is required." };
+  if (!onlyKeys(value, ["deviceId", "toolId", "toolCallId", "taskId", "arguments"])) {
+    return { ok: false, error: "Device tool dispatch contains unsupported fields." };
+  }
   if (!boundedString(value.deviceId, 1, 128) ||
       !boundedString(value.toolId, 2, 160) || !/^[a-z][a-z0-9_.-]+$/.test(value.toolId) ||
       !boundedString(value.toolCallId, 1, 80)) {
@@ -167,6 +180,9 @@ export function parseDeviceJobResult(value: unknown):
   | { ok: true; value: DeviceJobResult }
   | { ok: false; error: string } {
   if (!isRecord(value)) return { ok: false, error: "A JSON object is required." };
+  if (!onlyKeys(value, ["jobId", "deviceId", "status", "result", "errorCode"])) {
+    return { ok: false, error: "Device job result contains unsupported fields." };
+  }
   if (typeof value.jobId !== "string" || !/^[0-9a-f-]{36}$/i.test(value.jobId) ||
       !boundedString(value.deviceId, 1, 128) ||
       !["completed", "failed"].includes(String(value.status))) {

@@ -74,3 +74,18 @@ test("tool job result accepts only terminal states and bounded JSON", () => {
     status: "claimed",
   }).ok, false);
 });
+
+test("device bridge contracts reject unknown top-level fields", () => {
+  const jobId = "11111111-1111-4111-8111-111111111111";
+  assert.equal(parseDeviceJobDispatch({
+    deviceId: "android-main", toolId: "android.device.battery",
+    toolCallId: "call-1", arguments: {}, unexpected: true,
+  }).ok, false);
+  assert.equal(parseDeviceJobResult({
+    jobId, deviceId: "android-main", status: "completed", unexpected: true,
+  }).ok, false);
+  assert.equal(parseDeviceRegistration({
+    deviceId: "android-main", displayName: "Device", platform: "android",
+    capabilities: [], unexpected: true,
+  }).ok, false);
+});

@@ -119,3 +119,10 @@ test("requires a token and rejects unexpected arguments and invalid limits", asy
   await assert.rejects(() => listGitHubBranches({ owner: "attacker/repo" }), /only query and limit/);
   await assert.rejects(() => listGitHubCommits({ limit: 31 }), /between 1 and 30/);
 });
+
+test("normalizes GitHub request timeouts into a safe retry message", async () => {
+  globalThis.fetch = (async () => {
+    throw new DOMException("network timeout", "TimeoutError");
+  }) as typeof fetch;
+  await assert.rejects(() => listGitHubBranches({}), /timed out after 15 seconds/);
+});

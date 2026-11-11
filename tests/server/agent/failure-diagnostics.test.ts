@@ -22,3 +22,14 @@ test("hides arbitrary exception details", () => {
   );
   assert.equal(safeAgentFailureMessage("unexpected"), "Unexpected internal error. Check server logs using the task ID.");
 });
+
+test("shows curated GitHub connectivity diagnostics", () => {
+  assert.equal(
+    safeAgentFailureMessage(new Error("GitHub read request timed out after 15 seconds.")),
+    "GitHub read request timed out after 15 seconds.",
+  );
+  assert.equal(
+    safeAgentFailureMessage(new Error("GitHub read request failed with HTTP 403.")),
+    "GitHub read request failed with HTTP 403.",
+  );
+});
