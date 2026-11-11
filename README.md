@@ -103,7 +103,8 @@ The device bridge is a coordination contract: the backend does not directly acce
 - Per-Agent provider/model preferences, registered-tool allowlists, and bounded step/tool-call limits.
 - Agent configuration snapshots retained with task history, even if a definition is later edited or deleted.
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
-- Allow-listed backend tools, task status, event history, and result synthesis.\n- Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
+- Allow-listed backend tools, task status, event history, and result synthesis.
+- Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
 
 ### Model Context Protocol
 - Streamable HTTP JSON-RPC endpoint at `/api/mcp`.
@@ -214,7 +215,8 @@ Add the required environment variables to `.env.local`:
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key |
 | `SUPABASE_SECRET_KEY` | Server-only Supabase secret |
 | `AI_PROVIDER_ENCRYPTION_KEY` | Stable 32-byte base64 encryption key |
-| `FS_OWNER_TOKEN` | Long random owner master token |\n| `GITHUB_READ_TOKEN` | Optional fine-grained GitHub token with read-only Contents and Metadata access, scoped only to this repository |
+| `FS_OWNER_TOKEN` | Long random owner master token |
+| `GITHUB_READ_TOKEN` | Optional fine-grained GitHub token with read-only Contents and Metadata access, scoped only to this repository |
 
 Never commit real credentials. Never expose server secrets through a `NEXT_PUBLIC_` variable. GitHub tools are limited to the fixed repository `kandarpprajapati567-alt/MCP-backend`; they require `GITHUB_READ_TOKEN`, never accept arbitrary repository names, block secret-like file paths, and cap individual file reads at 200 KB. The GitHub token is used only server-side and is never returned to an Agent.
 
