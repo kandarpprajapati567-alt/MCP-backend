@@ -5,6 +5,7 @@ import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/r
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
+import { buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
