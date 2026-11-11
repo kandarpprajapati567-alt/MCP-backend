@@ -1,24 +1,24 @@
 const MAX_SYNTHESIS_CONTEXT_CHARS = 3_500;
 const MAX_TASK_CHARS = 900;
-const MAX_PLAN_CHARS = 900;
-const MAX_RESULT_EXCERPT_CHARS = 1_400;
+const MAX_PLAN_CHARS = 500;
+const MAX_RESULT_EXCERPT_CHARS = 1_100;
 const MAX_AGENT_INSTRUCTIONS_CHARS = 1_200;
 
 function serializeToolResult(value: unknown): string {
   if (isRecord(value) && typeof value.content === "string") {
     const content = value.content;
-    const preview = content.length <= 900
+    const preview = content.length <= 750
       ? content
-      : content.slice(0, 300) + "\\n...[middle omitted]...\\n" +
-        content.slice(Math.max(300, Math.floor(content.length / 2) - 150), Math.floor(content.length / 2) + 150) +
-        "\\n...[middle omitted]...\\n" + content.slice(-300);
+      : content.slice(0, 250) + "\n...[middle omitted]...\n" +
+        content.slice(Math.max(250, Math.floor(content.length / 2) - 125), Math.floor(content.length / 2) + 125) +
+        "\n...[middle omitted]...\n" + content.slice(-250);
     const metadata = Object.fromEntries(
       Object.entries(value).filter(([key]) => key !== "content"),
     );
     return JSON.stringify({
       ...metadata,
       contentPreview: preview,
-      contentTruncated: content.length > preview.length,
+      contentTruncated: content.length > 750,
     });
   }
   return safeSerialize(value);
@@ -75,9 +75,17 @@ export function buildSynthesisUserContent(
     omittedToolResults: 0,
   };
 
-  for (const item of toolResults) {
+  for (let index = 0; index < toolResults.length; index += 1) {
+    const item = toolResults[index];
     const resultText = serializeToolResult(item.result);
-    let excerptLength = Math.min(resultText.length, MAX_RESULT_EXCERPT_CHARS);
+    const remainingResults = toolResults.length - index;
+    const available = MAX_SYNTHESIS_CONTEXT_CHARS - JSON.stringify(context).length;
+    const wrapperBudget = item.callId.length + item.toolId.length + 90;
+    let excerptLength = Math.min(
+      resultText.length,
+      MAX_RESULT_EXCERPT_CHARS,
+      Math.max(0, Math.floor(available / remainingResults) - wrapperBudget),
+    );
     let accepted = false;
 
     while (excerptLength >= 0) {
