@@ -10,6 +10,26 @@ function json(body: unknown, status = 200) { return NextResponse.json(body, { st
 type Context = { params: Promise<{ botId: string }> };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export async function GET(request: Request, context: Context) {
+  if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
+  const { botId } = await context.params;
+  const conversationId = new URL(request.url).searchParams.get("conversationId");
+  if (!uuid.test(botId) || !conversationId || !uuid.test(conversationId)) {
+    return json({ error: "A valid Bot ID and conversationId are required." }, 400);
+  }
+  const admin = createAdminClient();
+  const { data: conversation, error: conversationError } = await admin.from("bot_conversations")
+    .select("id").eq("owner_id", PERSONAL_OWNER_ID).eq("bot_id", botId).eq("id", conversationId).maybeSingle();
+  if (conversationError) return json({ error: "Conversation could not be loaded." }, 503);
+  if (!conversation) return json({ error: "Conversation not found." }, 404);
+  const { data, error } = await admin.from("bot_messages")
+    .select("id,role,content,metadata,created_at")
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true }).limit(200);
+  if (error) return json({ error: "Conversation messages are unavailable." }, 503);
+  return json({ conversationId, messages: data ?? [] });
+}
+
 export async function POST(request: Request, context: Context) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   const { botId } = await context.params;
