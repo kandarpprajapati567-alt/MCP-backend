@@ -198,13 +198,20 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         if (deviceTools.some((tool) => tool.id === call.toolId)) return;
         if (execution.ok) {
           results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
-          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
         } else {
           results.push({
             callId: call.id,
             toolId: call.toolId,
             result: { ok: false, error: execution.error },
           });
+        }
+        // Persist every completed/failed backend tool outcome immediately. If a
+        // later call hits an infrastructure failure, task history still retains
+        // the evidence collected before that failure.
+        await setTask(admin, id, { tool_results: results });
+        if (execution.ok) {
+          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        } else {
           await event(admin, id, "tool.failed", {
             callId: call.id,
             toolId: call.toolId,
