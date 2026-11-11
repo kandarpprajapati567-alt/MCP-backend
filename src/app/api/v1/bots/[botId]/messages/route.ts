@@ -84,7 +84,10 @@ export async function POST(request: Request, context: Context) {
   if (userMessageError) return json({ error: "User message could not be saved." }, 503);
 
   try {
-    const taskInput = priorContext\n      ? "Prior conversation:\\n" + priorContext + "\\n\\nCurrent user message:\\n" + input.content.trim()\n      : input.content.trim();\n    const result = await submitAgentTask(taskInput, selectedAgentId, {
+    const taskInput = priorContext
+      ? "Prior conversation:\n" + priorContext + "\n\nCurrent user message:\n" + input.content.trim()
+      : input.content.trim();
+    const result = await submitAgentTask(taskInput, selectedAgentId, {
       personaInstructions: bot.persona_instructions,
       providerPreference: bot.provider_preference,
       ...(bot.model_preference ? { modelPreference: bot.model_preference } : {}),
