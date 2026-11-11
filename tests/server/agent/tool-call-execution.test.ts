@@ -43,3 +43,16 @@ test("keeps unknown internal exceptions sanitized", () => {
     "Unexpected internal error. Check server logs using the task ID.",
   );
 });
+
+test("does not convert device or persistence failures into tool errors", async () => {
+  await assert.rejects(
+    executeToolCallsSequentially(
+      ["device-tool"],
+      async () => {
+        throw new Error("Device tool job could not be queued.");
+      },
+      (call) => call !== "device-tool",
+    ),
+    /Device tool job could not be queued/,
+  );
+});
