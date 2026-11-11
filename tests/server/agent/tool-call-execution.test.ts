@@ -39,7 +39,7 @@ test("continues through planned calls after a tool failure and persists each out
   assert.equal(outcomes[1].call, "package-json");
   assert.equal(outcomes[1].execution.ok, true);
   if (outcomes[1].execution.ok) {
-    assert.match(JSON.stringify(outcomes[1].execution.result), /15\\.5\\.28/);
+    assert.ok(JSON.stringify(outcomes[1].execution.result).includes("15.5.28"));
   }
 });
 
