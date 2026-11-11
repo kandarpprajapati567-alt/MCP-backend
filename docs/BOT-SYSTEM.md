@@ -16,7 +16,7 @@ Bots do not execute tools directly and cannot expand an Agent's permissions. A B
 3. A conversation message selects the explicit Agent, the Bot default Agent, or the only assigned Agent when exactly one exists.
 4. The Bot passes its persona and narrower tool policy into the existing Agent task runtime.
 5. The Agent planner, policy validation, tool executor, synthesis, task events, and task history remain authoritative.
-6. User and assistant messages, conversation metadata, and the Agent task ID are persisted.
+6. Recent conversation context is bounded and included in each delegated task; user and assistant messages, conversation metadata, and the Agent task ID are persisted.
 
 When multiple Agents are assigned and no default exists, the caller must select an Agent. Automatic intent-based multi-Agent routing and coordinated multi-Agent workflows are intentionally deferred; the first slice keeps routing explicit and auditable.
 
