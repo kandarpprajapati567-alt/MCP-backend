@@ -11,6 +11,7 @@ type Bot = {
   model_preference: string | null; allowed_tools: string[]; enabled: boolean;
 };
 type ChatMessage = { role: "user" | "assistant"; content: string; created_at?: string };
+type BotConversation = { id: string; status: string; updated_at: string; last_agent_id: string | null };
 
 const emptyDraft = {
   name: "", description: "", personaInstructions: "",
@@ -29,6 +30,7 @@ export default function BotsPage() {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<BotConversation[]>([]);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -142,6 +144,21 @@ export default function BotsPage() {
     finally { setBusy(false); }
   }
 
+  async function loadConversations(botId: string) {
+    const response = await request("/api/v1/bots/" + botId + "/conversations");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Conversation history could not be loaded.");
+    setConversations(data.conversations ?? []);
+  }
+
+  async function openConversation(botId: string, id: string) {
+    const response = await request("/api/v1/bots/" + botId + "/messages?conversationId=" + encodeURIComponent(id));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Conversation could not be loaded.");
+    setConversationId(id);
+    setMessages((data.messages ?? []).filter((item: ChatMessage) => item.role === "user" || item.role === "assistant"));
+  }
+
   async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedBot || !prompt.trim()) return;
@@ -237,7 +254,7 @@ export default function BotsPage() {
 
             <section className="flex min-h-[480px] flex-col rounded-2xl border border-border bg-zinc-950/70 p-4 sm:p-5">
               {selectedBot ? <>
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4"><div><p className="text-xs uppercase tracking-wider text-cyan-300">Bot conversation</p><h2 className="mt-1 text-lg font-semibold text-white">{selectedBot.name}</h2><p className="mt-1 text-xs text-zinc-500">{selectedBot.description}</p></div><button type="button" onClick={() => { setConversationId(null); setMessages([]); }} className="text-xs text-cyan-300">New chat</button></div>
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4"><div><p className="text-xs uppercase tracking-wider text-cyan-300">Bot conversation</p><h2 className="mt-1 text-lg font-semibold text-white">{selectedBot.name}</h2><p className="mt-1 text-xs text-zinc-500">{selectedBot.description}</p></div><div className="flex items-center gap-2"><select value={conversationId ?? ""} onChange={(event) => { if (event.target.value) void openConversation(selectedBot.id, event.target.value).catch((cause) => setError(cause instanceof Error ? cause.message : "Conversation load failed.")); }} className="max-w-[180px] rounded-lg border border-border bg-black/30 px-2 py-1.5 text-xs text-zinc-300"><option value="">New conversation</option>{conversations.map((item) => <option key={item.id} value={item.id}>{new Date(item.updated_at).toLocaleString()}</option>)}</select><button type="button" onClick={() => { setConversationId(null); setMessages([]); }} className="text-xs text-cyan-300">New chat</button></div></div>
                 <label className="mt-4 space-y-1 text-xs text-zinc-400">Delegate to Agent<select value={selectedAgentId || selectedBot.default_agent_id || (assignedAgents.length === 1 ? assignedAgents[0]?.id ?? "" : "")} onChange={(event) => setSelectedAgentId(event.target.value)} className="w-full rounded-xl border border-border bg-black/30 px-3 py-2.5 text-sm text-white"><option value="">Choose assigned Agent…</option>{assignedAgents.map((agent) => <option key={agent.id} value={agent.id} disabled={!agent.enabled}>{agent.name}{agent.enabled ? "" : " (disabled)"}</option>)}</select></label>
                 <div className="mt-4 flex-1 space-y-3 overflow-y-auto rounded-xl border border-border/70 bg-black/20 p-3">
                   {messages.length === 0 ? <div className="py-12 text-center"><p className="text-sm text-zinc-300">Start a conversation</p><p className="mt-2 text-xs text-zinc-500">The Bot will delegate your request to an assigned Agent and return its result.</p></div> : messages.map((item, index) => <div key={index} className={item.role === "user" ? "ml-6 rounded-xl bg-cyan-950/40 p-3 text-sm text-cyan-100" : "mr-6 rounded-xl border border-border bg-zinc-900 p-3 text-sm text-zinc-200"}><p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">{item.role === "user" ? "You" : selectedBot.name}</p><p className="whitespace-pre-wrap break-words">{item.content}</p></div>)}
