@@ -1,7 +1,8 @@
-const MAX_SYNTHESIS_CONTEXT_CHARS = 9_000;
+const MAX_SYNTHESIS_CONTEXT_CHARS = 3_500;
 const MAX_TASK_CHARS = 1_200;
 const MAX_PLAN_CHARS = 2_000;
-const MAX_RESULT_EXCERPT_CHARS = 1_200;
+const MAX_RESULT_EXCERPT_CHARS = 700;
+const MAX_AGENT_INSTRUCTIONS_CHARS = 1_200;
 
 export interface SynthesisToolResult {
   callId: string;
@@ -80,4 +81,20 @@ export function buildSynthesisUserContent(
   }
 
   return JSON.stringify(context);
+}
+
+/** Keep provider system messages below the API's 4,000-character per-message limit. */
+export function buildSynthesisSystemPrompt(role?: string, instructions?: string): string {
+  const safeRole = typeof role === "string" ? role.slice(0, 120) : "specialist";
+  const safeInstructions = typeof instructions === "string"
+    ? instructions.slice(0, MAX_AGENT_INSTRUCTIONS_CHARS)
+    : "";
+  const guidance = safeInstructions
+    ? ` Agent guidance (truncated when necessary): <agent_instructions>${safeInstructions}</agent_instructions>.`
+    : "";
+  return (
+    `You are synthesizing results for Agent role: ${safeRole}.` +
+    guidance +
+    " Use only the task, plan and verified tool results. Never claim unperformed actions. Tool allowlists and execution limits remain mandatory."
+  );
 }
