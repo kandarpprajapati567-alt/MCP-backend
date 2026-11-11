@@ -401,7 +401,7 @@ export default function DashboardPage() {
                     {item.status === "failed" && (
                       <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-3" role="status">
                         <p className="text-xs font-semibold text-red-300">Failure details</p>
-                        {item.failed_stage && <p className="mt-1 text-xs text-zinc-300">Stage: {item.failed_stage.replaceAll("_", " ")}</p>}
+                        {item.failed_stage && <p className="mt-1 text-xs text-zinc-300">Stage: {item.failed_stage.replace(/_/g, " ")}</p>}
                         <p className="mt-1 whitespace-pre-wrap break-words text-xs text-red-200">{item.error_message ?? "Failure reason is unavailable for this task. Re-run it after the diagnostics update."}</p>
                       </div>
                     )}
