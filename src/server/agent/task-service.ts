@@ -132,7 +132,17 @@ export async function submitAgentTask(taskInput: string, agentId?: string, overr
   }
   const task = taskInput.trim();
   const admin = createAdminClient();
-  const loadedAgent = agentId ? await loadAgentDefinition(admin, agentId) : null;\n  const agent = loadedAgent ? {\n    ...loadedAgent,\n    ...(overrides?.personaInstructions ? { instructions: loadedAgent.instructions + "\\n\\nBot persona instructions:\\n" + overrides.personaInstructions } : {}),\n    ...(overrides?.allowedTools ? { allowedTools: loadedAgent.allowedTools.filter((tool) => overrides.allowedTools?.includes(tool)) } : {}),\n    ...(overrides?.providerPreference ? { providerPreference: overrides.providerPreference } : {}),\n    ...(overrides?.modelPreference !== undefined ? { modelPreference: overrides.modelPreference } : {}),\n  } : null;
+  const loadedAgent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const agent = loadedAgent ? {
+    ...loadedAgent,
+    ...(overrides?.personaInstructions ? { instructions: loadedAgent.instructions + "\
+\
+Bot persona instructions:\
+" + overrides.personaInstructions } : {}),
+    ...(overrides?.allowedTools ? { allowedTools: loadedAgent.allowedTools.filter((tool) => overrides.allowedTools?.includes(tool)) } : {}),
+    ...(overrides?.providerPreference ? { providerPreference: overrides.providerPreference } : {}),
+    ...(overrides?.modelPreference !== undefined ? { modelPreference: overrides.modelPreference } : {}),
+  } : null;
   const agentSnapshot = agent ? {
     name: agent.name,
     role: agent.role,
