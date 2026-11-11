@@ -10,6 +10,7 @@ import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
+import { buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -215,7 +216,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         { role: "system", content: agent
           ? `You are synthesizing results for Agent role: ${agent.role}. Agent guidance: <agent_instructions>${agent.instructions}</agent_instructions>. Use only the task, plan and verified tool results. Never claim unperformed actions; tool allowlists and execution limits remain mandatory.`
           : "Synthesize the outcome using only the task, plan and verified tool results. Do not claim unperformed actions." },
-        { role: "user", content: JSON.stringify({ task, plan, toolResults: results }) },
+        { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
       maxOutputTokens: 1200,
