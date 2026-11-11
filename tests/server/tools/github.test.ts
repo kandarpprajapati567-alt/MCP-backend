@@ -61,6 +61,7 @@ test("lists commits and repository files with bounded results", async () => {
 
   mockResponse({ truncated: false, tree: [
     { path: "src/index.ts", type: "blob", size: 100 },
+    { path: "src/lib", type: "tree" },
     { path: "src/lib/helper.ts", type: "blob", size: 50 },
     { path: "README.md", type: "blob", size: 20 },
     { path: "src", type: "tree" },
@@ -68,7 +69,23 @@ test("lists commits and repository files with bounded results", async () => {
   const files = await listGitHubFiles({ path: "src", limit: 1 });
   assert.equal(files.count, 1);
   assert.equal(files.files[0].path, "src/index.ts");
+  assert.equal(files.files[0].type, "file");
   assert.equal(files.truncated, true);
+
+  mockResponse({ truncated: false, tree: [
+    { path: "README.md", type: "blob", size: 20 },
+    { path: "src", type: "tree" },
+    { path: "src/index.ts", type: "blob", size: 100 },
+    { path: "tests", type: "tree" },
+    { path: "tests/server/example.test.ts", type: "blob", size: 80 },
+  ] });
+  const root = await listGitHubFiles({ path: "", limit: 10 });
+  assert.equal(root.path, "/");
+  assert.deepEqual(root.files.map((entry) => [entry.path, entry.type]), [
+    ["README.md", "file"],
+    ["src", "directory"],
+    ["tests", "directory"],
+  ]);
 });
 
 test("reads UTF-8 text files and rejects traversal and secret-like paths", async () => {
