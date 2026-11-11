@@ -185,9 +185,23 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
         await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
       } else {
-        const result = await executeBackendTool(call.toolId, call.arguments);
-        results.push({ callId: call.id, toolId: call.toolId, result });
-        await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        try {
+          const result = await executeBackendTool(call.toolId, call.arguments);
+          results.push({ callId: call.id, toolId: call.toolId, result });
+          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        } catch (toolError) {
+          const message = safeAgentFailureMessage(toolError);
+          results.push({
+            callId: call.id,
+            toolId: call.toolId,
+            result: { ok: false, error: message },
+          });
+          await event(admin, id, "tool.failed", {
+            callId: call.id,
+            toolId: call.toolId,
+            message,
+          });
+        }
       }
     }
 
