@@ -8,6 +8,7 @@ import { executeAgentWorkflow } from "@/server/ai/routing/runtime-executor";
 import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
+import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -142,6 +143,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     }).select("id").single();
   if (createError || !created) throw new Error("Unable to create task.");
   const id = created.id as string;
+  let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
     await event(admin, id, "task.created");
@@ -153,6 +155,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
     const plan = planned ?? localPlan(task, agent ?? undefined);
+    failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
         plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
       throw new Error("Agent execution policy rejected the generated plan.");
@@ -169,6 +172,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
 
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
+    failedStage = "tool_execution";
     for (const call of plan.toolCalls) {
       const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
       if (deviceTool) {
@@ -203,6 +207,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       };
     }
 
+    failedStage = "synthesis";
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await event(admin, id, "task.synthesizing");
     const synthesisRequest: AIGenerationRequest = {
@@ -228,6 +233,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         : "Task planned successfully. No registered tool was required.\nGoal: " + plan.goal +
           "\nSteps: " + plan.steps.map((step) => step.objective).join("; ") +
           "\nConfigure an AI provider to enable model-based planning and synthesis.";
+    failedStage = "finalization";
     await setTask(admin, id, { status: "completed", result, completed_at: new Date().toISOString() });
     await event(admin, id, "task.completed");
     return {
@@ -241,7 +247,11 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
   } catch (error) {
     const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
-    try { await setTask(admin, id, { status: "failed", error_code: code }); await event(admin, id, "task.failed", { code }); }
+    const message = safeAgentFailureMessage(error);
+    try {
+      await setTask(admin, id, { status: "failed", error_code: code });
+      await event(admin, id, "task.failed", { code, stage: failedStage, message });
+    }
     catch { /* Preserve the original task failure. */ }
     return {
       taskId: id,
