@@ -79,7 +79,7 @@ export async function POST(request: Request, context: Context) {
     const result = await submitAgentTask(input.content, selectedAgentId, {
       personaInstructions: bot.persona_instructions,
       providerPreference: bot.provider_preference,
-      modelPreference: bot.model_preference,
+      ...(bot.model_preference ? { modelPreference: bot.model_preference } : {}),
       ...(Array.isArray(bot.allowed_tools) && bot.allowed_tools.length ? { allowedTools: bot.allowed_tools } : {}),
     });
     const assistantContent = result.status === "completed"
