@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { searchWeb } from "../../../src/server/tools/web-search";
+import { searchWebWithKey } from "../../../src/server/tools/web-search-core";
 import { TOOL_CATALOG } from "../../../src/server/tools/registry";
 
 const originalFetch = globalThis.fetch;
@@ -29,7 +29,7 @@ test("searches Tavily and returns bounded source references without exposing cre
     }), { status: 200 });
   }) as typeof fetch;
 
-  const result = await searchWeb({ query: "latest AI agent protocols", maxResults: 3 }, "tavily-test-key");
+  const result = await searchWebWithKey({ query: "latest AI agent protocols", maxResults: 3 }, "tavily-test-key");
   assert.equal(requestBody.api_key, "tavily-test-key");
   assert.equal(result.count, 1);
   assert.equal(result.results[0].url, "https://example.com/page");
@@ -40,7 +40,7 @@ test("searches Tavily and returns bounded source references without exposing cre
 test("rejects unexpected arguments and invalid result limits before network access", async () => {
   let calls = 0;
   globalThis.fetch = (async () => { calls += 1; return new Response("{}", { status: 200 }); }) as typeof fetch;
-  await assert.rejects(() => searchWeb({ query: "ok", apiKey: "leak" }, "secret-key"), /only query and maxResults/);
-  await assert.rejects(() => searchWeb({ query: "x", maxResults: 9 }, "secret-key"), /2–500 characters/);
+  await assert.rejects(() => searchWebWithKey({ query: "ok", apiKey: "leak" }, "secret-key"), /only query and maxResults/);
+  await assert.rejects(() => searchWebWithKey({ query: "x", maxResults: 9 }, "secret-key"), /2–500 characters/);
   assert.equal(calls, 0);
 });
