@@ -30,6 +30,43 @@ test("sends a chat completion request to the fixed OpenAI endpoint", async () =>
   assert.equal(result.usage?.inputTokens, 3);
 });
 
+test("accepts planner system messages larger than 4000 characters within the request limit", async () => {
+  let sentContentLength = 0;
+  const provider = new OpenAICompatibleProvider("openai", "test-secret-key", 5_000, async (_input, init) => {
+    const payload = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+    sentContentLength = payload.messages[0].content.length;
+    return Response.json({
+      model: "gpt-test",
+      choices: [{ message: { content: "Plan created" }, finish_reason: "stop" }],
+    });
+  });
+
+  const result = await provider.generate({
+    model: "gpt-test",
+    messages: [{ role: "system", content: "x".repeat(5_000) }],
+  });
+
+  assert.equal(sentContentLength, 5_000);
+  assert.equal(result.text, "Plan created");
+});
+
+test("rejects messages exceeding the per-message request limit before network access", async () => {
+  let called = false;
+  const provider = new OpenAICompatibleProvider("openai", "test-secret-key", 5_000, async () => {
+    called = true;
+    return Response.json({});
+  });
+
+  await assert.rejects(
+    () => provider.generate({
+      model: "gpt-test",
+      messages: [{ role: "system", content: "x".repeat(12_001) }],
+    }),
+    (error: unknown) => error instanceof AIProviderError && error.code === "INVALID_REQUEST",
+  );
+  assert.equal(called, false);
+});
+
 test("uses the fixed OpenRouter endpoint and provider headers", async () => {
   let requestedUrl = "";
   let referer = "";

@@ -76,7 +76,7 @@ export class OpenAICompatibleProvider implements AIProvider {
         !message ||
         !["system", "user", "assistant"].includes(message.role) ||
         typeof message.content !== "string" ||
-        message.content.length > 4_000
+        message.content.length > 12_000
       )
     ) {
       throw new AIProviderError("INVALID_REQUEST", "A valid messages array is required.");
