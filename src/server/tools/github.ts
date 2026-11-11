@@ -40,13 +40,14 @@ function validatePath(value: unknown): string {
 }
 
 async function githubGet(path: string): Promise<unknown> {
+  const token = getToken();
   let response: Response;
   try {
     response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + path, {
       method: "GET",
       headers: {
         Accept: "application/vnd.github+json",
-        Authorization: "Bearer " + getToken(),
+        Authorization: "Bearer " + token,
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "Futuristic-System-MCP-Backend",
       },
