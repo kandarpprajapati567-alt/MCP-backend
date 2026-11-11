@@ -135,10 +135,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, overr
   const loadedAgent = agentId ? await loadAgentDefinition(admin, agentId) : null;
   const agent = loadedAgent ? {
     ...loadedAgent,
-    ...(overrides?.personaInstructions ? { instructions: loadedAgent.instructions + "\
-\
-Bot persona instructions:\
-" + overrides.personaInstructions } : {}),
+    ...(overrides?.personaInstructions ? { instructions: loadedAgent.instructions + "\n\nBot persona instructions:\n" + overrides.personaInstructions } : {}),
     ...(overrides?.allowedTools ? { allowedTools: loadedAgent.allowedTools.filter((tool) => overrides.allowedTools?.includes(tool)) } : {}),
     ...(overrides?.providerPreference ? { providerPreference: overrides.providerPreference } : {}),
     ...(overrides?.modelPreference !== undefined ? { modelPreference: overrides.modelPreference } : {}),
