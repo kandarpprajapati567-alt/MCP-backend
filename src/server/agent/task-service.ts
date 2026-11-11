@@ -175,7 +175,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
-    const outcomes = await executeToolCallsSequentially(
+    await executeToolCallsSequentially(
       plan.toolCalls,
       async (call) => {
         const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
@@ -194,26 +194,25 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         return executeBackendTool(call.toolId, call.arguments);
       },
       (call) => !deviceTools.some((tool) => tool.id === call.toolId),
+      async (call, execution) => {
+        if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+        if (execution.ok) {
+          results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
+          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        } else {
+          results.push({
+            callId: call.id,
+            toolId: call.toolId,
+            result: { ok: false, error: execution.error },
+          });
+          await event(admin, id, "tool.failed", {
+            callId: call.id,
+            toolId: call.toolId,
+            message: execution.error,
+          });
+        }
+      },
     );
-
-    for (const { call, execution } of outcomes) {
-      if (deviceTools.some((tool) => tool.id === call.toolId)) continue;
-      if (execution.ok) {
-        results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
-        await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-      } else {
-        results.push({
-          callId: call.id,
-          toolId: call.toolId,
-          result: { ok: false, error: execution.error },
-        });
-        await event(admin, id, "tool.failed", {
-          callId: call.id,
-          toolId: call.toolId,
-          message: execution.error,
-        });
-      }
-    }
 
     if (pendingJobs.length) {
       await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
