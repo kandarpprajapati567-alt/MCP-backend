@@ -31,13 +31,6 @@ export async function createAgentPlan(
     ? deviceTools.filter((tool) => agent.allowedTools.includes(tool.id))
     : deviceTools;
   const availableTools = [...backendTools, ...permittedDeviceTools.slice(0, 8)];
-  const toolManifest = availableTools.map((tool) => ({
-    id: tool.id,
-    description: tool.description ?? "",
-    inputSchema: tool.inputSchema,
-    ...("deviceId" in tool ? { deviceId: tool.deviceId } : {}),
-  }));
-
   const prompt = buildPlannerSystemPrompt(availableTools, agent);
 
   const request: AIGenerationRequest = {
