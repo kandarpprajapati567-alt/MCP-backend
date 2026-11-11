@@ -15,13 +15,14 @@ export async function executeToolCallSafely(
 }
 
 /**
- * Executes planned calls in order. Only failures selected by shouldCaptureFailure
- * become per-call results; infrastructure failures can still abort the task.
+ * Executes planned calls in order. Captured tool failures become per-call
+ * outcomes; infrastructure failures and outcome-persistence failures propagate.
  */
 export async function executeToolCallsSequentially<TCall>(
   calls: readonly TCall[],
   execute: (call: TCall) => Promise<unknown>,
   shouldCaptureFailure: (call: TCall, error: unknown) => boolean = () => true,
+  onOutcome?: (call: TCall, execution: ToolCallExecution) => Promise<void>,
 ): Promise<Array<{ call: TCall; execution: ToolCallExecution }>> {
   const outcomes: Array<{ call: TCall; execution: ToolCallExecution }> = [];
   for (const call of calls) {
@@ -33,6 +34,7 @@ export async function executeToolCallsSequentially<TCall>(
       execution = { ok: false, error: safeAgentFailureMessage(error) };
     }
     outcomes.push({ call, execution });
+    await onOutcome?.(call, execution);
   }
   return outcomes;
 }
