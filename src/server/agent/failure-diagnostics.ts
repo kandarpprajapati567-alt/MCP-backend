@@ -22,8 +22,12 @@ export function safeAgentFailureMessage(error: unknown): string {
     "Device capabilities could not be loaded.",
     "Device tool job could not be queued.",
     "No configured provider could execute this workflow.",
+    "GitHub read request timed out after 15 seconds.",
+    "GitHub read request could not connect. Retry the task.",
+    "File exceeds the 200 KB read limit.",
+    "The requested path is not a supported text file.",
   ]);
-  if (knownMessages.has(message)) return message;
+  if (knownMessages.has(message) || /^GitHub read request failed with HTTP [0-9]{3}\\.$/.test(message)) return message;
 
   if (/^(Plan must contain only version, goal, steps, and toolCalls|Unsupported plan version|Plan goal must be between 1 and 500 characters|Each step must contain only id, objective, and expectedOutcome|Step IDs must be unique values from step-1 through step-8|Each objective must be between 1 and 500 characters|Each expected outcome must be between 1 and 300 characters|Tool calls must contain only id, toolId, and arguments|Tool call IDs must be unique call-1 through call-4|Plan requested a tool that is not currently available|Tool arguments failed the registered input schema)\.$/.test(message) ||
       /^Plan must contain between 1 and [1-8] steps\.$/.test(message) ||
