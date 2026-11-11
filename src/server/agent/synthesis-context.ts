@@ -1,24 +1,24 @@
-const MAX_SYNTHESIS_CONTEXT_CHARS = 3_500;
-const MAX_TASK_CHARS = 900;
-const MAX_PLAN_CHARS = 500;
-const MAX_RESULT_EXCERPT_CHARS = 1_100;
+const MAX_SYNTHESIS_CONTEXT_CHARS = 9_500;
+const MAX_TASK_CHARS = 1_200;
+const MAX_PLAN_CHARS = 1_200;
+const MAX_RESULT_EXCERPT_CHARS = 4_000;
 const MAX_AGENT_INSTRUCTIONS_CHARS = 1_200;
 
 function serializeToolResult(value: unknown): string {
   if (isRecord(value) && typeof value.content === "string") {
     const content = value.content;
-    const preview = content.length <= 750
+    const preview = content.length <= 3_500
       ? content
-      : content.slice(0, 250) + "\n...[middle omitted]...\n" +
-        content.slice(Math.max(250, Math.floor(content.length / 2) - 125), Math.floor(content.length / 2) + 125) +
-        "\n...[middle omitted]...\n" + content.slice(-250);
+      : content.slice(0, 1_200) + "\n...[middle omitted]...\n" +
+        content.slice(Math.max(1_200, Math.floor(content.length / 2) - 500), Math.floor(content.length / 2) + 500) +
+        "\n...[middle omitted]...\n" + content.slice(-1_200);
     const metadata = Object.fromEntries(
       Object.entries(value).filter(([key]) => key !== "content"),
     );
     return JSON.stringify({
       ...metadata,
       contentPreview: preview,
-      contentTruncated: content.length > 750,
+      contentTruncated: content.length > 3_500,
     });
   }
   return safeSerialize(value);
