@@ -104,6 +104,7 @@ The device bridge is a coordination contract: the backend does not directly acce
 - Agent configuration snapshots retained with task history, even if a definition is later edited or deleted.
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
 - Allow-listed backend tools, task status, event history, and result synthesis.
+- Failure diagnostics in task history: failed execution stage (`planning`, `policy_validation`, `tool_execution`, `synthesis`, or `finalization`) plus a sanitized, user-safe error message. Unexpected internal errors remain generic; credentials and arbitrary exception details are not exposed.
 - Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
 
 ### Model Context Protocol
@@ -184,10 +185,10 @@ Current registered MCP tools include text processing, persistent memory, device 
 | --- | --- | --- |
 | Render | Production backend | [mcp-backend-2oyj.onrender.com](https://mcp-backend-2oyj.onrender.com) |
 | GitHub `main` | Production source branch | Render auto-deploys from this branch |
-| GitHub `feature/agent-bot-manager-foundation` | Agent Manager integration branch | Draft PR #12; not merged to production |
+| GitHub `main` | Agent Manager and read-only GitHub tools | Merged and included in the production source branch |
 | Vercel | Preview/build validation | Two linked projects; SSO protection is enabled |
 
-The Render service is the production API host. Vercel preview deployments are not the Android app's production base URL.
+The Render service is the production API host. Vercel preview deployments are not the Android app's production base URL. Failure diagnostics are persisted as `task.failed` events and surfaced by the owner-scoped task-list API; no database migration is required.
 
 ## Run locally
 

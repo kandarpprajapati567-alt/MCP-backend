@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SystemHealthCheck } from "@/components/dashboard/SystemHealthCheck";
 
-type Task = { id: string; status: string; task: string; result: string | null; created_at: string; agent_snapshot?: { name?: string } | null };
+type Task = { id: string; status: string; task: string; result: string | null; error_message?: string | null; failed_stage?: string | null; created_at: string; agent_snapshot?: { name?: string } | null };
 type Agent = { id: string; name: string; enabled: boolean };
 type Provider = { provider: string; updated_at: string };
 type Health = { status?: string; services?: { database?: string; authentication?: string } };
@@ -395,9 +395,16 @@ export default function DashboardPage() {
                   <article key={item.id} className="rounded-xl border border-border p-3">
                     <div className="flex flex-wrap justify-between gap-2">
                       <p className="text-sm text-zinc-200">{item.task}</p>
-                      <span className="text-xs text-emerald-300">{item.status}</span>
+                      <span className={item.status === "failed" ? "text-xs text-red-300" : "text-xs text-emerald-300"}>{item.status}</span>
                     </div>
                     {item.result && <pre className="mt-2 whitespace-pre-wrap text-xs text-zinc-400">{item.result}</pre>}
+                    {item.status === "failed" && (
+                      <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-3" role="status">
+                        <p className="text-xs font-semibold text-red-300">Failure details</p>
+                        {item.failed_stage && <p className="mt-1 text-xs text-zinc-300">Stage: {item.failed_stage.replace(/_/g, " ")}</p>}
+                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-red-200">{item.error_message ?? "Failure reason is unavailable for this task. Re-run it after the diagnostics update."}</p>
+                      </div>
+                    )}
                     {item.agent_snapshot?.name && <p className="mt-2 text-[10px] text-cyan-300">Agent: {item.agent_snapshot.name}</p>}
                     <p className="mt-2 text-[10px] text-zinc-600">{new Date(item.created_at).toLocaleString()}</p>
                   </article>
