@@ -81,3 +81,19 @@ test("preserves file metadata and beginning, middle, and end evidence", () => {
   assert.equal(JSON.parse(parsed.toolResults[1].resultExcerpt).contentTruncated, true);
   }
 });
+
+test("keeps complete synthesis request below the provider aggregate limit", () => {
+  const system = buildSynthesisSystemPrompt("research specialist", "instructions ".repeat(500));
+  const user = buildSynthesisUserContent(
+    "Inspect and compare repository files",
+    { goal: "read source and summarize evidence" },
+    Array.from({ length: 4 }, (_, index) => ({
+      callId: "call-" + index,
+      toolId: "github.read_file",
+      result: { path: "file-" + index + ".md", content: "x".repeat(20_000) },
+    })),
+  );
+  assert.ok(system.length <= 4_000);
+  assert.ok(user.length <= 9_500);
+  assert.ok(system.length + user.length <= 12_000);
+});
