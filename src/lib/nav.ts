@@ -8,6 +8,7 @@ export type NavItem = {
 export const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", description: "Live system status and activity", icon: "grid" },
   { href: "/dashboard/agents", label: "Agent Manager", description: "Create and manage specialist agents", icon: "cpu" },
+  { href: "/dashboard/connections", label: "Connections", description: "Connect GitHub, web search and MCP services", icon: "plug" },
   { href: "/dashboard/bots", label: "Bot Manager", description: "Create user-facing Bots and delegate to Agents", icon: "bot" },
   { href: "/dashboard/models", label: "AI Engine", description: "Providers and workflow routing", icon: "cpu" },
   { href: "/dashboard/api", label: "API Management", description: "Credentials and API endpoints", icon: "code" },
