@@ -97,11 +97,13 @@ The device bridge is a coordination contract: the backend does not directly acce
 - Encrypted provider credential storage using AES-256-GCM.
 - Usage limits and provider health/observability.
 
-### Agent execution foundation
-- Structured task planning.
-- Strict validation of plans and tool arguments.
-- Allow-listed backend tools.
-- Task status, event history, and result synthesis.
+### Agent execution and Agent Manager
+- Structured task planning with strict validation of plans and tool arguments.
+- Persistent, owner-managed specialist Agent definitions with role and instruction guidance.
+- Per-Agent provider/model preferences, registered-tool allowlists, and bounded step/tool-call limits.
+- Agent configuration snapshots retained with task history, even if a definition is later edited or deleted.
+- Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
+- Allow-listed backend tools, task status, event history, and result synthesis.
 
 ### Model Context Protocol
 - Streamable HTTP JSON-RPC endpoint at `/api/mcp`.
@@ -144,7 +146,9 @@ Owner APIs require the owner master token. Device pairing-claim and device-work 
 | POST | `/api/mcp` | MCP Streamable HTTP |
 | GET | `/api/v1/health` | Public health check |
 | GET | `/api/v1/tools` | Tool catalog |
-| GET, POST | `/api/v1/agent/tasks` | List and submit tasks |
+| GET, POST | `/api/v1/agent/tasks` | List and submit tasks, optionally with `agentId` |
+| GET, POST | `/api/v1/agents` | List and create Agent definitions |
+| PATCH, DELETE | `/api/v1/agents/:agentId` | Update or delete an Agent definition |
 | GET | `/api/v1/agent/tasks/:taskId` | Task status, events, and jobs |
 | POST | `/api/v1/ai/generate` | Routed text generation |
 | GET, PUT, DELETE | `/api/v1/ai/providers/keys` | Provider credentials |
@@ -192,6 +196,8 @@ The Render service is the production API host. Vercel preview deployments are no
 - Supabase project and server-side credentials
 
 ### Setup
+
+The Agent Manager also requires the unapplied migration `supabase/migrations/20261110180000_create_agent_definitions.sql`. Review and apply it to the intended Supabase environment before using Agent CRUD or submitting tasks with an Agent. The application does not run database migrations automatically.
 
 ```bash
 git clone https://github.com/kandarpprajapati567-alt/MCP-backend.git
