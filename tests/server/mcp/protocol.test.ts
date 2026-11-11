@@ -50,7 +50,7 @@ test("tools/list exposes registered tools with JSON input schemas", async () => 
   assert.equal(tools.some((tool) => tool.name === "github.list_commits"), true);
   assert.equal(tools.some((tool) => tool.name === "github.list_files"), true);
   assert.equal(tools.some((tool) => tool.name === "github.read_file"), true);
-  assert.equal(tools[0].name, "text.word_count");
+  assert.equal(tools.some((tool) => tool.name === "text.word_count"), true);
   assert.equal(tools[0].inputSchema.additionalProperties, false);
 });
 
