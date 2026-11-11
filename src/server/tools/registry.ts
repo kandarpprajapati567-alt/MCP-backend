@@ -13,7 +13,8 @@ export type RegisteredToolId =
   | "github.list_branches"
   | "github.list_commits"
   | "github.list_files"
-  | "github.read_file";
+  | "github.read_file"
+  | "web.search";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
@@ -117,6 +118,22 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
       additionalProperties: false,
     },
     annotations: githubReadOnly,
+  },
+  {
+    id: "web.search",
+    description: "Search the public web using the connected Tavily integration and return source titles, URLs and excerpts.",
+    permission: "web.search",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", minLength: 2, maxLength: 500, description: "Question or search query." },
+        maxResults: { type: "integer", minimum: 1, maximum: 8, description: "Maximum source results. Defaults to 5." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },
   { id: "text.word_count", description: "Count words in supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
   { id: "text.extract_keywords", description: "Extract frequent meaningful keywords from supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
