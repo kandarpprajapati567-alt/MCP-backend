@@ -119,7 +119,14 @@ async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClien
   return tools.slice(0, 40);
 }
 
-export type AgentTaskOverrides = {\n  personaInstructions?: string;\n  allowedTools?: string[];\n  providerPreference?: AgentProviderPreference;\n  modelPreference?: string | null;\n};\n\nexport async function submitAgentTask(taskInput: string, agentId?: string, overrides?: AgentTaskOverrides) {
+export type AgentTaskOverrides = {
+  personaInstructions?: string;
+  allowedTools?: string[];
+  providerPreference?: AgentProviderPreference;
+  modelPreference?: string | null;
+};
+
+export async function submitAgentTask(taskInput: string, agentId?: string, overrides?: AgentTaskOverrides) {
   if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
     throw new Error("Task must be 1–4000 characters.");
   }
