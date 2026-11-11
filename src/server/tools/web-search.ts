@@ -1,11 +1,11 @@
-import "server-only";
-
-import { createAdminClient } from "@/lib/supabase/admin";
-import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
-import { decryptProviderSecret } from "@/server/ai/secrets/encryption";
 import { searchWebWithKey } from "./web-search-core";
 
 export async function searchWeb(args: Record<string, unknown>) {
+  const [{ createAdminClient }, { PERSONAL_OWNER_ID }, { decryptProviderSecret }] = await Promise.all([
+    import("@/lib/supabase/admin"),
+    import("@/server/security/owner-auth"),
+    import("@/server/ai/secrets/encryption"),
+  ]);
   const { data, error } = await createAdminClient().from("integration_connections")
     .select("encrypted_secret,iv,auth_tag,key_version")
     .eq("owner_id", PERSONAL_OWNER_ID).eq("provider", "tavily").eq("enabled", true).maybeSingle();
