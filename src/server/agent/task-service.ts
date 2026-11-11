@@ -194,9 +194,11 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     if (pendingJobs.length) {
       await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
       try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
-      const { data: latest } = await admin.from("agent_tasks").select("status,result")
+      const { data: latest, error: latestError } = await admin.from("agent_tasks").select("status,result,error_code")
         .eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
+      if (latestError) throw new Error("Task status could not be reloaded.");
       const completed = latest?.status === "completed";
+      const failed = latest?.status === "failed";
       return {
         taskId: id,
         status: latest?.status ?? "waiting_for_device",
@@ -204,7 +206,9 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         plan,
         toolResults: results,
         pendingJobs,
-        ...(completed ? { result: latest.result } : { message: "Waiting for a connected device to execute its registered tools." }),
+        ...(completed ? { result: latest.result } : failed
+          ? { error: "Device execution finished, but task finalization failed. Check Task History for diagnostics.", code: latest.error_code }
+          : { message: "Waiting for a connected device to execute its registered tools." }),
       };
     }
 
