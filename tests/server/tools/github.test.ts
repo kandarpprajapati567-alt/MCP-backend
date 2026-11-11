@@ -35,7 +35,7 @@ test("registers four GitHub tools as read-only and side-effect free", () => {
 test("lists branches from the fixed repository using GET and a server-side token", async () => {
   let requestUrl = "";
   let requestInit: RequestInit | undefined;
-  globalThis.fetch = (async (input, init) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requestUrl = String(input);
     requestInit = init;
     return new Response(JSON.stringify([
