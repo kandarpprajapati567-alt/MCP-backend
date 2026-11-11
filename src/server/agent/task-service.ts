@@ -3,7 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
-import { parseAgentDefinition, type AgentDefinitionInput } from "@/server/agent/definition-schema";
+import { parseAgentDefinition, type AgentDefinitionInput, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { executeAgentWorkflow } from "@/server/ai/routing/runtime-executor";
 import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
@@ -119,13 +119,27 @@ async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClien
   return tools.slice(0, 40);
 }
 
-export async function submitAgentTask(taskInput: string, agentId?: string) {
+export type AgentTaskOverrides = {
+  personaInstructions?: string;
+  allowedTools?: string[];
+  providerPreference?: AgentProviderPreference;
+  modelPreference?: string | null;
+};
+
+export async function submitAgentTask(taskInput: string, agentId?: string, overrides?: AgentTaskOverrides) {
   if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
     throw new Error("Task must be 1–4000 characters.");
   }
   const task = taskInput.trim();
   const admin = createAdminClient();
-  const agent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const loadedAgent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const agent = loadedAgent ? {
+    ...loadedAgent,
+    ...(overrides?.personaInstructions ? { instructions: loadedAgent.instructions + "\n\nBot persona instructions:\n" + overrides.personaInstructions } : {}),
+    ...(overrides?.allowedTools ? { allowedTools: loadedAgent.allowedTools.filter((tool) => overrides.allowedTools?.includes(tool)) } : {}),
+    ...(overrides?.providerPreference ? { providerPreference: overrides.providerPreference } : {}),
+    ...(overrides?.modelPreference !== undefined ? { modelPreference: overrides.modelPreference } : {}),
+  } : null;
   const agentSnapshot = agent ? {
     name: agent.name,
     role: agent.role,
