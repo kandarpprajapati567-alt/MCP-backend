@@ -1,8 +1,32 @@
 const MAX_SYNTHESIS_CONTEXT_CHARS = 3_500;
-const MAX_TASK_CHARS = 1_200;
-const MAX_PLAN_CHARS = 2_000;
-const MAX_RESULT_EXCERPT_CHARS = 700;
+const MAX_TASK_CHARS = 900;
+const MAX_PLAN_CHARS = 900;
+const MAX_RESULT_EXCERPT_CHARS = 1_400;
 const MAX_AGENT_INSTRUCTIONS_CHARS = 1_200;
+
+function serializeToolResult(value: unknown): string {
+  if (isRecord(value) && typeof value.content === "string") {
+    const content = value.content;
+    const preview = content.length <= 900
+      ? content
+      : content.slice(0, 300) + "\\n...[middle omitted]...\\n" +
+        content.slice(Math.max(300, Math.floor(content.length / 2) - 150), Math.floor(content.length / 2) + 150) +
+        "\\n...[middle omitted]...\\n" + content.slice(-300);
+    const metadata = Object.fromEntries(
+      Object.entries(value).filter(([key]) => key !== "content"),
+    );
+    return JSON.stringify({
+      ...metadata,
+      contentPreview: preview,
+      contentTruncated: content.length > preview.length,
+    });
+  }
+  return safeSerialize(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export interface SynthesisToolResult {
   callId: string;
@@ -52,7 +76,7 @@ export function buildSynthesisUserContent(
   };
 
   for (const item of toolResults) {
-    const resultText = safeSerialize(item.result);
+    const resultText = serializeToolResult(item.result);
     let excerptLength = Math.min(resultText.length, MAX_RESULT_EXCERPT_CHARS);
     let accepted = false;
 
