@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDeviceRegistration } from "@/server/agent/device-contract";
 import { verifyDeviceRequest } from "@/server/security/device-auth";
+import { readJsonBody } from "@/server/http/read-json";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +24,11 @@ export async function GET(request: Request) {
 // Owner-only administrative registration remains available for trusted server operations.
 export async function POST(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
-  let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Invalid JSON body." }, 400); }
+  const parsedBody = await readJsonBody(request, 64000);
+  if (!parsedBody.ok) return parsedBody.reason === "too_large"
+    ? json({ error: "Request body too large." }, 413)
+    : json({ error: "Invalid JSON body." }, 400);
+  const body = parsedBody.value;
   const parsed = parseDeviceRegistration(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
   try {
