@@ -40,16 +40,25 @@ function validatePath(value: unknown): string {
 }
 
 async function githubGet(path: string): Promise<unknown> {
-  const response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + path, {
-    method: "GET",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: "Bearer " + getToken(),
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "Futuristic-System-MCP-Backend",
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + path, {
+      method: "GET",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: "Bearer " + getToken(),
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Futuristic-System-MCP-Backend",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error("GitHub read request timed out after 15 seconds.");
+    }
+    throw new Error("GitHub read request could not connect. Retry the task.");
+  }
   if (!response.ok) {
     if (response.status === 401) throw new Error("GitHub rejected GITHUB_READ_TOKEN. Check that the token is valid and not expired.");
     if (response.status === 403) throw new Error("GitHub denied repository read access or the API rate limit was reached. Check token permissions.");
