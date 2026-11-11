@@ -31,6 +31,7 @@ test("bounds planner prompt with long agent instructions and large device manife
   };
   const prompt = buildPlannerSystemPrompt(tools, agent);
   assert.ok(prompt.length <= 7_600);
+  assert.ok(prompt.length + 4_000 <= 12_000);
   assert.match(prompt, /omittedTools/);
 });
 
