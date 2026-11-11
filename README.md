@@ -183,7 +183,7 @@ Current registered MCP tools include `text.word_count`, `text.extract_keywords`,
 | --- | --- | --- |
 | Render | Production backend | [mcp-backend-2oyj.onrender.com](https://mcp-backend-2oyj.onrender.com) |
 | GitHub `main` | Production source branch | Render auto-deploys from this branch |
-| GitHub `backend-foundation` | Integration/development branch | Changes here are not production until merged |
+| GitHub `feature/agent-bot-manager-foundation` | Agent Manager integration branch | Draft PR #12; not merged to production |
 | Vercel | Preview/build validation | Two linked projects; SSO protection is enabled |
 
 The Render service is the production API host. Vercel preview deployments are not the Android app's production base URL.
@@ -197,7 +197,7 @@ The Render service is the production API host. Vercel preview deployments are no
 
 ### Setup
 
-The Agent Manager also requires the unapplied migration `supabase/migrations/20261110180000_create_agent_definitions.sql`. Review and apply it to the intended Supabase environment before using Agent CRUD or submitting tasks with an Agent. The application does not run database migrations automatically.
+The Agent Manager database migrations are tracked in `supabase/migrations/20261111043908_create_agent_definitions.sql` and `supabase/migrations/20261111043934_index_agent_tasks_agent_definition_id.sql`. They have been applied to the configured MCP Backend Supabase project. For another environment, review and apply these migrations before using Agent CRUD or submitting tasks with an Agent. The application does not run database migrations automatically.
 
 ```bash
 git clone https://github.com/kandarpprajapati567-alt/MCP-backend.git
@@ -253,6 +253,7 @@ See [Android Device Bridge](docs/android-device-bridge.md) for the current paylo
 - [x] Workflow-based AI provider routing
 - [x] Encrypted provider-key storage
 - [x] Agent task planning and validation foundation
+- [x] Persistent Agent Manager definitions and dashboard
 - [x] Persistent owner memory
 - [x] Device registration and job-bridge contracts
 - [x] Secure device pairing and revocable device-scoped credentials
