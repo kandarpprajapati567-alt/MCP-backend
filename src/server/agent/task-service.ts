@@ -9,6 +9,7 @@ import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
+import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 
@@ -174,22 +175,44 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
-    for (const call of plan.toolCalls) {
-      const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
-      if (deviceTool) {
-        const { data: job, error } = await admin.from("agent_tool_jobs").insert({
-          owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: deviceTool.deviceId,
-          tool_call_id: call.id, tool_id: call.toolId, arguments: call.arguments, status: "queued",
-        }).select("id,device_id,tool_id").single();
-        if (error || !job) throw new Error("Device tool job could not be queued.");
-        pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
-        await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
-      } else {
-        const result = await executeBackendTool(call.toolId, call.arguments);
-        results.push({ callId: call.id, toolId: call.toolId, result });
-        await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-      }
-    }
+    await executeToolCallsSequentially(
+      plan.toolCalls,
+      async (call) => {
+        const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
+        if (deviceTool) {
+          const { data: job, error } = await admin.from("agent_tool_jobs").insert({
+            owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: deviceTool.deviceId,
+            tool_call_id: call.id, tool_id: call.toolId, arguments: call.arguments, status: "queued",
+          }).select("id,device_id,tool_id").single();
+          if (error || !job) throw new Error("Device tool job could not be queued.");
+          pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
+          await event(admin, id, "tool.requested", {
+            jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id,
+          });
+          return { queuedForDevice: true };
+        }
+        return executeBackendTool(call.toolId, call.arguments);
+      },
+      (call) => !deviceTools.some((tool) => tool.id === call.toolId),
+      async (call, execution) => {
+        if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+        if (execution.ok) {
+          results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
+          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        } else {
+          results.push({
+            callId: call.id,
+            toolId: call.toolId,
+            result: { ok: false, error: execution.error },
+          });
+          await event(admin, id, "tool.failed", {
+            callId: call.id,
+            toolId: call.toolId,
+            message: execution.error,
+          });
+        }
+      },
+    );
 
     if (pendingJobs.length) {
       await setTask(admin, id, { status: "waiting_for_device", tool_results: results });

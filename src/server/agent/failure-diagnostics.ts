@@ -26,6 +26,10 @@ export function safeAgentFailureMessage(error: unknown): string {
     "GitHub read request could not connect. Retry the task.",
     "File exceeds the 200 KB read limit.",
     "The requested path is not a supported text file.",
+    "GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.",
+    "GitHub rejected GITHUB_READ_TOKEN. Check that the token is valid and not expired.",
+    "GitHub denied repository read access or the API rate limit was reached. Check token permissions.",
+    "The requested file is too large or is not a supported text file.",
   ]);
   if (knownMessages.has(message) || /^GitHub read request failed with HTTP [0-9]{3}\.$/.test(message)) return message;
 
