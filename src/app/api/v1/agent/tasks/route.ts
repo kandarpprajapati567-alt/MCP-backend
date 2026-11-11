@@ -11,6 +11,39 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers });
 }
 
+async function attachFailureDetails<T extends { id: string }>(
+  admin: ReturnType<typeof createAdminClient>,
+  tasks: T[],
+): Promise<Array<T & { error_message?: string; failed_stage?: string }>> {
+  if (!tasks.length) return tasks;
+  const { data, error } = await admin.from("agent_task_events")
+    .select("task_id,payload")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .eq("event_type", "task.failed")
+    .in("task_id", tasks.map((task) => task.id));
+  if (error) throw new Error("Task failure diagnostics are unavailable.");
+
+  const failures = new Map<string, { message?: string; stage?: string }>();
+  for (const row of data ?? []) {
+    const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? row.payload as Record<string, unknown>
+      : {};
+    failures.set(row.task_id, {
+      ...(typeof payload.message === "string" ? { message: payload.message.slice(0, 240) } : {}),
+      ...(typeof payload.stage === "string" ? { stage: payload.stage.slice(0, 40) } : {}),
+    });
+  }
+
+  return tasks.map((task) => {
+    const failure = failures.get(task.id);
+    return {
+      ...task,
+      ...(failure?.message ? { error_message: failure.message } : {}),
+      ...(failure?.stage ? { failed_stage: failure.stage } : {}),
+    };
+  });
+}
+
 export async function GET(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   const admin = createAdminClient();
@@ -19,7 +52,10 @@ export async function GET(request: Request) {
     .eq("owner_id", PERSONAL_OWNER_ID)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (!primary.error) return json({ tasks: primary.data ?? [] });
+  if (!primary.error) {
+    try { return json({ tasks: await attachFailureDetails(admin, primary.data ?? []) }); }
+    catch { return json({ error: "Unable to load task history diagnostics." }, 500); }
+  }
   if (!/agent_snapshot|agent_definition_id|column .* does not exist/i.test(primary.error.message)) {
     return json({ error: "Unable to load task history." }, 500);
   }
@@ -29,7 +65,8 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(50);
   if (legacy.error) return json({ error: "Unable to load task history." }, 500);
-  return json({ tasks: legacy.data ?? [] });
+  try { return json({ tasks: await attachFailureDetails(admin, legacy.data ?? []) }); }
+  catch { return json({ error: "Unable to load task history diagnostics." }, 500); }
 }
 
 export async function POST(request: Request) {
