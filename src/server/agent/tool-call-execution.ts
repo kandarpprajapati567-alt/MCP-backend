@@ -13,3 +13,19 @@ export async function executeToolCallSafely(
     return { ok: false, error: safeAgentFailureMessage(error) };
   }
 }
+
+/**
+ * Executes planned backend calls in order. A failed call is captured as a
+ * result, so it does not prevent later calls from running.
+ */
+export async function executeToolCallsSequentially<TCall>(
+  calls: readonly TCall[],
+  execute: (call: TCall) => Promise<unknown>,
+): Promise<Array<{ call: TCall; execution: ToolCallExecution }>> {
+  const outcomes: Array<{ call: TCall; execution: ToolCallExecution }> = [];
+  for (const call of calls) {
+    const execution = await executeToolCallSafely(() => execute(call));
+    outcomes.push({ call, execution });
+  }
+  return outcomes;
+}
