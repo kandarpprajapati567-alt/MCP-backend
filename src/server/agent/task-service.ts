@@ -267,6 +267,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
 
 export async function getAgentTaskStatus(taskId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error("A valid task UUID is required.");
+  try { await finalizeAgentTaskIfReady(taskId); } catch { /* Keep status reads available; finalization state is persisted when possible. */ }
   const admin = createAdminClient();
   const [taskResult, eventResult, jobResult] = await Promise.all([
     admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
