@@ -9,7 +9,11 @@ export type RegisteredToolId =
   | "agent.submit_task"
   | "agent.task_status"
   | "models.list_providers"
-  | "models.provider_info";
+  | "models.provider_info"
+  | "github.list_branches"
+  | "github.list_commits"
+  | "github.list_files"
+  | "github.read_file";
 
 export type ToolDefinition = {
   id: RegisteredToolId;
@@ -46,8 +50,74 @@ const textInputSchema: ToolDefinition["inputSchema"] = {
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const writeIdempotent = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const deviceDispatch = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const githubReadOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
 export const TOOL_CATALOG: readonly ToolDefinition[] = [
+  {
+    id: "github.list_branches",
+    description: "List branches in the fixed Futuristic System MCP Backend GitHub repository. Read-only; requires GITHUB_READ_TOKEN.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", maxLength: 100, description: "Optional case-insensitive branch-name filter." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum branches to return. Defaults to 30." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    annotations: githubReadOnly,
+  },
+  {
+    id: "github.list_commits",
+    description: "List recent commits from a branch, tag or commit ref in the fixed Futuristic System MCP Backend repository. Read-only.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", maxLength: 120, description: "Branch, tag or commit reference. Defaults to main." },
+        limit: { type: "integer", minimum: 1, maximum: 30, description: "Maximum commits to return. Defaults to 10." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    annotations: githubReadOnly,
+  },
+  {
+    id: "github.list_files",
+    description: "List repository files, optionally under a directory, in the fixed Futuristic System MCP Backend repository. Read-only.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", maxLength: 120, description: "Branch, tag or commit reference. Defaults to main." },
+        path: { type: "string", maxLength: 240, description: "Optional repository-relative directory path." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum files to return. Defaults to 60." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    annotations: githubReadOnly,
+  },
+  {
+    id: "github.read_file",
+    description: "Read a bounded text file from the fixed Futuristic System MCP Backend repository. Secret-like paths and files over 200 KB are blocked. Read-only.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", minLength: 1, maxLength: 240, description: "Repository-relative text file path." },
+        ref: { type: "string", maxLength: 120, description: "Optional branch, tag or commit reference. Defaults to main." },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+    annotations: githubReadOnly,
+  },
   { id: "text.word_count", description: "Count words in supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
   { id: "text.extract_keywords", description: "Extract frequent meaningful keywords from supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
   { id: "text.text_stats", description: "Return character, word, and sentence counts for supplied text.", permission: "local_text_read", sideEffect: false, inputSchema: textInputSchema, annotations: readOnly },
