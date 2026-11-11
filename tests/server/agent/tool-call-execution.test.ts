@@ -8,10 +8,12 @@ import { safeAgentFailureMessage } from "../../../src/server/agent/failure-diagn
 test("continues through planned calls after a tool failure and persists each outcome in order", async () => {
   const calls: string[] = [];
   const persisted: string[] = [];
+  const timeline: string[] = [];
   const outcomes = await executeToolCallsSequentially(
     ["missing-file", "package-json"],
     async (tool) => {
       calls.push(tool);
+      timeline.push("execute:" + tool);
       if (tool === "missing-file") {
         throw new Error(
           "GitHub repository or requested resource was not found. Confirm repository access and the supplied ref/path.",
@@ -22,9 +24,16 @@ test("continues through planned calls after a tool failure and persists each out
     () => true,
     async (tool, execution) => {
       persisted.push(tool + ":" + (execution.ok ? "completed" : "failed"));
+      timeline.push("persist:" + tool);
     },
   );
 
+  assert.deepEqual(timeline, [
+    "execute:missing-file",
+    "persist:missing-file",
+    "execute:package-json",
+    "persist:package-json",
+  ]);
   assert.deepEqual(calls, ["missing-file", "package-json"]);
   assert.deepEqual(persisted, ["missing-file:failed", "package-json:completed"]);
   assert.equal(outcomes.length, 2);
