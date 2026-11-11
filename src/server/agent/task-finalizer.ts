@@ -27,7 +27,9 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   const staleCutoff = new Date(Date.now() - STALE_SYNTHESIS_MS).toISOString();
   const waiting = task.status === "waiting_for_device";
   const staleSynthesis = task.status === "synthesizing" &&
-    typeof task.updated_at === "string" && task.updated_at < staleCutoff;
+    typeof task.updated_at === "string" &&
+    Number.isFinite(Date.parse(task.updated_at)) &&
+    Date.parse(task.updated_at) < Date.now() - STALE_SYNTHESIS_MS;
   if (!waiting && !staleSynthesis) return false;
 
   const { data: snapshotRow, error: snapshotError } = await admin.from("agent_tasks")
