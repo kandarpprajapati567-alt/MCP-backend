@@ -53,7 +53,7 @@ test("lists branches from the fixed repository using GET and a server-side token
 
 test("lists commits and repository files with bounded results", async () => {
   mockResponse([
-    { sha: "abc123", commit: { message: "Add feature\\nDetails", author: { date: "2026-11-11T10:00:00Z" } }, html_url: "https://github.com/example/commit/abc123" },
+    { sha: "abc123", commit: { message: "Add feature\nDetails", author: { date: "2026-11-11T10:00:00Z" } }, html_url: "https://github.com/example/commit/abc123" },
   ]);
   const commits = await listGitHubCommits({ ref: "main", limit: 2 });
   assert.equal(commits.count, 1);
