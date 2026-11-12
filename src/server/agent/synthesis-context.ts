@@ -46,8 +46,8 @@ function classifyToolOutcome(value: unknown): "reported_failure" | "returned_out
 
 function extractSourceReferenceCandidates(value: unknown): string[] {
   const serialized = safeSerialize(value);
-  const matches = serialized.match(/https?:\\/\\/[^\\s"'<>\\\\]+/g) ?? [];
-  return [...new Set(matches.map((url) => url.replace(/[),.;\\]}]+$/, "")))].slice(0, 5);
+  const matches = serialized.match(/https?:\/\/[^\s"'<>\\]+/g) ?? [];
+  return [...new Set(matches.map((url) => url.replace(/[),.;\]}]+$/, "")))].slice(0, 5);
 }
 
 function safeSerialize(value: unknown): string {
