@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       connections: [
         { id: "github", name: "GitHub", category: "Developer", connected: Boolean(process.env.GITHUB_READ_TOKEN), status: process.env.GITHUB_READ_TOKEN ? "connected" : "needs_credential", tools: ["github.list_branches", "github.list_commits", "github.list_files", "github.read_file"], setup: "Configure GITHUB_READ_TOKEN on the backend with read-only repository access." },
         { id: "tavily", name: "Web Search", category: "Research", connected: configured.has("tavily"), status: configured.has("tavily") ? "connected" : "not_connected", tools: ["web.search"], setup: "Connect a Tavily API key below." },
-        { id: "mcp_remote", name: "Remote MCP Servers", category: "MCP", connected: false, status: "coming_soon", tools: [], setup: "Remote MCP server discovery and secure connection management is the next connector." },
+        { id: "mcp_remote", name: "Remote MCP Servers", category: "MCP", connected: remoteServers.length > 0, status: remoteResult.error ? "migration_required" : remoteServers.length > 0 ? "connected" : "not_connected", tools: [], setup: remoteResult.error ? "Apply the Remote MCP migration to enable secure server registration." : remoteServers.length + " connected server(s) · " + remoteToolCount + " read-only tool(s) discovered. Add servers below." },
       ],
     });
   } catch {
