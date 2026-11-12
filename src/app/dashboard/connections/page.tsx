@@ -116,7 +116,6 @@ export default function ConnectionsPage() {
           <button disabled={busy || apiKey.length < 8} onClick={() => void saveTavily()} className="rounded-xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">Connect Web Search</button>
         </div>)}
       </section>)}
-    </>}
     <section className="space-y-4 rounded-2xl border border-border bg-zinc-950/70 p-5">
       <div><p className="text-xs uppercase tracking-wide text-zinc-500">MCP</p><h2 className="mt-1 text-lg font-semibold text-white">Remote MCP servers</h2><p className="mt-1 text-sm text-zinc-400">Register public HTTPS Streamable HTTP servers. DNS is pinned to validated public IPv4 addresses, redirects are blocked, bearer credentials are encrypted, and only explicitly read-only tools are exposed.</p></div>
       <form onSubmit={(event) => { event.preventDefault(); void connectRemoteMcp(); }} className="grid gap-3 sm:grid-cols-2">
@@ -133,6 +132,7 @@ export default function ConnectionsPage() {
       </div>)}
       {remoteServers.length === 0 && <p className="text-xs text-zinc-500">No remote MCP servers connected.</p>}
     </section>
+    </>}
     {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
     {message && <p role="status" className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}
   </div>;
