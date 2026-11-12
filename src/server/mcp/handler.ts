@@ -128,10 +128,11 @@ async function dispatch(method: string, params: JsonRecord, id: JsonRpcId, versi
   if (method === "ping") return rpcResult(id, {}, version);
 
   if (method === "tools/list") {
+    const remoteTools = await listRemoteAgentToolsSafe();
     return rpcResult(
       id,
       {
-        tools: TOOL_CATALOG.map((tool) => ({
+        tools: [...TOOL_CATALOG, ...remoteTools].map((tool) => ({
           name: tool.id,
           description: tool.description,
           inputSchema: tool.inputSchema,
