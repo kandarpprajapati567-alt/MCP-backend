@@ -105,6 +105,9 @@ export async function POST(request: Request) {
     const status = message.startsWith("Task must") || message.includes("valid agent ID") ? 400
       : message === "IDEMPOTENCY_KEY_REUSED" || message.includes("disabled") ? 409
         : message.includes("does not exist") ? 404 : 503;
-    return json({ error: message }, status);
+    const publicMessage = message === "IDEMPOTENCY_KEY_REUSED"
+      ? "This Idempotency-Key was already used for a different task or Agent. Use a new key for different work."
+      : message;
+    return json({ error: publicMessage }, status);
   }
 }
