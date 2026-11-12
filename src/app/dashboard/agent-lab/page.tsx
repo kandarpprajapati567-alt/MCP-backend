@@ -163,6 +163,21 @@ export default function AgentLabPage() {
     } finally { setSuiteBusy(false); }
   }
 
+  async function cancelTask(id: string) {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await api("/api/v1/agent/tasks/" + id + "/cancel", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? data.message ?? "Task cancellation failed.");
+      setMessage(data.message ?? "Cancellation requested.");
+      await refresh();
+      await openTask(id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task cancellation failed.");
+      await refresh().catch(() => undefined);
+    } finally { setBusy(false); }
+  }
+
   async function openTask(id: string) {
     setError("");
     try {
@@ -248,7 +263,17 @@ export default function AgentLabPage() {
 
           {detail && (
             <section className="space-y-4 rounded-2xl border border-cyan-900/50 bg-zinc-950/80 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold text-white">Execution trace</h2><span className="text-xs text-zinc-500">Task {String(detail.task.id ?? "")}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold text-white">Execution trace</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">Task {String(detail.task.id ?? "")}</span>
+                  {["queued", "planning", "awaiting_approval", "waiting_for_device", "executing", "synthesizing"].includes(String(detail.task.status)) && (
+                    <button type="button" disabled={busy} onClick={() => void cancelTask(String(detail.task.id ?? ""))} className="rounded-lg border border-red-900/70 px-3 py-1.5 text-xs text-red-200 disabled:opacity-40">
+                      {busy ? "Working…" : "Cancel task"}
+                    </button>
+                  )}
+                </div>
+              </div>
               <div><p className="text-xs text-zinc-500">Input</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-200">{String(detail.task.task ?? "")}</p></div>
               <div><p className="text-xs text-zinc-500">Status</p><p className="mt-1 text-sm text-white">{String(detail.task.status ?? "unknown")}</p></div>
               <div><p className="text-xs text-zinc-500">Plan</p><pre className="mt-1 max-h-72 overflow-auto rounded-xl bg-black/40 p-3 text-xs text-cyan-100">{JSON.stringify(detail.task.plan ?? null, null, 2)}</pre></div>
