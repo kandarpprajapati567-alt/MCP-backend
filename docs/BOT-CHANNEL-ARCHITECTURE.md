@@ -12,8 +12,9 @@ The first shared contract slice is now implemented in `src/server/channels/messa
 - Stable SHA-256 event deduplication key scoped to channel + provider event ID.
 - Stable SHA-256 session scope scoped to owner + channel + external sender + conversation.
 - Contract regression tests are part of `npm test`.
+- Owner-authenticated `POST /api/v1/channels/test` runs deterministic checks, and **Dashboard → Bot Gateway** exposes individual Test buttons plus Run All Tests.
 
-This is a **shared contract foundation only**. It does not yet verify provider webhook signatures, resolve/link identities, persist deduplication records, submit Agent tasks, deliver replies or expose bot connection controls. Those remain explicit implementation gates; no channel should be shown as connected until its full end-to-end criteria pass.
+This is a **shared contract foundation only**. It does not yet verify provider webhook signatures, resolve/link identities, persist deduplication records, submit Agent tasks or deliver replies. The dashboard is a contract Test Center and status view, not a live bot connection manager yet. Those remain explicit implementation gates; no channel should be shown as connected until its full end-to-end criteria pass.
 
 ## 1. Product decision
 
