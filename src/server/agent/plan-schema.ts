@@ -1,4 +1,4 @@
-import type { AgentPlan, AgentPlanStep, AgentToolCall } from "@/shared/agent/contracts";
+import type { AgentPlan } from "@/shared/agent/contracts";
 
 export type { AgentPlan, AgentPlanStep, AgentToolCall } from "@/shared/agent/contracts";
 
