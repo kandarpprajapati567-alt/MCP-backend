@@ -53,6 +53,21 @@ function isOpaqueId(value: unknown): value is string {
   return typeof value === "string" && OPAQUE_ID.test(value) && value.trim() === value;
 }
 
+function isStrictIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value) || !Number.isFinite(Date.parse(value))) return false;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const hour = Number(value.slice(11, 13));
+  const minute = Number(value.slice(14, 16));
+  const second = Number(value.slice(17, 19));
+  if (year < 1000 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false;
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return false;
+  const offset = value.match(/([+-])(\\d{2}):(\\d{2})$/);
+  return !offset || (Number(offset[2]) <= 23 && Number(offset[3]) <= 59);
+}
+
 /**
  * Validates the internal envelope at the gateway/Agent boundary.
  * Unknown fields fail closed so raw provider payloads cannot smuggle policy
@@ -77,8 +92,7 @@ export function parseNormalizedChannelMessageV1(input: unknown): ChannelMessageP
       input.text.length > CHANNEL_MESSAGE_MAX_TEXT_LENGTH) {
     return { ok: false, error: "Message text must be non-empty and within the size limit." };
   }
-  if (typeof input.receivedAt !== "string" || !ISO_TIMESTAMP.test(input.receivedAt) ||
-      !Number.isFinite(Date.parse(input.receivedAt))) {
+  if (!isStrictIsoTimestamp(input.receivedAt)) {
     return { ok: false, error: "Invalid message received timestamp." };
   }
 
