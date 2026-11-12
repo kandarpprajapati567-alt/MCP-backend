@@ -110,3 +110,30 @@ test("validates nested objects and array items instead of accepting unchecked co
     targets: [],
   }), available).ok, false);
 });
+
+
+test("validates schema-defined additional properties and fails closed on malformed constraints", () => {
+  const available = [{
+    id: "device.metadata",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        metadata: {
+          type: "object",
+          properties: {},
+          additionalProperties: { type: "string", maxLength: 12 },
+        },
+      },
+      required: ["metadata"],
+      additionalProperties: false,
+    },
+  }];
+  const makePlan = (metadata: unknown) => ({
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "device.metadata", arguments: { metadata } }],
+  });
+
+  assert.equal(parseAgentPlan(makePlan({ label: "sensor" }), available).ok, true);
+  assert.equal(parseAgentPlan(makePlan({ label: 42 }), available).ok, false);
+  assert.equal(parseAgentPlan(makePlan({ label: "x".repeat(13) }), available).ok, false);
+});
