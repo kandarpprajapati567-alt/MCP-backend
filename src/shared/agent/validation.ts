@@ -1,0 +1,85 @@
+import type {
+  AgentCapabilityManifestEntry,
+  AgentInvocationEnvelope,
+  AgentInvocationResult,
+} from "./contracts";
+
+const MAX_SCHEMA_BYTES = 16_000;
+const MAX_ARGUMENT_BYTES = 16_000;
+const MAX_EVIDENCE_ITEMS = 20;
+const MAX_TEXT_LENGTH = 2_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isBoundedText(value: unknown, max = MAX_TEXT_LENGTH): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= max;
+}
+
+function jsonByteLength(value: unknown): number {
+  try {
+    const encoded = JSON.stringify(value);
+    return typeof encoded === "string" ? new TextEncoder().encode(encoded).byteLength : Infinity;
+  } catch {
+    return Infinity;
+  }
+}
+
+/**
+ * Validates the portable, normalized subset of a capability manifest.
+ * Runtime-specific permission checks must still happen in the owning runtime.
+ */
+export function isValidCapabilityManifestEntry(
+  value: unknown,
+): value is AgentCapabilityManifestEntry {
+  if (!isRecord(value)) return false;
+  if (!isBoundedText(value.id, 120) || !/^[a-z0-9][a-z0-9._-]*$/.test(value.id)) return false;
+  if (value.runtime !== "web" && value.runtime !== "android") return false;
+  if (!Number.isInteger(value.manifestVersion) || (value.manifestVersion as number) < 1) return false;
+  if (!isBoundedText(value.description, 500)) return false;
+  if (!isRecord(value.inputSchema) || value.inputSchema.type !== "object" ||
+      !isRecord(value.inputSchema.properties) || value.inputSchema.additionalProperties !== false) return false;
+  if (jsonByteLength(value.inputSchema) > MAX_SCHEMA_BYTES) return false;
+  if (value.inputSchema.required !== undefined &&
+      (!Array.isArray(value.inputSchema.required) ||
+       value.inputSchema.required.some((item) => typeof item !== "string" || !Object.hasOwn(value.inputSchema!.properties as object, item)))) return false;
+  if (!Array.isArray(value.requiredPermissions) || value.requiredPermissions.length > 32 ||
+      value.requiredPermissions.some((permission) => !isBoundedText(permission, 100))) return false;
+  return typeof value.sideEffect === "boolean" &&
+    typeof value.idempotent === "boolean" &&
+    typeof value.requiresUserApproval === "boolean";
+}
+
+export function isValidInvocationEnvelope(value: unknown, now = Date.now()): value is AgentInvocationEnvelope {
+  if (!isRecord(value) || value.contractVersion !== 1) return false;
+  if (!isBoundedText(value.invocationId, 128) || !isBoundedText(value.toolCallId, 128) ||
+      !isBoundedText(value.capabilityId, 120) || !isBoundedText(value.idempotencyKey, 128)) return false;
+  if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
+  if (value.targetRuntime !== "web" && value.targetRuntime !== "android") return false;
+  if (value.targetDeviceId !== null && !isBoundedText(value.targetDeviceId, 128)) return false;
+  if (value.targetRuntime === "web" && value.targetDeviceId !== null) return false;
+  if (!isRecord(value.arguments) || jsonByteLength(value.arguments) > MAX_ARGUMENT_BYTES) return false;
+  if (typeof value.createdAt !== "string" || typeof value.expiresAt !== "string") return false;
+  const createdAt = Date.parse(value.createdAt);
+  const expiresAt = Date.parse(value.expiresAt);
+  if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt <= createdAt) return false;
+  if (expiresAt - createdAt > 24 * 60 * 60 * 1000 || expiresAt <= now) return false;
+  return true;
+}
+
+export function isValidInvocationResult(value: unknown): value is AgentInvocationResult {
+  if (!isRecord(value) || value.contractVersion !== 1) return false;
+  if (!isBoundedText(value.invocationId, 128) || !isBoundedText(value.toolCallId, 128)) return false;
+  if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
+  if (value.runtime !== "web" && value.runtime !== "android") return false;
+  if (!["completed", "failed", "denied", "expired", "cancelled"].includes(String(value.status))) return false;
+  if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return false;
+  if (value.errorCode !== undefined && !isBoundedText(value.errorCode, 100)) return false;
+  if (value.evidence !== undefined && (!Array.isArray(value.evidence) || value.evidence.length > MAX_EVIDENCE_ITEMS ||
+      value.evidence.some((item) => !isRecord(item) ||
+        !isBoundedText(item.kind, 80) || !isBoundedText(item.source, 200) ||
+        !isBoundedText(item.summary, 500)))) return false;
+  if (value.status !== "completed" && value.result !== undefined) return false;
+  return true;
+}
