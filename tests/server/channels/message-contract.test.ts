@@ -4,7 +4,8 @@ import {
   CHANNEL_MESSAGE_MAX_TEXT_LENGTH,
   createChannelEventDeduplicationKey,
   createChannelSessionScopeKey,
-  parseNormalizedChannelMessageV1,\n  runChannelContractSelfTests,
+  parseNormalizedChannelMessageV1,
+  runChannelContractSelfTests,
   type NormalizedChannelMessageV1,
 } from "../../../src/server/channels/message-contract";
 
