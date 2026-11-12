@@ -290,7 +290,8 @@ The order is deliberate: **finish a trustworthy Agent Engine first; then connect
 - [x] MCP Streamable HTTP endpoint and registered tool catalog
 - [x] OpenAI / OpenRouter text-generation adapters and mock testing provider
 - [x] Encrypted provider credential storage and workflow routing
-- [x] Agent planning/validation foundation and Agent Manager definitions\n- [x] Expanded bounded planning capacity: up to 16 planning steps and 8 registered tool calls per Agent plan (configurable, schema-validated, not unlimited execution)
+- [x] Agent planning/validation foundation and Agent Manager definitions
+- [x] Expanded bounded planning capacity: up to 16 planning steps and 8 registered tool calls per Agent plan (configurable, schema-validated, not unlimited execution)
 - [x] Supabase-backed owner memory, task records and event history
 - [x] Device pairing, scoped device credentials and backend job-bridge contracts
 - [x] GitHub read-only tools, Tavily web search connector and restricted remote MCP connections
