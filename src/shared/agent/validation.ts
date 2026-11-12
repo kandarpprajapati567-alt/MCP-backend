@@ -55,13 +55,17 @@ export function isValidCapabilityManifestEntry(
   for (const property of Object.values(properties)) {
     if (!isRecord(property) || !["string", "number", "integer", "boolean"].includes(String(property.type))) return false;
     if (property.type === "string") {
+      if (!hasOnlyKeys(property, ["type"], ["minLength", "maxLength"])) return false;
       if (property.maxLength !== undefined && (!Number.isInteger(property.maxLength) || (property.maxLength as number) < 0 || (property.maxLength as number) > 12_000)) return false;
       if (property.minLength !== undefined && (!Number.isInteger(property.minLength) || (property.minLength as number) < 0 || (property.minLength as number) > 12_000)) return false;
       if (typeof property.maxLength === "number" && typeof property.minLength === "number" && property.minLength > property.maxLength) return false;
-    } else if (property.minimum !== undefined || property.maximum !== undefined) {
+    } else if (property.type === "number" || property.type === "integer") {
+      if (!hasOnlyKeys(property, ["type"], ["minimum", "maximum"])) return false;
       if (property.minimum !== undefined && (typeof property.minimum !== "number" || !Number.isFinite(property.minimum))) return false;
       if (property.maximum !== undefined && (typeof property.maximum !== "number" || !Number.isFinite(property.maximum))) return false;
       if (typeof property.minimum === "number" && typeof property.maximum === "number" && property.minimum > property.maximum) return false;
+    } else if (!hasOnlyKeys(property, ["type"])) {
+      return false;
     }
   }
   if (schema.required !== undefined &&
