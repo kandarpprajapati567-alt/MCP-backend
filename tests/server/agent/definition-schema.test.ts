@@ -29,7 +29,7 @@ test("rejects unsupported providers and unsafe tool IDs", () => {
 });
 
 test("enforces execution limits and duplicate tool rejection", () => {
-  assert.equal(parseAgentDefinition({ ...valid, maxSteps: 9 }).ok, false);
+  assert.equal(parseAgentDefinition({ ...valid, maxSteps: 17 }).ok, false);
   assert.equal(parseAgentDefinition({ ...valid, maxToolCalls: -1 }).ok, false);
   assert.equal(parseAgentDefinition({ ...valid, allowedTools: ["text.word_count", "text.word_count"] }).ok, false);
 });
