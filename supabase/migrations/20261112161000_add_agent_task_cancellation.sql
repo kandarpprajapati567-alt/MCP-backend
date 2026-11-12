@@ -68,3 +68,16 @@ $$;
 
 revoke all on function public.request_agent_task_cancellation(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.request_agent_task_cancellation(uuid,uuid) to service_role;
+
+alter table public.agent_task_events
+  drop constraint if exists agent_task_events_event_type_check;
+alter table public.agent_task_events
+  add constraint agent_task_events_event_type_check
+  check (event_type = any (array[
+    'task.created','task.planning','task.plan_ready','task.executing',
+    'tool.requested','tool.claimed','tool.completed','tool.failed',
+    'task.synthesizing','task.completed','task.failed','task.cancelled',
+    'task.cancellation_requested',
+    'device.registered','device.heartbeat',
+    'memory.created','memory.updated','memory.deleted'
+  ]));
