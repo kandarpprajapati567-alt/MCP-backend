@@ -49,7 +49,7 @@ export function CompleteSystemTest({ token }: Props) {
       { id: "health", label: "Website API + database", path: "/api/v1/health", validate: (d, r) => r.ok && d.status === "ok" && d.services?.database === "ok" ? null : `HTTP ${r.status}; status=${d.status ?? "unknown"}; database=${d.services?.database ?? "unknown"}` },
       { id: "render", label: "Render backend", path: "/api/v1/system/health", validate: (d) => d.reachable && d.body?.status === "ok" ? null : d.error ?? `Backend unavailable or degraded (HTTP ${d.httpStatus ?? "unknown"}).` },
       { id: "tools", label: "Registered tool catalog", path: "/api/v1/tools", validate: (d, r) => r.ok && Array.isArray(d.tools) && d.tools.length > 0 ? null : d.error ?? "Tool catalog missing or empty." },
-      { id: "agents", label: "Agent definitions + tool assignments", path: "/api/v1/agents", validate: (d, r) => r.ok && Array.isArray(d.agents) ? null : d.error ?? "Agent definitions could not be loaded." },
+      { id: "agents", label: "Agent definitions registry", path: "/api/v1/agents", validate: (d, r) => r.ok && Array.isArray(d.agents) ? null : d.error ?? "Agent definitions could not be loaded." },
       { id: "providers", label: "Provider adapters + configuration", path: "/api/v1/ai/providers/health", validate: (d, r) => r.ok && Array.isArray(d.providers) ? null : d.error ?? "Provider diagnostics unavailable." },
       { id: "connections", label: "GitHub / Web / remote MCP connections", path: "/api/v1/connections", validate: (d, r) => r.ok && Array.isArray(d.connections) ? null : d.error ?? "Connections registry unavailable." },
       { id: "devices", label: "Android device registry", path: "/api/v1/devices", validate: (d, r) => r.ok && Array.isArray(d.devices) ? null : d.error ?? "Device registry unavailable." },
@@ -170,7 +170,7 @@ export function CompleteSystemTest({ token }: Props) {
         <button type="button" disabled={running} onClick={() => void runSafeTest()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{running ? "Testing…" : "Run Safe Test"}</button>
         <button type="button" disabled={running} onClick={() => void runLiveTest()} className="rounded-xl border border-amber-700/70 bg-amber-950/30 px-5 py-3 text-sm font-semibold text-amber-200 disabled:opacity-40">{running ? "Testing…" : "Run Live Agent Test"}</button>
       </div>
-      <p className="mt-3 text-xs text-zinc-500">Safe Test performs read-only endpoint and data-contract checks; it does not run paid AI requests or change records. Live Agent Test asks for confirmation, may consume provider credits and creates task-history records. Agents with side-effect-capable tools are skipped.</p>
+      <p className="mt-3 text-xs text-zinc-500">Safe Test performs read-only endpoint and data-contract checks; it does not run paid AI requests or change records. Live Agent Test asks for confirmation, may consume AI or connected-integration credits and creates task-history records. Agents with side-effect-capable tools are skipped.</p>
       {results.length > 0 && (
         <div className="mt-5">
           <div className="flex flex-wrap justify-between gap-2 border-b border-white/10 pb-3">
