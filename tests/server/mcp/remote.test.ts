@@ -5,7 +5,7 @@ import {
   normalizeRemoteMcpEndpoint,
   sanitizeRemoteTool,
   validateRemoteToolArguments,
-} from "../../../src/server/mcp/remote";
+} from "../../../src/server/mcp/remote-contract";
 
 test("accepts HTTPS public host endpoints on the default port", () => {
   assert.equal(normalizeRemoteMcpEndpoint("https://mcp.example.com/v1").toString(), "https://mcp.example.com/v1");
