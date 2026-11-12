@@ -95,6 +95,70 @@ export default function AgentLabPage() {
     } finally { setBusy(false); }
   }
 
+  async function prepareFreeTestAgent() {
+    setBusy(true); setError(""); setMessage("");
+    const requiredTools = ["text.word_count", "text.extract_keywords", "text.text_stats"];
+    try {
+      const existing = agents.find((agent) => agent.enabled && agent.provider_preference === "mock" && requiredTools.every((tool) => agent.allowed_tools?.includes(tool)));
+      if (existing) {
+        setAgentId(existing.id);
+        setMessage("Free Test Agent selected. All deterministic text tools are assigned.");
+        return;
+      }
+      const response = await api("/api/v1/agents", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Agent Lab Free Test Agent",
+          description: "Owner-only, zero-inference-cost fixture for deterministic Agent Lab tests.",
+          role: "Deterministic test runner",
+          instructions: "For test prompts, call only the explicitly requested registered deterministic text tool. Do not use external providers or integrations. Return tool output faithfully.",
+          providerPreference: "mock",
+          modelPreference: null,
+          allowedTools: requiredTools,
+          maxSteps: 4,
+          maxToolCalls: 3,
+          enabled: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.agent?.id) throw new Error(data.error ?? "Free Test Agent could not be prepared.");
+      await refresh();
+      setAgentId(data.agent.id);
+      setMessage("Free Test Agent created and selected. Deterministic tests use Mock mode and no paid model inference.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Test Agent setup failed.");
+    } finally { setBusy(false); }
+  }
+
+  async function runToolRegistryCheck(toolId: string) {
+    setActiveTest("registry:" + toolId); setError(""); setMessage("");
+    try {
+      const response = await api("/api/v1/tools");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Tool registry request failed.");
+      const tool = (data.tools ?? []).find((item: Record<string, unknown>) => item.id === toolId);
+      const schema = tool?.inputSchema as Record<string, unknown> | undefined;
+      const annotations = tool?.annotations as Record<string, unknown> | undefined;
+      const passed = Boolean(tool && typeof tool.description === "string" && tool.description.length > 0 &&
+        typeof tool.permission === "string" && tool.permission.length > 0 && typeof tool.sideEffect === "boolean" &&
+        schema?.type === "object" && schema?.properties && typeof schema.properties === "object" &&
+        Array.isArray(schema.required) && schema.additionalProperties === false &&
+        annotations && typeof annotations.readOnlyHint === "boolean" && typeof annotations.destructiveHint === "boolean");
+      const result: SuiteResult = {
+        name: "Registry contract · " + toolId,
+        status: passed ? "passed" : "failed",
+        detail: passed ? "Live owner-authenticated registry response includes schema, permission, side-effect flag and safety annotations. This verifies metadata, not tool execution." : "Registry contract is missing or malformed (HTTP " + response.status + ").",
+      };
+      setSuiteResults((current) => [...current.filter((item) => item.name !== result.name), result]);
+      setMessage(result.name + ": " + result.status.toUpperCase() + " — " + result.detail);
+      if (!passed) setError(result.detail);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "Registry contract check failed.";
+      setSuiteResults((current) => [...current.filter((item) => item.name !== "Registry contract · " + toolId), { name: "Registry contract · " + toolId, status: "failed", detail }]);
+      setError(detail);
+    } finally { setActiveTest(null); }
+  }
+
   async function runTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setError(""); setMessage(""); setDetail(null);
@@ -208,6 +272,40 @@ export default function AgentLabPage() {
           }
         }
       } else if (checkId === "permission_boundary") {
+        const probeName = "Agent Lab Permission Probe " + crypto.randomUUID().slice(0, 8);
+        let probeId: string | null = null;
+        try {
+          const createProbe = await api("/api/v1/agents", {
+            method: "POST",
+            body: JSON.stringify({
+              name: probeName, description: "Temporary least-privilege test fixture.", role: "Permission boundary probe",
+              instructions: "Only use tools explicitly assigned to this Agent. Never bypass the allowlist.",
+              providerPreference: "mock", modelPreference: null, allowedTools: ["text.word_count"],
+              maxSteps: 2, maxToolCalls: 1, enabled: true,
+            }),
+          });
+          const probeData = await createProbe.json();
+          if (!createProbe.ok || typeof probeData.agent?.id !== "string") throw new Error(probeData.error ?? "Could not create isolated permission test Agent.");
+          probeId = probeData.agent.id;
+          const denied = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: "Extract keywords from: renewable energy solar power solar panels wind power", agentId: probeId }),
+          });
+          const deniedData = await denied.json();
+          const passed = !denied.ok && deniedData.status === "failed";
+          result = {
+            name: "Tool permission boundary",
+            status: passed ? "passed" : "failed",
+            detail: passed ? "A temporary Agent with only text.word_count attempted keyword extraction; the live Agent pipeline rejected the unassigned tool." : "Least-privilege denial was not observed. HTTP " + denied.status + "; " + (deniedData.error ?? "Unexpected Agent task response."),
+          };
+        } finally {
+          if (probeId) {
+            const cleanup = await api("/api/v1/agents/" + probeId, { method: "DELETE" });
+            if (!cleanup.ok) throw new Error("Permission check fixture cleanup failed (HTTP " + cleanup.status + "). Remove temporary Agent " + probeName + " in Agent Manager.");
+          }
+        }
+
         const denied = deterministicChecks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
         if (!denied) {
           result = { name: "Tool permission boundary", status: "skipped", detail: "All tested local tools are assigned. Remove one tool from this Agent to verify denial." };
@@ -347,7 +445,13 @@ export default function AgentLabPage() {
             </form>
             <div className="border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-sm font-semibold text-white">Test Center · Individual tests</p><p className="mt-1 text-xs text-zinc-500">Run any check independently or run the full set. Each button executes a real Agent task through the backend; Mock provider is required to keep tests no-cost.</p></div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Test Center · Individual tests</p>
+                  <p className="mt-1 text-xs text-zinc-500">Run checks independently. Prepare a free Mock Test Agent once; deterministic tests do not use paid model inference.</p>
+                  <button type="button" disabled={busy || suiteBusy || activeTest !== null} onClick={() => void prepareFreeTestAgent()} className="mt-3 rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">Prepare free Test Agent</button>
+                  {selectedAgent && <p className="mt-2 text-[11px] text-zinc-400">Selected: {selectedAgent.name} · {selectedAgent.provider_preference}</p>}
+                  {!selectedAgent && <p className="mt-2 text-[11px] text-amber-300">No Agent selected. Prepare the free Test Agent to enable deterministic tests.</p>}
+                </div>
                 <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running all tests…" : "Run all tests"}</button>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -370,6 +474,23 @@ export default function AgentLabPage() {
                 <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
                   <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Cancellation safety</p><p className="mt-1 text-[10px] text-zinc-500">Completed tasks must remain terminal</p>{suiteResults.find((item) => item.name === "Cancellation safety") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Cancellation safety")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Cancellation safety")?.detail}</p>}</div>
                   <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !deterministicChecks.some((check) => selectedAgent.allowed_tools?.includes(check.tool))} onClick={() => void runDeterministicCheck("cancellation_guard")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "cancellation_guard" ? "Testing…" : "Test"}</button>
+                </div>
+              </div>
+              <div className="mt-5 border-t border-border pt-4">
+                <h3 className="text-sm font-semibold text-white">Registered feature contracts · {tools.length} tools</h3>
+                <p className="mt-1 text-xs text-zinc-500">Every registered tool has its own live registry-contract check. PASS verifies exposed schema and safety metadata only—not successful execution of the integration.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {tools.map((tool) => {
+                    const result = suiteResults.find((item) => item.name === "Registry contract · " + tool.id);
+                    return <div key={tool.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-zinc-100">{tool.id}</p>
+                        <p className="mt-1 text-[10px] text-zinc-500">{tool.permission} · {tool.sideEffect ? "side effect" : "read only"}</p>
+                        {result && <p className={"mt-1 text-[10px] " + (result.status === "passed" ? "text-emerald-300" : "text-red-300")}>{result.status.toUpperCase()} · {result.detail}</p>}
+                      </div>
+                      <button type="button" disabled={activeTest !== null || suiteBusy || busy} onClick={() => void runToolRegistryCheck(tool.id)} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "registry:" + tool.id ? "Testing…" : "Test"}</button>
+                    </div>;
+                  })}
                 </div>
               </div>
               {suiteResults.length > 0 && <div className="mt-3 rounded-lg border border-border/70 p-3"><p className="text-xs font-semibold text-zinc-200">Latest test report</p><ol className="mt-2 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex items-start justify-between gap-3 text-xs"><span className="text-zinc-300">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"shrink-0 rounded-full px-2 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status.toUpperCase()}</span></li>)}</ol></div>}
