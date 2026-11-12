@@ -48,3 +48,27 @@ test("channel Test Center endpoint rejects unknown check IDs", async () => {
     else process.env.FS_OWNER_TOKEN = previousToken;
   }
 });
+
+
+test("channel Test Center exposes Telegram security checks individually", async () => {
+  process.env.FS_OWNER_TOKEN = ownerToken;
+  try {
+    for (const testId of ["telegram_secret", "telegram_allowlist", "telegram_payload"]) {
+      const response = await POST(new Request("https://example.test/api/v1/channels/test", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-fs-owner-token": ownerToken },
+        body: JSON.stringify({ testId }),
+      }));
+      const data = await response.json() as { summary: { total: number; passed: number; failed: number }; results: Array<{ id: string; status: string }> };
+      assert.equal(response.status, 200);
+      assert.equal(data.summary.total, 1);
+      assert.equal(data.summary.passed, 1);
+      assert.equal(data.summary.failed, 0);
+      assert.equal(data.results[0]?.id, testId);
+      assert.equal(data.results[0]?.status, "passed");
+    }
+  } finally {
+    if (previousToken === undefined) delete process.env.FS_OWNER_TOKEN;
+    else process.env.FS_OWNER_TOKEN = previousToken;
+  }
+});
