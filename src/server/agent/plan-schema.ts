@@ -52,13 +52,6 @@ function validateSchemaValue(schema: unknown, value: unknown, depth = 0): boolea
       if (typeof value !== "string") return false;
       if (typeof schema.minLength === "number" && value.length < schema.minLength) return false;
       if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return false;
-      if (typeof schema.pattern === "string") {
-        try {
-          if (!new RegExp(schema.pattern, "u").test(value)) return false;
-        } catch {
-          return false;
-        }
-      }
       return true;
     }
     case "number":
