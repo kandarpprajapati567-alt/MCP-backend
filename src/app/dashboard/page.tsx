@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SystemHealthCheck } from "@/components/dashboard/SystemHealthCheck";
+import { CompleteSystemTest } from "@/components/dashboard/CompleteSystemTest";
 
 type Task = { id: string; status: string; task: string; result: string | null; error_message?: string | null; failed_stage?: string | null; created_at: string; agent_snapshot?: { name?: string } | null };
 type Agent = { id: string; name: string; enabled: boolean };
@@ -229,6 +230,7 @@ export default function DashboardPage() {
       />
 
       <SystemHealthCheck connected={connected} token={token} />
+      {connected && <CompleteSystemTest token={token} />}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
