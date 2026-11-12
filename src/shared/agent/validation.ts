@@ -17,6 +17,12 @@ function isBoundedText(value: unknown, max = MAX_TEXT_LENGTH): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= max;
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.hasOwn(value, key)) &&
+    Object.keys(value).every((key) => allowed.has(key));
+}
+
 function jsonByteLength(value: unknown): number {
   try {
     const encoded = JSON.stringify(value);
@@ -33,7 +39,10 @@ function jsonByteLength(value: unknown): number {
 export function isValidCapabilityManifestEntry(
   value: unknown,
 ): value is AgentCapabilityManifestEntry {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value) || !hasOnlyKeys(value, [
+    "id", "runtime", "manifestVersion", "description", "inputSchema",
+    "requiredPermissions", "sideEffect", "idempotent", "requiresUserApproval",
+  ])) return false;
   if (!isBoundedText(value.id, 120) || !/^[a-z0-9][a-z0-9._-]*$/.test(value.id)) return false;
   if (value.runtime !== "web" && value.runtime !== "android") return false;
   if (!Number.isInteger(value.manifestVersion) || (value.manifestVersion as number) < 1) return false;
@@ -67,7 +76,10 @@ export function isValidCapabilityManifestEntry(
 }
 
 export function isValidInvocationEnvelope(value: unknown, now = Date.now()): value is AgentInvocationEnvelope {
-  if (!isRecord(value) || value.contractVersion !== 1) return false;
+  if (!isRecord(value) || value.contractVersion !== 1 || !hasOnlyKeys(value, [
+    "contractVersion", "invocationId", "taskId", "toolCallId", "targetRuntime",
+    "targetDeviceId", "capabilityId", "arguments", "createdAt", "expiresAt", "idempotencyKey",
+  ])) return false;
   if (!isBoundedText(value.invocationId, 128) || !isBoundedText(value.toolCallId, 128) ||
       !isBoundedText(value.capabilityId, 120) || !isBoundedText(value.idempotencyKey, 128)) return false;
   if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
@@ -85,13 +97,17 @@ export function isValidInvocationEnvelope(value: unknown, now = Date.now()): val
 }
 
 export function isValidInvocationResult(value: unknown): value is AgentInvocationResult {
-  if (!isRecord(value) || value.contractVersion !== 1) return false;
+  if (!isRecord(value) || value.contractVersion !== 1 || !hasOnlyKeys(value, [
+    "contractVersion", "invocationId", "taskId", "toolCallId", "runtime",
+    "status", "completedAt", "evidence",
+  ], ["result", "errorCode"])) return false;
   if (!isBoundedText(value.invocationId, 128) || !isBoundedText(value.toolCallId, 128)) return false;
   if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
   if (value.runtime !== "web" && value.runtime !== "android") return false;
   if (!["completed", "failed", "denied", "expired", "cancelled"].includes(String(value.status))) return false;
   if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return false;
   if (value.errorCode !== undefined && !isBoundedText(value.errorCode, 100)) return false;
+  if (value.result !== undefined && jsonByteLength(value.result) > MAX_ARGUMENT_BYTES) return false;
   if (!Array.isArray(value.evidence) || value.evidence.length > MAX_EVIDENCE_ITEMS ||
       value.evidence.some((item) => !isRecord(item) ||
         !isBoundedText(item.kind, 80) || !isBoundedText(item.source, 200) ||
