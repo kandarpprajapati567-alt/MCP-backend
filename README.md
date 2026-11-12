@@ -3,9 +3,9 @@
 # Futuristic System
 ### AI Orchestration Backend · MCP Server · Device Bridge
 
-**The coordination layer behind a personal AI system.**
+**One personal AI platform. Multiple interfaces. One secure orchestration layer.**
 
-Connect AI providers, tools, memory, and trusted devices through one modular backend — while keeping device permissions and sensitive local actions under the user's control.
+Futuristic System connects an Android client, a web Command Centre, AI providers, approved tools, persistent context, and future messaging bots through one owner-controlled backend.
 
 <br/>
 
@@ -17,7 +17,7 @@ Connect AI providers, tools, memory, and trusted devices through one modular bac
 
 <br/>
 
-**Project status:** Backend foundation in active development · Android runtime integration pending
+**Project status:** Backend and Agent foundation in active development · Android end-to-end validation pending · Bot channels planned after Agent Engine hardening
 
 </div>
 
@@ -27,9 +27,9 @@ Connect AI providers, tools, memory, and trusted devices through one modular bac
 
 Futuristic System is being built as a personal AI platform: one system that can understand a task, choose the right AI model, use approved tools, remember useful context, and coordinate work across connected devices.
 
-This repository contains its **backend foundation** — not the Android application itself.
+This repository contains the **website Command Centre and central backend**. It does not contain the Android application source.
 
-The backend acts as the system's orchestration and integration layer. It provides a common place to manage AI providers, route work by workflow, expose capabilities through the Model Context Protocol (MCP), persist owner memory, and coordinate device-side jobs.
+The backend is the shared control plane: it authenticates owner requests, plans tasks, selects configured AI providers, validates and routes approved tools, stores task history and memory, exposes capabilities through MCP, and queues work for paired devices. The Android app is a separate client that can perform explicitly permitted local actions. Future bots will be additional clients of the same Agent Engine—not separate AI brains.
 
 ### The problem it solves
 
@@ -41,9 +41,19 @@ AI capabilities are often fragmented:
 
 Futuristic System brings these concerns behind one modular backend, with an explicit boundary between **cloud coordination** and **local device execution**.
 
-## Core design
+## Why Android, Website, Backend and MCP all exist
 
-> **One AI system. Multiple providers. Validated tools. Persistent context. User-controlled devices.**
+These components solve different problems and are designed to work together:
+
+| Component | Why it exists | What it does |
+| --- | --- | --- |
+| **Android app** | Phones own local capabilities and permissions. | Acts as a trusted device client for supported sensors, files or other capabilities that the app explicitly implements. It checks Android permissions and consent locally before execution. |
+| **Website Command Centre** | The owner needs one place to configure and supervise the system. | Manages AI provider keys and routing, Agent definitions, tool allowlists, connections, memory, devices, task history and tests. The website is the control interface—not the AI model itself. |
+| **MCP Backend** | Every interface needs one consistent, secured orchestration layer. | Runs APIs, Agent planning, validation, tool routing, provider selection, persistence and device-job coordination. |
+| **MCP protocol** | External MCP-compatible clients need a standard way to discover and call approved capabilities. | Exposes registered tools, resources and prompts. MCP is a protocol; it does not provide intelligence or grant extra permissions. |
+| **Future bot channels** | The same Agent Engine should be reachable from messaging platforms. | Telegram, WhatsApp Business, Discord and web chat are planned as channel adapters that will call the same backend policies and Agents. They are not implemented yet. |
+
+> **One AI system. Multiple interfaces. One backend. Explicit permissions. Evidence-backed results.**
 
 | Layer | Responsibility |
 | --- | --- |
@@ -55,26 +65,30 @@ Futuristic System brings these concerns behind one modular backend, with an expl
 | Device bridge | Register devices, discover capabilities, queue jobs, and receive results |
 | Command Centre | Configure providers, workflow policies, tools, memory, and devices |
 
-## Architecture
-
-The backend is designed to coordinate work without taking over the device.
+## System architecture
 
 ```mermaid
 flowchart TD
-    A["Futuristic System App"] -->|"Task / request"| B["Backend API"]
-    B --> C["Agent Planner"]
-    C --> D["Workflow Router"]
-    D --> E["AI Provider Adapters"]
-    D --> F["Validated Backend Tools"]
-    D --> G["Device Job Queue"]
-    E --> H["Task Synthesizer"]
-    F --> H
-    G -->|"Approved job"| I["Connected Device"]
-    I -->|"Permission check + local execution"| J["Device Tool Result"]
-    J --> H
-    K[("Supabase Postgres")] <--> B
-    H --> L["Task Result + Event History"]
+    A["Android App"] --> G["Shared Backend API / MCP"]
+    W["Web Command Centre"] --> G
+    B["Future Bots: Telegram / WhatsApp / Discord / Web Chat"] -. "planned channel adapters" .-> G
+    G --> P["Agent Planner"]
+    P --> V["Plan + Policy + Schema Validation"]
+    V --> R["Tool Router / Executor"]
+    R --> AI["Configured AI Providers"]
+    R --> T["Approved Backend / Search / GitHub / Remote MCP Tools"]
+    R --> Q["Device Job Queue"]
+    Q --> A
+    A --> X["Local permission check + execution"]
+    AI --> S["Evidence-aware Synthesizer"]
+    T --> S
+    X --> S
+    S --> DB[("Supabase: tasks / events / memory")]
+    S --> O["Result + Evidence Status"]
+    O -. "independent verifier is next hardening phase" .-> O
 ```
+
+The system separates **intelligence**, **orchestration**, **tools**, **storage**, and **local execution**. A server-side task request is not permission to access a phone. The backend can queue only registered capabilities for a paired device; the client must enforce its own permission and consent checks.
 
 ### Typical task lifecycle
 
@@ -86,16 +100,22 @@ flowchart TD
 6. **Verify and synthesize** — combine returned evidence and execution results.
 7. **Persist** — retain task events and permitted memory for continuity.
 
-The device bridge is a coordination contract: the backend does not directly access a phone's files, camera, sensors, installed apps, or Android permissions.
+The device bridge is a coordination contract, not remote unrestricted control. The backend does not directly access a phone's files, camera, microphone, sensors, installed apps, contacts, messages, or Android permissions. Only capabilities actually implemented and advertised by a paired client can be queued; local authorization and execution remain on that device.
 
 ## Capabilities
 
-### AI provider and model routing
-- Provider adapters for OpenAI-compatible APIs, OpenRouter, and a deterministic mock provider.
-- Workflow-specific provider/model policies.
-- Retryable fallback routing.
-- Encrypted provider credential storage using AES-256-GCM.
-- Usage limits and provider health/observability.
+### Where the AI intelligence comes from
+
+The model is the reasoning/generation engine; this backend supplies orchestration, tools, policies and context. **MCP itself is not an AI model.**
+
+- **Currently wired for text generation:** OpenAI and OpenRouter adapters, with workflow-specific provider/model policies and fallback routing.
+- **Mock provider:** deterministic test/development behavior only. It is not real AI inference and must never be presented as such.
+- **Web research:** the `web.search` tool uses a separately connected Tavily API credential. Tavily search is a retrieval service, not the language model.
+- **Credential handling:** provider secrets are encrypted at rest with AES-256-GCM and loaded server-side. They are not sent to the Android app or exposed in dashboard responses.
+- **Provider catalogue versus working adapter:** Gemini, Anthropic, Ollama, vLLM, NVIDIA NIM, Hugging Face TGI and ComfyUI appear as provider-adapter targets/catalog entries. They are not all connected to the current text-generation runtime; each needs its own implemented adapter, configuration and tests before it can be called supported for execution.
+- **Local GGUF:** a local model runtime is a roadmap item, not a currently available inference engine in this repository.
+
+**Zero-budget reality:** mock tests and deterministic local/backend tools can run without a paid model. Genuine cloud inference requires a configured provider key and is subject to that provider's free quota, rate limits and billing. No unlimited free AI access is promised.
 
 ### Agent execution and Agent Manager
 - Structured task planning with strict validation of plans and tool arguments.
@@ -111,6 +131,7 @@ The device bridge is a coordination contract: the backend does not directly acce
 - Streamable HTTP JSON-RPC endpoint at `/api/mcp`.
 - Tools, resources, and prompts discovery and invocation.
 - Stateless MCP transport.
+- Owner-authenticated access to the registered tool surface; MCP does not bypass the backend's allowlists, authentication or device permission boundary.
 
 ### Persistent memory
 - Owner-scoped memory storage and search.
@@ -177,7 +198,7 @@ Owner APIs require the owner master token. Device pairing-claim and device-work 
 
 Supported protocol methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 
-Current registered MCP tools include text processing, persistent memory, device coordination, Agent Manager, model-provider discovery, and four read-only GitHub tools: `github.list_branches`, `github.list_commits`, `github.list_files`, and `github.read_file`. Owner-managed remote MCP connections support encrypted bearer credentials, dynamic discovery of explicitly read-only tools, and a dashboard **Test connection** action that repeats the handshake and refreshes the tool manifest. The Agent Lab includes **Run Agent test** and **Run safe test suite** controls. Remote tools enter the Agent planner and MCP tool catalog after schema sanitization and per-Agent allowlisting. See `docs/REMOTE-MCP.md` for endpoint restrictions and the remote-server trust boundary.
+Current registered capabilities include bounded text processing, owner memory, device registry/dispatch, Agent task submission/status, provider discovery, read-only GitHub repository inspection, and Tavily-backed web search when configured. Owner-managed remote MCP connections support encrypted bearer credentials, connection testing, sanitized discovery and per-Agent allowlisting. Only the remote tools that pass the current read-only contract are exposed; remote server annotations are not cryptographic proof of safety. The Agent Lab includes **Run Agent test** and **Run safe test suite** controls. See `docs/REMOTE-MCP.md` and `docs/CONNECTIONS-HUB.md` for exact restrictions.
 
 ## Deployment
 
@@ -237,37 +258,73 @@ npm run build
 
 GitHub Actions runs typecheck, tests, and a production build.
 
+## How far can the backend reach?
+
+The backend's reach is limited to configured integrations and capabilities explicitly registered with it. It is not a universal remote-control service.
+
+| Reach | Current boundary |
+| --- | --- |
+| Supabase | Owner-scoped application data, Agent/task/event records, provider metadata and memory through server-side credentials. Supabase stores data; it does not generate AI answers. |
+| AI providers | OpenAI or OpenRouter only when the owner has configured a valid provider credential and model policy. Provider quotas and network availability apply. |
+| Public web research | Tavily-backed `web.search` only when a Tavily key is connected; results are returned as bounded source references/excerpts. |
+| GitHub | Read-only inspection of the fixed Futuristic System MCP Backend repository when the server-side read token is configured. It is not arbitrary GitHub write access. |
+| Remote MCP | Only owner-registered HTTPS endpoints that pass connection restrictions; current discovery intentionally exposes read-only annotated tools after schema sanitization. |
+| Android / Windows device | Only a paired, recently online device's advertised capabilities. Jobs are queued by the backend and must be permission-checked and executed by the client. The actual client implementation determines what is possible. |
+| External clients | MCP clients with valid owner authorization can discover/call only the backend's registered MCP tools. The owner token must remain server-side. |
+
+The backend **cannot automatically** read arbitrary phone files, camera/microphone streams, contacts, SMS, notifications, installed-app data, or control Android settings. It cannot bypass Android permissions, root the phone, execute arbitrary APKs, or access unregistered devices. A future feature must be implemented in the client, exposed as a bounded tool, permission-gated locally and tested end to end before it is described as available.
+
+This is currently a personal owner-mode foundation, not a public multi-user SaaS or unrestricted open bot platform.
+
 ## Android integration status
 
-The backend includes the device registration and job-bridge contracts, but the Android app has **not yet been connected and runtime-tested** against this service.
+The backend-side pairing, device-scoped authentication, capability manifest and job queue/result contracts exist. That proves the **server contract** exists; it does not by itself prove the Android client can complete every task. Production readiness requires a real app-side round trip: pair, securely store the device token, check in, claim a job, validate locally, request/verify Android permission, execute, return a bounded result, reconnect and revoke. See [Android Device Bridge](docs/android-device-bridge.md).
 
-Before production app integration, the next required pieces are:
-1. Android API client and secure token storage (Android Keystore).
-2. QR pairing UI and authenticated device registration.
-3. Background job polling/claiming with reconnect and retry handling.
-4. Local permission checks, execution, and bounded result callbacks.
-5. End-to-end tests using the actual Android app.
+## Roadmap and implementation order
 
-See [Android Device Bridge](docs/android-device-bridge.md) for the current payloads and protocol contract.
+The order is deliberate: **finish a trustworthy Agent Engine first; then connect more interfaces to that same engine.** Bots must not be built on top of an unreliable execution core.
 
-## Roadmap
+### Current foundation
+- [x] Next.js web Command Centre and owner-authenticated backend APIs
+- [x] MCP Streamable HTTP endpoint and registered tool catalog
+- [x] OpenAI / OpenRouter text-generation adapters and mock testing provider
+- [x] Encrypted provider credential storage and workflow routing
+- [x] Agent planning/validation foundation and Agent Manager definitions
+- [x] Supabase-backed owner memory, task records and event history
+- [x] Device pairing, scoped device credentials and backend job-bridge contracts
+- [x] GitHub read-only tools, Tavily web search connector and restricted remote MCP connections
+- [x] Agent Lab test controls
 
-- [x] MCP Streamable HTTP foundation
-- [x] Workflow-based AI provider routing
-- [x] Encrypted provider-key storage
-- [x] Agent task planning and validation foundation
-- [x] Persistent Agent Manager definitions and dashboard
-- [x] Persistent owner memory
-- [x] Device registration and job-bridge contracts
-- [x] Secure device pairing and revocable device-scoped credentials
-- [ ] Android app integration and runtime validation
-- [ ] Web search and research workflows
-- [ ] YouTube/transcript research integration
-- [ ] Local GGUF model runtime
-- [ ] Handwritten-notes generation pipeline
-- [ ] Public multi-user authentication and release
+### Phase 1 — Complete and harden the Agent Engine (current priority)
+- [ ] Independent claim verifier and contradiction/confidence reporting
+- [ ] Evidence provenance, source freshness and cross-source checks beyond the current synthesis guard
+- [ ] Durable worker lifecycle, cancellation, idempotency and recovery for long-running tasks
+- [ ] Central risk/permission policy enforced immediately before side effects
+- [ ] Certification registry, versioned suites and evidence-backed trust-level display
 
-Roadmap items describe intended work, not completed features.
+### Phase 2 — Android device integration
+- [ ] End-to-end Android pairing and authenticated check-in validation
+- [ ] Secure device-token storage, job polling/reconnect and local permission UI
+- [ ] Device tool execution/result callbacks with failure and revocation tests
+
+### Phase 3 — Universal Bot / Channel Gateway (planned next interface family)
+- [ ] Shared channel adapter contract, identity mapping and per-channel session isolation
+- [ ] Telegram bot adapter and webhook/secret verification
+- [ ] Discord bot adapter and interaction signature verification
+- [ ] WhatsApp Business Platform / Cloud API adapter, template and opt-in compliance
+- [ ] Website chat interface using the same Agent task API
+- [ ] Android assistant/chat interface using the same backend Agent Engine
+- [ ] Per-channel tool allowlists, user consent, rate limits, abuse controls and audit history
+
+**Bot status:** Telegram, WhatsApp, Discord and website chat bots are roadmap items. No live bot integration is claimed in this repository today. Messaging providers may require their own accounts, approvals, credentials and usage fees; a ₹0 budget does not guarantee free production messaging.
+
+### Phase 4 — Research and local intelligence
+- [ ] YouTube metadata/transcript research where legally and technically accessible
+- [ ] Local GGUF model runtime and resource-aware routing
+- [ ] Source-grounded study/research workflows and handwritten-notes generation pipeline
+- [ ] Public multi-user authentication and release hardening
+
+Roadmap checkboxes represent repository evidence, not aspirations. A feature is marked complete only after its implementation and relevant tests are verified.
 
 ## Repository structure
 
