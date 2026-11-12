@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
-type CheckId = "valid_envelope" | "reject_unknown_fields" | "event_deduplication" | "session_isolation" | "timestamp_validation";
+type CheckId = "valid_envelope" | "reject_unknown_fields" | "event_deduplication" | "session_isolation" | "timestamp_validation" | "telegram_secret" | "telegram_allowlist" | "telegram_payload";
 type CheckResult = { id: CheckId; name: string; status: "passed" | "failed"; detail: string };
 type CheckResponse = { summary?: { total: number; passed: number; failed: number; status: string }; results?: CheckResult[]; error?: string; note?: string };
 
@@ -13,6 +13,9 @@ const checks: Array<{ id: CheckId; name: string; description: string }> = [
   { id: "event_deduplication", name: "Event replay key", description: "Generate a stable channel-scoped key for duplicate provider events." },
   { id: "session_isolation", name: "Conversation isolation", description: "Keep owner, channel, sender and conversation scopes separate." },
   { id: "timestamp_validation", name: "Strict timestamp validation", description: "Reject impossible calendar timestamps." },
+  { id: "telegram_secret", name: "Telegram webhook secret", description: "Verify the webhook secret using a constant-time comparison; fail closed if missing." },
+  { id: "telegram_allowlist", name: "Telegram sender allowlist", description: "Accept only an exact numeric Telegram user ID explicitly allowlisted by the owner." },
+  { id: "telegram_payload", name: "Telegram private text payload", description: "Accept private human text only; reject groups, bots, attachments and unknown fields." },
 ];
 
 const channels = [
@@ -54,9 +57,15 @@ export default function BotChannelsPage() {
       }
       if (!response.ok && !data.results) throw new Error(data.error ?? `Test request failed (HTTP ${response.status}).`);
       setConnected(true);
-      if (testId === "all") setResults(data.results ?? []);
-      else setResults((current) => [...current.filter((item) => item.id !== testId), ...(data.results ?? [])]);
-      setSummary(data.summary);
+      const nextResults = testId === "all"
+        ? (data.results ?? [])
+        : [...results.filter((item) => item.id !== testId), ...(data.results ?? [])];
+      setResults(nextResults);
+      const passed = nextResults.filter((item) => item.status === "passed").length;
+      const failed = nextResults.filter((item) => item.status === "failed").length;
+      setSummary(testId === "all"
+        ? data.summary
+        : { total: nextResults.length, passed, failed, status: failed === 0 ? "passed" : "failed" });
       setNote(data.note ?? "");
       if (data.summary?.failed) setError(`${data.summary.failed} check(s) failed. Inspect the report below.`);
     } catch (cause) {
@@ -68,7 +77,7 @@ export default function BotChannelsPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Bot & Channel Gateway" description="One shared Agent Engine, multiple secure interfaces. This workspace tests the versioned channel contract; provider connections remain disabled until webhook, identity and end-to-end gates are implemented." />
+      <PageHeader title="Bot & Channel Gateway" description="One shared Agent Engine, multiple secure interfaces. Run contract and Telegram inbound security checks. Live provider delivery remains disabled until credentials, persistent replay protection and end-to-end task routing are configured." />
 
       <section className="panel mb-6 rounded-2xl border border-white/[0.08] bg-slate-950/70 p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

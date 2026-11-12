@@ -13,8 +13,9 @@ The first shared contract slice is now implemented in `src/server/channels/messa
 - Stable SHA-256 session scope scoped to owner + channel + external sender + conversation.
 - Contract regression tests are part of `npm test`.
 - Owner-authenticated `POST /api/v1/channels/test` runs deterministic checks, and **Dashboard → Bot Gateway** exposes individual Test buttons plus Run All Tests.
+- Telegram inbound primitives now verify the configured webhook secret in constant time, enforce an explicit numeric sender allowlist, and accept only direct private human text updates. Each boundary has its own Test Center button and regression tests.
 
-This is a **shared contract foundation only**. It does not yet verify provider webhook signatures, resolve/link identities, persist deduplication records, submit Agent tasks or deliver replies. The dashboard is a contract Test Center and status view, not a live bot connection manager yet. Those remain explicit implementation gates; no channel should be shown as connected until its full end-to-end criteria pass.
+This is a **shared contract foundation only**. Telegram secret and sender validation primitives exist, but a live webhook route, persistent replay storage, owner identity-link flow, Agent task submission and outbound replies are not yet implemented. The dashboard is a contract Test Center and status view, not a live bot connection manager yet. Those remain explicit implementation gates; no channel should be shown as connected until its full end-to-end criteria pass.
 
 ## 1. Product decision
 
