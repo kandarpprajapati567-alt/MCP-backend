@@ -24,6 +24,8 @@ test("verifies Telegram webhook secret only when configured and equal", () => {
   assert.equal(verifyTelegramWebhookSecret(secret, undefined), false);
   assert.equal(verifyTelegramWebhookSecret("short", "short"), false);
   assert.equal(verifyTelegramWebhookSecret(null, secret), false);
+  // Equal UTF-16 string lengths can still have different UTF-8 byte lengths.
+  assert.equal(verifyTelegramWebhookSecret("é".repeat(32), secret), false);
 });
 
 test("Telegram allowlist requires an exact numeric sender ID", () => {
