@@ -125,7 +125,7 @@ export default function AgentLabPage() {
       { name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
         const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
         const stats = value as { characters?: number; words?: number; sentences?: number };
-        return stats?.characters === source.length && stats.words === source.trim().split(/\\s+/u).length && stats.sentences === 2;
+        return stats?.characters === source.length && stats.words === source.trim().split(/\s+/u).length && stats.sentences === 2;
       } },
     ];
     try {
