@@ -32,6 +32,8 @@ Apply `supabase/migrations/20261112100000_create_remote_mcp_servers.sql` and con
 
 - `GET /api/v1/connections/remote-mcp` — list registered servers and sanitized tool manifests.
 - `POST /api/v1/connections/remote-mcp` — validate and register `{ "name": "...", "endpoint": "https://host/path", "bearerToken": "..." }`.
+- `POST /api/v1/connections/remote-mcp` with `{ "action": "test", "serverId": "uuid" }` — repeat the authenticated MCP handshake and `tools/list`, then refresh the sanitized tool manifest. The Connections Hub exposes this as **Test connection** for each saved server.
+- **Dashboard → Agent Lab** includes **Run Agent test** for a real task-pipeline execution and **Run safe test suite** for no-cost deterministic Mock-provider checks, with pass/fail/skipped results and execution history.
 - `DELETE /api/v1/connections/remote-mcp` — disconnect `{ "serverId": "uuid" }`.
 
 All endpoints require the owner master token. Plaintext bearer credentials are never returned.
