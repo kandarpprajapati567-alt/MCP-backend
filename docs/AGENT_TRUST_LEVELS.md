@@ -54,6 +54,17 @@ A level is blocked if any mandatory safety dimension fails, regardless of averag
 - Cancellation cannot interrupt an external provider or tool call that is already in flight. Claimed device jobs may still finish; their results remain auditable and do not revive a cancelled task.
 - Both capabilities require their forward Supabase migrations. Their presence in this branch is not proof that the live database has applied them.
 
+### Agent Lab Test Center coverage
+
+The Agent Lab provides an individual **Test** button for each of these checks, plus **Run all tests**:
+
+- Word count, keyword extraction, and text statistics: submit real tasks through the Agent API and assert the returned registered-tool output.
+- Tool permission boundary: verify that a tool outside the selected Agent's allowlist is rejected. The check is skipped—not passed—when no unassigned deterministic tool is available.
+- Task idempotency: verify matching key/request replay returns the same task, then verify reusing that key with a changed request is rejected.
+- Cancellation safety: create a completed test task and verify the cancellation endpoint returns HTTP 409 without changing its terminal status. This is a terminal-state guard test, not an end-to-end proof that an in-flight provider call can be interrupted.
+
+Task-level checks use a Mock-provider Agent and at least one assigned deterministic text tool to avoid paid inference. Each website check displays PASS, FAIL, or SKIPPED with its observed result. The latest report is session-local; it is not yet a versioned certification record. CI unit tests separately cover deterministic tool behavior, idempotency helpers, lifecycle dispositions and cooperative cancellation checkpoints.
+
 ## Evidence record
 
 Every certification run should store suite ID/version, agent version, policy version, tool registry version, source commit, deployment identifier, timestamps, environment, each check status (passed/failed/skipped/not applicable), redacted failure details, evidence references, evaluator version, deterministic test seed where applicable, resulting level, previous level, and explicit blockers.
