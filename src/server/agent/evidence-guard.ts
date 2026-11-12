@@ -14,6 +14,37 @@ function normalizeUrl(value: string): string {
  * present in the raw tool outputs. This does not prove that a source is true;
  * it only prevents the model from introducing a new URL as if it were evidence.
  */
+function executionFailureStatus(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (record.ok === false) return "failed";
+  if (typeof record.status === "string" &&
+      ["failed", "cancelled", "expired", "error"].includes(record.status.toLowerCase())) {
+    return record.status.toLowerCase();
+  }
+  return null;
+}
+
+function executionOutcomeNotice(toolResults: SynthesisToolResult[]): string | null {
+  const failures = toolResults.flatMap((item) => {
+    const status = executionFailureStatus(item.result);
+    return status ? [{ toolId: item.toolId, status }] : [];
+  });
+  if (!failures.length) return null;
+
+  const label = failures.length === toolResults.length ? "FAILED" : "PARTIAL";
+  const lines = failures.map(({ toolId, status }) =>
+    "- " + toolId.slice(0, 100) + ": " + status,
+  );
+  return [
+    "EXECUTION STATUS: " + label + " — " + failures.length + " of " + toolResults.length + " tool operation(s) did not succeed.",
+    "Do not describe failed operations as completed or imply that their intended effects occurred.",
+    "Failed operations:",
+    ...lines,
+    "",
+  ].join("\n");
+}
+
 export function guardSynthesisAnswer(
   answer: string,
   toolResults: SynthesisToolResult[],
