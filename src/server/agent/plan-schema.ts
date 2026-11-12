@@ -1,21 +1,6 @@
-export interface AgentPlanStep {
-  id: string;
-  objective: string;
-  expectedOutcome: string;
-}
+import type { AgentPlan } from "@/shared/agent/contracts";
 
-export interface AgentToolCall {
-  id: string;
-  toolId: string;
-  arguments: Record<string, unknown>;
-}
-
-export interface AgentPlan {
-  version: 1;
-  goal: string;
-  steps: AgentPlanStep[];
-  toolCalls: AgentToolCall[];
-}
+export type { AgentPlan, AgentPlanStep, AgentToolCall } from "@/shared/agent/contracts";
 
 export type AgentAvailableTool = {
   id: string;
