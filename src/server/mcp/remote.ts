@@ -20,8 +20,15 @@ function isRecord(value: unknown): value is JsonRecord {
 
 async function resolvePublicAddress(hostname: string): Promise<string> {
   let addresses: string[];
-  try { addresses = await resolve4(hostname); }
-  catch { throw new Error("Remote MCP hostname could not be resolved to a public IPv4 address."); }
+  try {
+    addresses = await new Promise<string[]>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Remote MCP DNS resolution timed out.")), 5_000);
+      resolve4(hostname).then(
+        (resolved) => { clearTimeout(timer); resolve(resolved); },
+        () => { clearTimeout(timer); reject(new Error("DNS resolution failed.")); },
+      );
+    });
+  } catch { throw new Error("Remote MCP hostname could not be resolved to a public IPv4 address within 5 seconds."); }
   if (!addresses.length || addresses.length > 16 || addresses.some((address) => !isPublicIpv4Address(address))) {
     throw new Error("Remote MCP hostname resolves to a blocked or non-public address.");
   }
