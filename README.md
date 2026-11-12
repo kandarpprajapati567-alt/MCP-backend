@@ -125,6 +125,9 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
 - Allow-listed backend tools, task status, event history, and result synthesis.
 - Failure diagnostics in task history: failed execution stage (`planning`, `policy_validation`, `tool_execution`, `synthesis`, or `finalization`) plus a sanitized, user-safe error message. Unexpected internal errors remain generic; credentials and arbitrary exception details are not exposed.
+- Agent task submission accepts an optional `Idempotency-Key` header; repeated keys return the original task only when the normalized task and selected Agent match. Reusing a key for different work is rejected.
+- Owner-authenticated task cancellation is available at `POST /api/v1/agent/tasks/:taskId/cancel`. Queued/device-waiting work can be cancelled immediately; active work observes cancellation at safe checkpoints between tools and before final completion. An already-running external call cannot be forcibly interrupted.
+- These lifecycle changes are in PR #30 and require the new Supabase migrations before deployment. They do not yet provide a durable background worker, automatic task retries, or crash-resume of the full Agent plan.
 - Evidence-aware synthesis guard and nested tool-schema hardening are under [PR #30](https://github.com/kandarpprajapati567-alt/MCP-backend/pull/30). The PR is open and not merged; do not treat these changes as deployed production behavior.
 - Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
 
