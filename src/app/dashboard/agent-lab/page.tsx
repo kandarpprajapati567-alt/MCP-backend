@@ -47,6 +47,7 @@ export default function AgentLabPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [suiteBusy, setSuiteBusy] = useState(false);
+  const [activeTest, setActiveTest] = useState<string | null>(null);
   const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
 
   async function api(path: string, init: RequestInit = {}) {
@@ -118,53 +119,81 @@ export default function AgentLabPage() {
     } finally { setBusy(false); }
   }
 
+  const deterministicChecks = [
+    { id: "word_count", name: "Word count", tool: "text.word_count", prompt: "Count words in: alpha beta gamma delta", verify: (value: unknown) => (value as { wordCount?: number })?.wordCount === 4 },
+    { id: "keyword_extraction", name: "Keyword extraction", tool: "text.extract_keywords", prompt: "Extract keywords from: renewable energy solar power solar panels wind power", verify: (value: unknown) => (value as { keywords?: Array<{ keyword: string; count: number }> })?.keywords?.some((item) => item.keyword === "solar" && item.count === 2) === true },
+    { id: "text_statistics", name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
+      const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
+      const stats = value as { characters?: number; words?: number; sentences?: number };
+      return stats?.characters === source.length && stats.words === source.trim().split(/\\s+/u).length && stats.sentences === 2;
+    } },
+  ];
+
+  async function runDeterministicCheck(checkId: string) {
+    if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
+      setError("Select a Mock-provider Agent before running no-cost deterministic tests.");
+      return;
+    }
+    setActiveTest(checkId); setError(""); setMessage("");
+    setSuiteResults((current) => [...current.filter((item) => item.name !== (deterministicChecks.find((check) => check.id === checkId)?.name ?? "Tool permission boundary"))]);
+    try {
+      let result: SuiteResult;
+      if (checkId === "permission_boundary") {
+        const denied = deterministicChecks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
+        if (!denied) {
+          result = { name: "Tool permission boundary", status: "skipped", detail: "All tested local tools are assigned. Remove one tool from this Agent to verify denial." };
+        } else {
+          const response = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }),
+          });
+          const data = await response.json();
+          const passed = !response.ok && data.status === "failed";
+          result = { name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected by the Agent pipeline." : data.error ?? "An unassigned tool request was not rejected as expected." };
+        }
+      } else {
+        const check = deterministicChecks.find((item) => item.id === checkId);
+        if (!check) throw new Error("Unknown deterministic test.");
+        if (!selectedAgent.allowed_tools?.includes(check.tool)) {
+          result = { name: check.name, status: "skipped", detail: "This tool is not assigned to the selected Agent." };
+        } else {
+          const response = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: check.prompt, agentId: selectedAgent.id }),
+          });
+          const data = await response.json();
+          const toolResult = Array.isArray(data.toolResults) ? data.toolResults.find((item: { toolId?: string }) => item.toolId === check.tool) : undefined;
+          const passed = response.ok && data.status === "completed" && toolResult && check.verify(toolResult.result);
+          result = { name: check.name, status: passed ? "passed" : "failed", detail: passed ? "Actual Agent task completed and expected tool output was verified." : data.error ?? "Agent task or expected output verification failed." };
+        }
+      }
+      setSuiteResults((current) => [...current.filter((item) => item.name !== result.name), result]);
+      setMessage(result.name + ": " + result.status.toUpperCase() + " — " + result.detail);
+      if (result.status === "failed") setError(result.name + " failed. Inspect its report and task history.");
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The selected test could not complete.");
+    } finally { setActiveTest(null); }
+  }
+
   async function runDeterministicSuite() {
     if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
       setError("Select a Mock-provider Agent before running the no-cost deterministic suite.");
       return;
     }
     setSuiteBusy(true); setSuiteResults([]); setError(""); setMessage("");
-    const results: SuiteResult[] = [];
-    const checks = [
-      { name: "Word count", tool: "text.word_count", prompt: "Count words in: alpha beta gamma delta", verify: (value: unknown) => (value as { wordCount?: number })?.wordCount === 4 },
-      { name: "Keyword extraction", tool: "text.extract_keywords", prompt: "Extract keywords from: renewable energy solar power solar panels wind power", verify: (value: unknown) => (value as { keywords?: Array<{ keyword: string; count: number }> })?.keywords?.some((item) => item.keyword === "solar" && item.count === 2) === true },
-      { name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
-        const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
-        const stats = value as { characters?: number; words?: number; sentences?: number };
-        return stats?.characters === source.length && stats.words === source.trim().split(/\s+/u).length && stats.sentences === 2;
-      } },
-    ];
     try {
-      for (const check of checks) {
-        if (!selectedAgent.allowed_tools?.includes(check.tool)) {
-          results.push({ name: check.name, status: "skipped", detail: "Tool is not assigned to this Agent." });
-          continue;
-        }
-        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: check.prompt, agentId: selectedAgent.id }) });
-        const data = await response.json();
-        const toolResult = Array.isArray(data.toolResults) ? data.toolResults.find((item: { toolId?: string }) => item.toolId === check.tool) : undefined;
-        const passed = response.ok && data.status === "completed" && toolResult && check.verify(toolResult.result);
-        results.push({ name: check.name, status: passed ? "passed" : "failed", detail: passed ? "Expected tool output verified." : data.error ?? "Expected tool output did not match." });
-      }
-      const denied = checks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
-      if (denied) {
-        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }) });
-        const data = await response.json();
-        const passed = !response.ok && data.status === "failed";
-        results.push({ name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected." : "An unassigned tool request was not rejected as expected." });
-      } else {
-        results.push({ name: "Tool permission boundary", status: "skipped", detail: "All three local tools are assigned; remove one temporarily to test denial." });
-      }
-      setSuiteResults(results);
-      const passedCount = results.filter((item) => item.status === "passed").length;
-      const failedCount = results.filter((item) => item.status === "failed").length;
-      const summary = "Deterministic suite finished: " + passedCount + " passed, " + failedCount + " failed, " + results.filter((item) => item.status === "skipped").length + " skipped.";
-      if (failedCount > 0) setError(summary); else setMessage(summary);
+      for (const check of deterministicChecks) await runDeterministicCheck(check.id);
+      await runDeterministicCheck("permission_boundary");
+      const finalResults = [
+        ...deterministicChecks.map((check) => ({ id: check.id, name: check.name })),
+        { id: "permission_boundary", name: "Tool permission boundary" },
+      ];
+      const passed = finalResults.filter((item) => suiteResults.find((result) => result.name === item.name)?.status === "passed").length;
+      setMessage("Test run finished. Review each individual result below; skipped tests are not counted as passed.");
       await refresh();
-    } catch (cause) {
-      setSuiteResults(results);
-      setError(cause instanceof Error ? cause.message : "Deterministic suite could not complete.");
-      await refresh().catch(() => undefined);
     } finally { setSuiteBusy(false); }
   }
 
@@ -241,10 +270,24 @@ export default function AgentLabPage() {
             </form>
             <div className="border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-sm font-semibold text-white">Deterministic test suite</p><p className="mt-1 text-xs text-zinc-500">No-cost checks for local tools and allowlist enforcement. Requires a Mock-provider Agent.</p></div>
-                <button type="button" disabled={suiteBusy || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running suite…" : "Run safe test suite"}</button>
+                <div><p className="text-sm font-semibold text-white">Test Center · Individual tests</p><p className="mt-1 text-xs text-zinc-500">Run any check independently or run the full set. Each button executes a real Agent task through the backend; Mock provider is required to keep tests no-cost.</p></div>
+                <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running all tests…" : "Run all tests"}</button>
               </div>
-              {suiteResults.length > 0 && <ol className="mt-3 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 p-3"><span className="text-xs text-zinc-200">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"rounded-full px-2.5 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status}</span></li>)}</ol>}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {deterministicChecks.map((check) => {
+                  const result = suiteResults.find((item) => item.name === check.name);
+                  const assigned = selectedAgent?.allowed_tools?.includes(check.tool) ?? false;
+                  return <div key={check.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                    <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">{check.name}</p><p className="mt-1 truncate text-[10px] text-zinc-500">{check.tool}</p>{result && <p className={"mt-1 text-[10px] " + (result.status === "passed" ? "text-emerald-300" : result.status === "failed" ? "text-red-300" : "text-zinc-400")}>{result.status.toUpperCase()} · {result.detail}</p>}</div>
+                    <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !assigned} onClick={() => void runDeterministicCheck(check.id)} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === check.id ? "Testing…" : "Test"}</button>
+                  </div>;
+                })}
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Tool permission boundary</p><p className="mt-1 text-[10px] text-zinc-500">Verify an unassigned tool is rejected</p>{suiteResults.find((item) => item.name === "Tool permission boundary") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Tool permission boundary")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Tool permission boundary")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicCheck("permission_boundary")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "permission_boundary" ? "Testing…" : "Test"}</button>
+                </div>
+              </div>
+              {suiteResults.length > 0 && <div className="mt-3 rounded-lg border border-border/70 p-3"><p className="text-xs font-semibold text-zinc-200">Latest test report</p><ol className="mt-2 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex items-start justify-between gap-3 text-xs"><span className="text-zinc-300">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"shrink-0 rounded-full px-2 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status.toUpperCase()}</span></li>)}</ol></div>}
             </div>
             <div className="border-t border-border pt-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Quick test prompts · requires assigned tool</p>
