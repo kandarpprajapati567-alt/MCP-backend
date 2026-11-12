@@ -17,8 +17,11 @@ export function verifyTelegramWebhookSecret(
   supplied: string | null,
   expected: string | undefined,
 ): boolean {
-  if (!supplied || !expected || expected.length < 32 || supplied.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(supplied, "utf8"), Buffer.from(expected, "utf8"));
+  if (!supplied || !expected || expected.length < 32) return false;
+  const suppliedBytes = Buffer.from(supplied, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  if (suppliedBytes.length !== expectedBytes.length) return false;
+  return timingSafeEqual(suppliedBytes, expectedBytes);
 }
 
 /** Explicit owner-approved numeric Telegram user IDs; never accept IDs from webhook data as owner identity. */
