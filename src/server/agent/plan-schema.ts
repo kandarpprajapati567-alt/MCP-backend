@@ -44,12 +44,15 @@ const MAX_SCHEMA_DEPTH = 8;
 function validateSchemaValue(schema: unknown, value: unknown, depth = 0): boolean {
   if (!isRecord(schema) || typeof schema.type !== "string" || depth > MAX_SCHEMA_DEPTH) return false;
 
-  if (Array.isArray(schema.enum) && !schema.enum.some((candidate) =>
-    JSON.stringify(candidate) === JSON.stringify(value))) return false;
+  if (schema.enum !== undefined && (!Array.isArray(schema.enum) || !schema.enum.some((candidate) =>
+    JSON.stringify(candidate) === JSON.stringify(value)))) return false;
 
   switch (schema.type) {
     case "string": {
       if (typeof value !== "string") return false;
+      if (schema.minLength !== undefined && (typeof schema.minLength !== "number" || !Number.isInteger(schema.minLength) || schema.minLength < 0)) return false;
+      if (schema.maxLength !== undefined && (typeof schema.maxLength !== "number" || !Number.isInteger(schema.maxLength) || schema.maxLength < 0)) return false;
+      if (typeof schema.minLength === "number" && typeof schema.maxLength === "number" && schema.minLength > schema.maxLength) return false;
       if (typeof schema.minLength === "number" && value.length < schema.minLength) return false;
       if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return false;
       return true;
@@ -58,6 +61,9 @@ function validateSchemaValue(schema: unknown, value: unknown, depth = 0): boolea
     case "integer": {
       if (typeof value !== "number" || !Number.isFinite(value)) return false;
       if (schema.type === "integer" && !Number.isInteger(value)) return false;
+      if (schema.minimum !== undefined && (typeof schema.minimum !== "number" || !Number.isFinite(schema.minimum))) return false;
+      if (schema.maximum !== undefined && (typeof schema.maximum !== "number" || !Number.isFinite(schema.maximum))) return false;
+      if (typeof schema.minimum === "number" && typeof schema.maximum === "number" && schema.minimum > schema.maximum) return false;
       if (typeof schema.minimum === "number" && value < schema.minimum) return false;
       if (typeof schema.maximum === "number" && value > schema.maximum) return false;
       return true;
@@ -71,16 +77,27 @@ function validateSchemaValue(schema: unknown, value: unknown, depth = 0): boolea
       if (schema.additionalProperties === false && keys.some((key) => !(key in properties))) return false;
       if (typeof schema.minProperties === "number" && keys.length < schema.minProperties) return false;
       if (typeof schema.maxProperties === "number" && keys.length > schema.maxProperties) return false;
+      if (schema.required !== undefined && !Array.isArray(schema.required)) return false;
       const required = Array.isArray(schema.required) ? schema.required : [];
       if (required.some((key) => typeof key !== "string" || !(key in value))) return false;
+      if (schema.additionalProperties !== undefined && typeof schema.additionalProperties !== "boolean" &&
+          !isRecord(schema.additionalProperties)) return false;
       return Object.entries(value).every(([key, child]) => {
-        const childSchema = properties[key];
-        if (childSchema === undefined) return schema.additionalProperties !== false;
-        return validateSchemaValue(childSchema, child, depth + 1);
+        if (Object.prototype.hasOwnProperty.call(properties, key)) {
+          return validateSchemaValue(properties[key], child, depth + 1);
+        }
+        if (schema.additionalProperties === false) return false;
+        if (isRecord(schema.additionalProperties)) {
+          return validateSchemaValue(schema.additionalProperties, child, depth + 1);
+        }
+        return true;
       });
     }
     case "array": {
       if (!Array.isArray(value)) return false;
+      if (schema.minItems !== undefined && (!Number.isInteger(schema.minItems) || (schema.minItems as number) < 0)) return false;
+      if (schema.maxItems !== undefined && (!Number.isInteger(schema.maxItems) || (schema.maxItems as number) < 0)) return false;
+      if (typeof schema.minItems === "number" && typeof schema.maxItems === "number" && schema.minItems > schema.maxItems) return false;
       if (typeof schema.minItems === "number" && value.length < schema.minItems) return false;
       if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return false;
       if (schema.items === undefined) return true;
