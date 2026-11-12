@@ -50,7 +50,7 @@ export function guardSynthesisAnswer(
   toolResults: SynthesisToolResult[],
 ): string {
   const allowedUrls = new Set(toolResults.flatMap((item) =>
-    extractSourceReferenceCandidates(item.result),
+    executionFailureStatus(item.result) ? [] : extractSourceReferenceCandidates(item.result),
   ));
   let removedUrls = 0;
   const safeAnswer = answer.replace(URL_PATTERN, (candidate) => {
