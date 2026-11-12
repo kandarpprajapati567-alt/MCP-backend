@@ -34,7 +34,7 @@ test("Telegram allowlist requires an exact numeric sender ID", () => {
 });
 
 test("parses only a valid private text update", () => {
-  const result = parseTelegramPrivateTextUpdate(validUpdate);
+  const result = parseTelegramPrivateTextUpdate({ ...validUpdate, message: { ...validUpdate.message, from: { ...validUpdate.message.from, first_name: "Test", username: "safe_user", language_code: "en" }, chat: { ...validUpdate.message.chat, first_name: "Test" } } });
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual(result.value, {
     updateId: 1001,
