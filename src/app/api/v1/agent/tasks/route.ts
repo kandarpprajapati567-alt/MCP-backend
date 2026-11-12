@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 import { submitAgentTask } from "@/server/agent/task-service";
+import { isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
@@ -90,15 +91,23 @@ export async function POST(request: Request) {
     return json({ error: "agentId must be a valid Agent UUID." }, 400);
   }
 
+  const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
+  if (idempotencyKey !== undefined && !isValidAgentTaskIdempotencyKey(idempotencyKey)) {
+    return json({ error: "Idempotency-Key must be 1–128 characters using letters, numbers, dot, underscore, colon or hyphen." }, 400);
+  }
+
   try {
-    const result = await submitAgentTask(input.task, input.agentId as string | undefined);
-    const status = result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
+    const result = await submitAgentTask(input.task, input.agentId as string | undefined, idempotencyKey);
+    const status = ("replayed" in result && result.replayed) ? 200 : result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
     return json(result, status);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Unable to submit task.";
     const status = message.startsWith("Task must") || message.includes("valid agent ID") ? 400
-      : message.includes("does not exist") ? 404
-        : message.includes("disabled") ? 409 : 503;
-    return json({ error: message }, status);
+      : message === "IDEMPOTENCY_KEY_REUSED" || message.includes("disabled") ? 409
+        : message.includes("does not exist") ? 404 : 503;
+    const publicMessage = message === "IDEMPOTENCY_KEY_REUSED"
+      ? "This Idempotency-Key was already used for a different task or Agent. Use a new key for different work."
+      : message;
+    return json({ error: publicMessage }, status);
   }
 }

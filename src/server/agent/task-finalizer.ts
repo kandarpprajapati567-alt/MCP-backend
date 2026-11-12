@@ -5,6 +5,7 @@ import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/r
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 
@@ -17,7 +18,7 @@ const STALE_SYNTHESIS_MS = 5 * 60 * 1000;
 export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean> {
   const admin = createAdminClient();
   const { data: task, error: taskError } = await admin.from("agent_tasks")
-    .select("id,status,task,plan,tool_results,updated_at")
+    .select("id,status,task,plan,tool_results,updated_at,cancellation_requested_at")
     .eq("owner_id", PERSONAL_OWNER_ID)
     .eq("id", taskId)
     .maybeSingle();
@@ -63,8 +64,11 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     toolId: job.tool_id,
     deviceId: job.device_id,
     status: job.status,
-    result: job.result,
-    ...(job.error_code ? { errorCode: job.error_code } : {}),
+    result: {
+      status: job.status,
+      result: job.result,
+      ...(job.error_code ? { errorCode: job.error_code } : {}),
+    },
   }));
   const toolResults = [...localResults, ...deviceResults];
 
@@ -81,6 +85,32 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
       updated_at: new Date().toISOString(),
     }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "synthesizing");
     throw new Error("Task execution event could not be persisted.");
+  }
+
+  const { data: lifecycle, error: lifecycleError } = await admin.from("agent_tasks")
+    .select("status,cancellation_requested_at")
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle();
+  if (lifecycleError) throw new Error("Task lifecycle state could not be checked.");
+  if (lifecycle?.status === "cancelled" || lifecycle?.cancellation_requested_at) {
+    const cancelledAt = new Date().toISOString();
+    const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
+      status: "cancelled",
+      completed_at: cancelledAt,
+      updated_at: cancelledAt,
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
+      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+      .select("id").maybeSingle();
+    if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
+    if (cancelledTask) {
+      const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
+        task_id: taskId,
+        owner_id: PERSONAL_OWNER_ID,
+        event_type: "task.cancelled",
+        payload: { cooperative: true, stage: "device_finalization" },
+      });
+      if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
+    }
+    return true;
   }
 
   const snapshot = isRecord(agentSnapshot) ? agentSnapshot : null;
@@ -102,7 +132,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         { role: "user", content: buildSynthesisUserContent(String(task.task ?? ""), task.plan, toolResults) },
       ],
       temperature: 0.2,
-      maxOutputTokens: 1400,
+      maxOutputTokens: 1800,
     };
     const synthesis = snapshot
       ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
@@ -111,9 +141,33 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     result = synthesis.route.providerId === "mock"
-      ? "Device execution finished. AI synthesis is unavailable; verified results are preserved below.\n" + JSON.stringify(toolResults, null, 2)
-      : synthesis.result.text;
+      ? "AI synthesis unavailable. No model-generated conclusion was produced. Raw device tool outcomes follow; they are observations and are not independently verified.\n" + JSON.stringify(toolResults, null, 2)
+      : guardSynthesisAnswer(synthesis.result.text, toolResults);
   } catch (error) {
+    const { data: latestLifecycle } = await admin.from("agent_tasks")
+      .select("status,cancellation_requested_at")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle();
+    if (latestLifecycle?.status === "cancelled" || latestLifecycle?.cancellation_requested_at) {
+      const cancelledAt = new Date().toISOString();
+      const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
+        status: "cancelled",
+        completed_at: cancelledAt,
+        updated_at: cancelledAt,
+      }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
+        .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+        .select("id").maybeSingle();
+      if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
+      if (cancelledTask) {
+        const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
+          task_id: taskId,
+          owner_id: PERSONAL_OWNER_ID,
+          event_type: "task.cancelled",
+          payload: { cooperative: true, stage: "device_finalization" },
+        });
+        if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
+      }
+      return true;
+    }
     const message = safeAgentFailureMessage(error);
     const now = new Date().toISOString();
     const { error: failureUpdateError } = await admin.from("agent_tasks").update({
@@ -133,14 +187,36 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await admin.from("agent_tasks").update({
+  const { data: completedTask, error: updateError } = await admin.from("agent_tasks").update({
     status: "completed",
     tool_results: toolResults,
     result,
     completed_at: now,
     updated_at: now,
-  }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "synthesizing");
+  }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
+    .eq("status", "synthesizing").is("cancellation_requested_at", null)
+    .select("id").maybeSingle();
   if (updateError) throw new Error("Task completion could not be saved.");
+  if (!completedTask) {
+    const cancelledAt = new Date().toISOString();
+    const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
+      status: "cancelled",
+      completed_at: cancelledAt,
+      updated_at: cancelledAt,
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
+      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+      .select("id").maybeSingle();
+    if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
+    if (!cancelledTask) return false;
+    const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
+      task_id: taskId,
+      owner_id: PERSONAL_OWNER_ID,
+      event_type: "task.cancelled",
+      payload: { cooperative: true, stage: "device_finalization" },
+    });
+    if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
+    return true;
+  }
 
   const { error: completedEventError } = await admin.from("agent_task_events").insert({
     task_id: taskId,

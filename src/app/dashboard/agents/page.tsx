@@ -40,8 +40,8 @@ const emptyDraft: Draft = {
   instructions: "",
   providerPreference: "auto",
   modelPreference: "",
-  maxSteps: 8,
-  maxToolCalls: 4,
+  maxSteps: 16,
+  maxToolCalls: 8,
   enabled: true,
   allowedTools: [],
 };
@@ -269,12 +269,12 @@ export default function AgentsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 text-xs text-zinc-400">Maximum planning steps
                   <select value={draft.maxSteps} onChange={(event) => setDraft({ ...draft, maxSteps: Number(event.target.value) })} className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white">
-                    {[1,2,3,4,5,6,7,8].map((value) => <option key={value} value={value}>{value}</option>)}
+                    {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16].map((value) => <option key={value} value={value}>{value}</option>)}
                   </select>
                 </label>
                 <label className="space-y-1 text-xs text-zinc-400">Maximum tool calls
                   <select value={draft.maxToolCalls} onChange={(event) => setDraft({ ...draft, maxToolCalls: Number(event.target.value) })} className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white">
-                    {[0,1,2,3,4].map((value) => <option key={value} value={value}>{value}</option>)}
+                    {[0,1,2,3,4,5,6,7,8].map((value) => <option key={value} value={value}>{value}</option>)}
                   </select>
                 </label>
               </div>

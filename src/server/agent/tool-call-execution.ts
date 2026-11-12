@@ -23,9 +23,11 @@ export async function executeToolCallsSequentially<TCall>(
   execute: (call: TCall) => Promise<unknown>,
   shouldCaptureFailure: (call: TCall, error: unknown) => boolean = () => true,
   onOutcome?: (call: TCall, execution: ToolCallExecution) => Promise<void>,
+  beforeEach?: (call: TCall) => Promise<void>,
 ): Promise<Array<{ call: TCall; execution: ToolCallExecution }>> {
   const outcomes: Array<{ call: TCall; execution: ToolCallExecution }> = [];
   for (const call of calls) {
+    await beforeEach?.(call);
     let execution: ToolCallExecution;
     try {
       execution = { ok: true, result: await execute(call) };

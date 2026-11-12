@@ -4,7 +4,7 @@ import {parseAgentPlan} from "../../../src/server/agent/plan-schema";
 const validPlan={version:1,goal:"Prepare a project status report.",steps:[{id:"step-1",objective:"Collect verified project status.",expectedOutcome:"A concise status summary."},{id:"step-2",objective:"Organize completed and pending work.",expectedOutcome:"A structured progress report."}],toolCalls:[]};
 test("accepts a valid versioned plan",()=>{const result=parseAgentPlan(validPlan);assert.equal(result.ok,true);if(result.ok)assert.equal(result.value.steps.length,2);});
 test("rejects unknown keys and unsupported versions",()=>{assert.equal(parseAgentPlan({...validPlan,command:"run shell"}).ok,false);assert.equal(parseAgentPlan({...validPlan,version:2}).ok,false);});
-test("rejects empty, oversized, or malformed step lists",()=>{assert.equal(parseAgentPlan({...validPlan,steps:[]}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:Array(9).fill(validPlan.steps[0])}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[null]}).ok,false);});
+test("rejects empty, oversized, or malformed step lists",()=>{assert.equal(parseAgentPlan({...validPlan,steps:[]}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:Array(17).fill(validPlan.steps[0])}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[null]}).ok,false);});
 test("rejects duplicate or invalid step IDs",()=>{const duplicate={...validPlan,steps:[validPlan.steps[0],{...validPlan.steps[1],id:"step-1"}]};assert.equal(parseAgentPlan(duplicate).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[{...validPlan.steps[0],id:"tool-call"}]}).ok,false);});
 test("rejects empty and oversized step text",()=>{assert.equal(parseAgentPlan({...validPlan,goal:""}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[{...validPlan.steps[0],objective:" "}]}).ok,false);assert.equal(parseAgentPlan({...validPlan,steps:[{...validPlan.steps[0],expectedOutcome:"x".repeat(301)}]}).ok,false);});
 test("rejects unregistered or malformed tool calls",()=>{assert.equal(parseAgentPlan({...validPlan,toolCalls:[{id:"call-1",toolId:"shell.exec",arguments:{command:"ls"}}]}).ok,false);assert.equal(parseAgentPlan({...validPlan,toolCalls:[{id:"call-1",toolId:"text.word_count",arguments:{text:"abc",extra:true}}]}).ok,false);});
@@ -46,4 +46,111 @@ test("enforces Agent-specific maximum step and tool-call counts", () => {
   };
   assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 0 }).ok, false);
   assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 1 }).ok, true);
+});
+
+
+test("validates nested objects and array items instead of accepting unchecked containers", () => {
+  const available = [{
+    id: "device.configure",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        settings: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["safe", "balanced"] },
+            retries: { type: "integer", minimum: 0, maximum: 3 },
+          },
+          required: ["mode"],
+          additionalProperties: false,
+        },
+        targets: {
+          type: "array",
+          minItems: 1,
+          maxItems: 2,
+          items: { type: "string", enum: ["sensor-1", "sensor-2"] },
+        },
+      },
+      required: ["settings", "targets"],
+      additionalProperties: false,
+    },
+  }];
+  const makePlan = (args: Record<string, unknown>) => ({
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "device.configure", arguments: args }],
+  });
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", retries: 2 },
+    targets: ["sensor-1", "sensor-2"],
+  }), available).ok, true);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "unsafe", retries: 2 },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", retries: 9 },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", unexpected: true },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe" },
+    targets: ["unknown-sensor"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe" },
+    targets: [],
+  }), available).ok, false);
+});
+
+
+test("validates schema-defined additional properties and fails closed on malformed constraints", () => {
+  const available = [{
+    id: "device.metadata",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        metadata: {
+          type: "object",
+          properties: {},
+          additionalProperties: { type: "string", maxLength: 12 },
+        },
+      },
+      required: ["metadata"],
+      additionalProperties: false,
+    },
+  }];
+  const makePlan = (metadata: unknown) => ({
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "device.metadata", arguments: { metadata } }],
+  });
+
+  assert.equal(parseAgentPlan(makePlan({ label: "sensor" }), available).ok, true);
+  assert.equal(parseAgentPlan(makePlan({ label: 42 }), available).ok, false);
+  assert.equal(parseAgentPlan(makePlan({ label: "x".repeat(13) }), available).ok, false);
+});
+
+test("accepts expanded plans up to sixteen steps and eight registered tool calls", () => {
+  const steps = Array.from({ length: 16 }, (_, index) => ({
+    id: "step-" + (index + 1),
+    objective: "Perform bounded planning stage " + (index + 1) + ".",
+    expectedOutcome: "A recorded intermediate outcome.",
+  }));
+  const toolCalls = Array.from({ length: 8 }, (_, index) => ({
+    id: "call-" + (index + 1),
+    toolId: "text.word_count",
+    arguments: { text: "alpha beta" },
+  }));
+  const expanded = parseAgentPlan({ ...validPlan, steps, toolCalls });
+  assert.equal(expanded.ok, true);
+  assert.equal(parseAgentPlan({ ...validPlan, steps: [...steps, { ...steps[0], id: "step-17" }] }).ok, false);
+  assert.equal(parseAgentPlan({ ...validPlan, toolCalls: [...toolCalls, { ...toolCalls[0], id: "call-9" }] }).ok, false);
 });

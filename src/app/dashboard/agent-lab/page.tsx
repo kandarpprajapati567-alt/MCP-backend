@@ -41,11 +41,13 @@ export default function AgentLabPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agentId, setAgentId] = useState("");
   const [taskInput, setTaskInput] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [suiteBusy, setSuiteBusy] = useState(false);
+  const [activeTest, setActiveTest] = useState<string | null>(null);
   const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
 
   async function api(path: string, init: RequestInit = {}) {
@@ -97,14 +99,18 @@ export default function AgentLabPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage(""); setDetail(null);
     try {
+      const requestKey = idempotencyKey || crypto.randomUUID();
+      setIdempotencyKey(requestKey);
       const response = await api("/api/v1/agent/tasks", {
         method: "POST",
+        headers: { "Idempotency-Key": requestKey },
         body: JSON.stringify({ task: taskInput, ...(agentId ? { agentId } : {}) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Agent task failed.");
       setMessage(data.status === "completed" ? "Task completed. Inspect the execution trace below." : data.status === "waiting_for_device" ? "Task is waiting for a connected device." : "Task submitted.");
       setTaskInput("");
+      setIdempotencyKey("");
       await refresh();
       if (data.taskId) await openTask(data.taskId);
     } catch (cause) {
@@ -113,54 +119,174 @@ export default function AgentLabPage() {
     } finally { setBusy(false); }
   }
 
+  const deterministicChecks = [
+    { id: "word_count", name: "Word count", tool: "text.word_count", prompt: "Count words in: alpha beta gamma delta", verify: (value: unknown) => (value as { wordCount?: number })?.wordCount === 4 },
+    { id: "keyword_extraction", name: "Keyword extraction", tool: "text.extract_keywords", prompt: "Extract keywords from: renewable energy solar power solar panels wind power", verify: (value: unknown) => (value as { keywords?: Array<{ keyword: string; count: number }> })?.keywords?.some((item) => item.keyword === "solar" && item.count === 2) === true },
+    { id: "text_statistics", name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
+      const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
+      const stats = value as { characters?: number; words?: number; sentences?: number };
+      return stats?.characters === source.length && stats.words === source.trim().split(/\s+/u).length && stats.sentences === 2;
+    } },
+  ];
+
+  async function runDeterministicCheck(checkId: string) {
+    if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
+      setError("Select a Mock-provider Agent before running no-cost deterministic tests.");
+      return;
+    }
+    setActiveTest(checkId); setError(""); setMessage("");
+    setSuiteResults((current) => [...current.filter((item) => item.name !== (deterministicChecks.find((check) => check.id === checkId)?.name ?? "Tool permission boundary"))]);
+    try {
+      let result: SuiteResult;
+      if (checkId === "idempotency") {
+        const assignedCheck = deterministicChecks.find((check) => selectedAgent.allowed_tools?.includes(check.tool));
+        if (!assignedCheck) {
+          result = { name: "Task idempotency", status: "skipped", detail: "Assign at least one deterministic text tool to this Agent before testing task replay." };
+        } else {
+          const key = crypto.randomUUID();
+          const body = JSON.stringify({ task: assignedCheck.prompt, agentId: selectedAgent.id });
+          const firstResponse = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": key },
+            body,
+          });
+          const firstData = await firstResponse.json();
+          if (!firstResponse.ok || typeof firstData.taskId !== "string") {
+            result = { name: "Task idempotency", status: "failed", detail: firstData.error ?? "The initial idempotent task could not be created." };
+          } else {
+            const replayResponse = await api("/api/v1/agent/tasks", {
+              method: "POST",
+              headers: { "Idempotency-Key": key },
+              body,
+            });
+            const replayData = await replayResponse.json();
+            const mismatchResponse = await api("/api/v1/agent/tasks", {
+              method: "POST",
+              headers: { "Idempotency-Key": key },
+              body: JSON.stringify({ task: assignedCheck.prompt + " mismatch", agentId: selectedAgent.id }),
+            });
+            const mismatchData = await mismatchResponse.json();
+            const passed = replayResponse.ok &&
+              replayData.replayed === true &&
+              replayData.taskId === firstData.taskId &&
+              mismatchResponse.status === 409;
+            result = {
+              name: "Task idempotency",
+              status: passed ? "passed" : "failed",
+              detail: passed
+                ? "Same key + same request replayed the original task; changed request with that key was rejected (409). Task " + firstData.taskId + "."
+                : "Replay or key-reuse protection failed. Replay status: " + replayResponse.status + "; mismatch status: " + mismatchResponse.status + "; " + (mismatchData.error ?? replayData.error ?? "Unexpected response."),
+            };
+          }
+        }
+      } else if (checkId === "cancellation_guard") {
+        const assignedCheck = deterministicChecks.find((check) => selectedAgent.allowed_tools?.includes(check.tool));
+        if (!assignedCheck) {
+          result = { name: "Cancellation safety", status: "skipped", detail: "Assign at least one deterministic text tool to this Agent before testing terminal-task protection." };
+        } else {
+          const createResponse = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: assignedCheck.prompt, agentId: selectedAgent.id }),
+          });
+          const created = await createResponse.json();
+          if (!createResponse.ok || created.status !== "completed" || typeof created.taskId !== "string") {
+            result = { name: "Cancellation safety", status: "failed", detail: created.error ?? "Could not create a completed fixture task; observed status: " + String(created.status ?? createResponse.status) + "." };
+          } else {
+            const cancelResponse = await api("/api/v1/agent/tasks/" + created.taskId + "/cancel", { method: "POST" });
+            const cancelled = await cancelResponse.json();
+            const passed = cancelResponse.status === 409 &&
+              cancelled.status === "completed" &&
+              cancelled.cancelled === false;
+            result = {
+              name: "Cancellation safety",
+              status: passed ? "passed" : "failed",
+              detail: passed
+                ? "The real cancellation endpoint refused to alter an already-completed task (HTTP 409). Task " + created.taskId + "."
+                : "Terminal-task protection failed. HTTP " + cancelResponse.status + "; observed status: " + String(cancelled.status ?? "unknown") + "; " + (cancelled.error ?? cancelled.message ?? "Unexpected response."),
+            };
+          }
+        }
+      } else if (checkId === "permission_boundary") {
+        const denied = deterministicChecks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
+        if (!denied) {
+          result = { name: "Tool permission boundary", status: "skipped", detail: "All tested local tools are assigned. Remove one tool from this Agent to verify denial." };
+        } else {
+          const response = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }),
+          });
+          const data = await response.json();
+          const passed = !response.ok && data.status === "failed";
+          result = { name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected by the Agent pipeline." : data.error ?? "An unassigned tool request was not rejected as expected." };
+        }
+      } else {
+        const check = deterministicChecks.find((item) => item.id === checkId);
+        if (!check) throw new Error("Unknown deterministic test.");
+        if (!selectedAgent.allowed_tools?.includes(check.tool)) {
+          result = { name: check.name, status: "skipped", detail: "This tool is not assigned to the selected Agent." };
+        } else {
+          const response = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: check.prompt, agentId: selectedAgent.id }),
+          });
+          const data = await response.json();
+          const toolResult = Array.isArray(data.toolResults) ? data.toolResults.find((item: { toolId?: string }) => item.toolId === check.tool) : undefined;
+          const passed = response.ok && data.status === "completed" && toolResult && check.verify(toolResult.result);
+          result = { name: check.name, status: passed ? "passed" : "failed", detail: passed ? "Actual Agent task completed and expected tool output was verified." : data.error ?? "Agent task or expected output verification failed." };
+        }
+      }
+      setSuiteResults((current) => [...current.filter((item) => item.name !== result.name), result]);
+      setMessage(result.name + ": " + result.status.toUpperCase() + " — " + result.detail);
+      if (result.status === "failed") setError(result.name + " failed. Inspect its report and task history.");
+      await refresh().catch(() => undefined);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "The selected test could not complete.";
+      const names: Record<string, string> = {
+        word_count: "Word count",
+        keyword_extraction: "Keyword extraction",
+        text_statistics: "Text statistics",
+        permission_boundary: "Tool permission boundary",
+        idempotency: "Task idempotency",
+        cancellation_guard: "Cancellation safety",
+      };
+      const name = names[checkId] ?? "Agent test";
+      setSuiteResults((current) => [...current.filter((item) => item.name !== name), { name, status: "failed", detail }]);
+      setError(name + " failed: " + detail);
+    } finally { setActiveTest(null); }
+  }
+
   async function runDeterministicSuite() {
     if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
       setError("Select a Mock-provider Agent before running the no-cost deterministic suite.");
       return;
     }
     setSuiteBusy(true); setSuiteResults([]); setError(""); setMessage("");
-    const results: SuiteResult[] = [];
-    const checks = [
-      { name: "Word count", tool: "text.word_count", prompt: "Count words in: alpha beta gamma delta", verify: (value: unknown) => (value as { wordCount?: number })?.wordCount === 4 },
-      { name: "Keyword extraction", tool: "text.extract_keywords", prompt: "Extract keywords from: renewable energy solar power solar panels wind power", verify: (value: unknown) => (value as { keywords?: Array<{ keyword: string; count: number }> })?.keywords?.some((item) => item.keyword === "solar" && item.count === 2) === true },
-      { name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
-        const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
-        const stats = value as { characters?: number; words?: number; sentences?: number };
-        return stats?.characters === source.length && stats.words === source.trim().split(/\s+/u).length && stats.sentences === 2;
-      } },
-    ];
     try {
-      for (const check of checks) {
-        if (!selectedAgent.allowed_tools?.includes(check.tool)) {
-          results.push({ name: check.name, status: "skipped", detail: "Tool is not assigned to this Agent." });
-          continue;
-        }
-        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: check.prompt, agentId: selectedAgent.id }) });
-        const data = await response.json();
-        const toolResult = Array.isArray(data.toolResults) ? data.toolResults.find((item: { toolId?: string }) => item.toolId === check.tool) : undefined;
-        const passed = response.ok && data.status === "completed" && toolResult && check.verify(toolResult.result);
-        results.push({ name: check.name, status: passed ? "passed" : "failed", detail: passed ? "Expected tool output verified." : data.error ?? "Expected tool output did not match." });
-      }
-      const denied = checks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
-      if (denied) {
-        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }) });
-        const data = await response.json();
-        const passed = !response.ok && data.status === "failed";
-        results.push({ name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected." : "An unassigned tool request was not rejected as expected." });
-      } else {
-        results.push({ name: "Tool permission boundary", status: "skipped", detail: "All three local tools are assigned; remove one temporarily to test denial." });
-      }
-      setSuiteResults(results);
-      const passedCount = results.filter((item) => item.status === "passed").length;
-      const failedCount = results.filter((item) => item.status === "failed").length;
-      const summary = "Deterministic suite finished: " + passedCount + " passed, " + failedCount + " failed, " + results.filter((item) => item.status === "skipped").length + " skipped.";
-      if (failedCount > 0) setError(summary); else setMessage(summary);
+      for (const check of deterministicChecks) await runDeterministicCheck(check.id);
+      await runDeterministicCheck("permission_boundary");
+      await runDeterministicCheck("idempotency");
+      await runDeterministicCheck("cancellation_guard");
+      setMessage("Test run finished. Review each individual result below; skipped tests are not counted as passed.");
       await refresh();
-    } catch (cause) {
-      setSuiteResults(results);
-      setError(cause instanceof Error ? cause.message : "Deterministic suite could not complete.");
-      await refresh().catch(() => undefined);
     } finally { setSuiteBusy(false); }
+  }
+
+  async function cancelTask(id: string) {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await api("/api/v1/agent/tasks/" + id + "/cancel", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? data.message ?? "Task cancellation failed.");
+      setMessage(data.message ?? "Cancellation requested.");
+      await refresh();
+      await openTask(id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task cancellation failed.");
+      await refresh().catch(() => undefined);
+    } finally { setBusy(false); }
   }
 
   async function openTask(id: string) {
@@ -212,7 +338,7 @@ export default function AgentLabPage() {
               </label>
               {selectedAgent && <p className="text-xs text-zinc-500">Assigned tools: {selectedAgent.allowed_tools?.length ? selectedAgent.allowed_tools.join(", ") : "none — this Agent is tool-free"}</p>}
               <label className="block space-y-1 text-xs text-zinc-400">Task / test prompt
-                <textarea required minLength={1} maxLength={4000} rows={4} value={taskInput} onChange={(event) => setTaskInput(event.target.value)} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
+                <textarea required minLength={1} maxLength={4000} rows={4} value={taskInput} onChange={(event) => { setTaskInput(event.target.value); setIdempotencyKey(""); }} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
               </label>
               <div className="flex flex-wrap gap-2">
                 <button disabled={busy || !taskInput.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Running…" : "Run Agent test"}</button>
@@ -221,10 +347,32 @@ export default function AgentLabPage() {
             </form>
             <div className="border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-sm font-semibold text-white">Deterministic test suite</p><p className="mt-1 text-xs text-zinc-500">No-cost checks for local tools and allowlist enforcement. Requires a Mock-provider Agent.</p></div>
-                <button type="button" disabled={suiteBusy || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running suite…" : "Run safe test suite"}</button>
+                <div><p className="text-sm font-semibold text-white">Test Center · Individual tests</p><p className="mt-1 text-xs text-zinc-500">Run any check independently or run the full set. Each button executes a real Agent task through the backend; Mock provider is required to keep tests no-cost.</p></div>
+                <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running all tests…" : "Run all tests"}</button>
               </div>
-              {suiteResults.length > 0 && <ol className="mt-3 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 p-3"><span className="text-xs text-zinc-200">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"rounded-full px-2.5 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status}</span></li>)}</ol>}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {deterministicChecks.map((check) => {
+                  const result = suiteResults.find((item) => item.name === check.name);
+                  const assigned = selectedAgent?.allowed_tools?.includes(check.tool) ?? false;
+                  return <div key={check.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                    <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">{check.name}</p><p className="mt-1 truncate text-[10px] text-zinc-500">{check.tool}</p>{result && <p className={"mt-1 text-[10px] " + (result.status === "passed" ? "text-emerald-300" : result.status === "failed" ? "text-red-300" : "text-zinc-400")}>{result.status.toUpperCase()} · {result.detail}</p>}</div>
+                    <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !assigned} onClick={() => void runDeterministicCheck(check.id)} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === check.id ? "Testing…" : "Test"}</button>
+                  </div>;
+                })}
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Tool permission boundary</p><p className="mt-1 text-[10px] text-zinc-500">Verify an unassigned tool is rejected</p>{suiteResults.find((item) => item.name === "Tool permission boundary") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Tool permission boundary")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Tool permission boundary")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicCheck("permission_boundary")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "permission_boundary" ? "Testing…" : "Test"}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Task idempotency</p><p className="mt-1 text-[10px] text-zinc-500">Replay same key; reject changed payload</p>{suiteResults.find((item) => item.name === "Task idempotency") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Task idempotency")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Task idempotency")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !deterministicChecks.some((check) => selectedAgent.allowed_tools?.includes(check.tool))} onClick={() => void runDeterministicCheck("idempotency")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "idempotency" ? "Testing…" : "Test"}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Cancellation safety</p><p className="mt-1 text-[10px] text-zinc-500">Completed tasks must remain terminal</p>{suiteResults.find((item) => item.name === "Cancellation safety") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Cancellation safety")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Cancellation safety")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !deterministicChecks.some((check) => selectedAgent.allowed_tools?.includes(check.tool))} onClick={() => void runDeterministicCheck("cancellation_guard")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "cancellation_guard" ? "Testing…" : "Test"}</button>
+                </div>
+              </div>
+              {suiteResults.length > 0 && <div className="mt-3 rounded-lg border border-border/70 p-3"><p className="text-xs font-semibold text-zinc-200">Latest test report</p><ol className="mt-2 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex items-start justify-between gap-3 text-xs"><span className="text-zinc-300">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"shrink-0 rounded-full px-2 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status.toUpperCase()}</span></li>)}</ol></div>}
             </div>
             <div className="border-t border-border pt-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Quick test prompts · requires assigned tool</p>
@@ -248,7 +396,17 @@ export default function AgentLabPage() {
 
           {detail && (
             <section className="space-y-4 rounded-2xl border border-cyan-900/50 bg-zinc-950/80 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold text-white">Execution trace</h2><span className="text-xs text-zinc-500">Task {String(detail.task.id ?? "")}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold text-white">Execution trace</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">Task {String(detail.task.id ?? "")}</span>
+                  {["queued", "planning", "awaiting_approval", "waiting_for_device", "executing", "synthesizing"].includes(String(detail.task.status)) && (
+                    <button type="button" disabled={busy} onClick={() => void cancelTask(String(detail.task.id ?? ""))} className="rounded-lg border border-red-900/70 px-3 py-1.5 text-xs text-red-200 disabled:opacity-40">
+                      {busy ? "Working…" : "Cancel task"}
+                    </button>
+                  )}
+                </div>
+              </div>
               <div><p className="text-xs text-zinc-500">Input</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-200">{String(detail.task.task ?? "")}</p></div>
               <div><p className="text-xs text-zinc-500">Status</p><p className="mt-1 text-sm text-white">{String(detail.task.status ?? "unknown")}</p></div>
               <div><p className="text-xs text-zinc-500">Plan</p><pre className="mt-1 max-h-72 overflow-auto rounded-xl bg-black/40 p-3 text-xs text-cyan-100">{JSON.stringify(detail.task.plan ?? null, null, 2)}</pre></div>

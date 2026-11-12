@@ -60,11 +60,11 @@ export function parseAgentDefinition(value: unknown): AgentDefinitionParseResult
       new Set(allowedTools).size !== allowedTools.length) {
     return { ok: false, error: "allowedTools must contain up to 40 unique tool IDs." };
   }
-  if (typeof maxSteps !== "number" || !Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 8) {
-    return { ok: false, error: "maxSteps must be an integer from 1 to 8." };
+  if (typeof maxSteps !== "number" || !Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 16) {
+    return { ok: false, error: "maxSteps must be an integer from 1 to 16." };
   }
-  if (typeof maxToolCalls !== "number" || !Number.isInteger(maxToolCalls) || maxToolCalls < 0 || maxToolCalls > 4) {
-    return { ok: false, error: "maxToolCalls must be an integer from 0 to 4." };
+  if (typeof maxToolCalls !== "number" || !Number.isInteger(maxToolCalls) || maxToolCalls < 0 || maxToolCalls > 8) {
+    return { ok: false, error: "maxToolCalls must be an integer from 0 to 8." };
   }
   if (typeof enabled !== "boolean") return { ok: false, error: "enabled must be boolean." };
 

@@ -90,3 +90,26 @@ test("stops when persisting a tool outcome fails instead of silently losing task
   );
   assert.deepEqual(calls, ["first"]);
 });
+
+test("cooperative lifecycle checkpoint stops before the next tool call", async () => {
+  const executed: string[] = [];
+  let checks = 0;
+  await assert.rejects(
+    executeToolCallsSequentially(
+      ["first", "second"],
+      async (call) => {
+        executed.push(call);
+        return { ok: true };
+      },
+      () => true,
+      undefined,
+      async () => {
+        checks += 1;
+        if (checks === 2) throw new Error("Agent task cancellation requested.");
+      },
+    ),
+    /cancellation requested/,
+  );
+  assert.deepEqual(executed, ["first"]);
+  assert.equal(checks, 2);
+});

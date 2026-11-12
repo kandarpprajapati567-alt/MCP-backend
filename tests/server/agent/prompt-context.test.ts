@@ -51,3 +51,8 @@ test("keeps default planner prompt compact and preserves available tool schemas"
   assert.match(prompt, /github.read_file/);
   assert.match(prompt, /"required":\["path"\]/);
 });
+
+test("advertises expanded default planning and tool-call capacity", () => {
+  const prompt = buildPlannerSystemPrompt([]);
+  assert.match(prompt, /Use 1–16 steps and at most 8 tool calls/);
+});

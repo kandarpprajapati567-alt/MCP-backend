@@ -13,6 +13,9 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
+import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
+import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -27,6 +30,16 @@ async function setTask(admin: ReturnType<typeof createAdminClient>, id: string, 
   const { error } = await admin.from("agent_tasks").update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID);
   if (error) throw new Error("Unable to update task.");
+}
+
+async function assertTaskNotCancelled(admin: ReturnType<typeof createAdminClient>, id: string) {
+  const { data, error } = await admin.from("agent_tasks")
+    .select("status,cancellation_requested_at")
+    .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
+  if (error || !data) throw new Error("Task lifecycle state is unavailable.");
+  if (data.status === "cancelled" || isAgentTaskCancellationRequested(data.cancellation_requested_at)) {
+    throw new AgentTaskCancelledError();
+  }
 }
 
 async function loadAgentDefinition(
@@ -95,13 +108,33 @@ async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClien
   return tools.slice(0, 40);
 }
 
-export async function submitAgentTask(taskInput: string, agentId?: string) {
+export async function submitAgentTask(taskInput: string, agentId?: string, idempotencyKey?: string) {
   if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
     throw new Error("Task must be 1–4000 characters.");
   }
   const task = taskInput.trim();
   const admin = createAdminClient();
   const agent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const requestFingerprint = createAgentTaskRequestFingerprint(task, agent?.id ?? null);
+  if (idempotencyKey) {
+    const { data: existing, error: existingError } = await admin.from("agent_tasks")
+      .select("id,status,request_fingerprint")
+      .eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existingError) throw new Error("Task idempotency is unavailable. Apply the Agent task idempotency migration.");
+    if (existing) {
+      if (!isSameAgentTaskRequest(existing.request_fingerprint, requestFingerprint)) {
+        throw new Error("IDEMPOTENCY_KEY_REUSED");
+      }
+      return {
+        taskId: existing.id as string,
+        status: existing.status as string,
+        replayed: true,
+        message: "This idempotency key already created the task; the existing task was returned.",
+      };
+    }
+  }
   const agentSnapshot = agent ? {
     name: agent.name,
     role: agent.role,
@@ -117,15 +150,36 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       owner_id: PERSONAL_OWNER_ID,
       status: "queued",
       task,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey, request_fingerprint: requestFingerprint } : {}),
       ...(agent ? { agent_definition_id: agent.id, agent_snapshot: agentSnapshot } : {}),
     }).select("id").single();
-  if (createError || !created) throw new Error("Unable to create task.");
+  if (createError || !created) {
+    if (idempotencyKey && createError?.code === "23505") {
+      const { data: raced, error: racedError } = await admin.from("agent_tasks")
+        .select("id,status,request_fingerprint")
+        .eq("owner_id", PERSONAL_OWNER_ID)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (!racedError && raced && isSameAgentTaskRequest(raced.request_fingerprint, requestFingerprint)) {
+        return {
+          taskId: raced.id as string,
+          status: raced.status as string,
+          replayed: true,
+          message: "This idempotency key already created the task; the existing task was returned.",
+        };
+      }
+      if (!racedError && raced) throw new Error("IDEMPOTENCY_KEY_REUSED");
+    }
+    throw new Error("Unable to create task.");
+  }
   const id = created.id as string;
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
     await event(admin, id, "task.created");
+    await assertTaskNotCancelled(admin, id);
     await setTask(admin, id, { status: "planning" });
+    await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
@@ -133,6 +187,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
+    await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
         plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
@@ -195,9 +250,12 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
           });
         }
       },
+      async () => assertTaskNotCancelled(admin, id),
     );
 
+    await assertTaskNotCancelled(admin, id);
     if (pendingJobs.length) {
+      await assertTaskNotCancelled(admin, id);
       await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
       try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
       const { data: latest, error: latestError } = await admin.from("agent_tasks").select("status,result,error_code")
@@ -218,8 +276,10 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       };
     }
 
+    await assertTaskNotCancelled(admin, id);
     failedStage = "synthesis";
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
+    await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.synthesizing");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
@@ -227,7 +287,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 1800,
     };
     const synthesis = agent
       ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
@@ -236,14 +296,19 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     const result = synthesis.route.providerId !== "mock"
-      ? synthesis.result.text
-      : results.length
-        ? "Task completed using " + results.length + " registered tool(s).\n" + JSON.stringify(results, null, 2)
-        : "Task planned successfully. No registered tool was required.\nGoal: " + plan.goal +
-          "\nSteps: " + plan.steps.map((step) => step.objective).join("; ") +
-          "\nConfigure an AI provider to enable model-based planning and synthesis.";
+      ? guardSynthesisAnswer(synthesis.result.text, results)
+      : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
+        JSON.stringify(results, null, 2) +
+        (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
     failedStage = "finalization";
-    await setTask(admin, id, { status: "completed", result, completed_at: new Date().toISOString() });
+    const completedAt = new Date().toISOString();
+    const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
+      .update({ status: "completed", result, completed_at: completedAt, updated_at: completedAt })
+      .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("status", "synthesizing").is("cancellation_requested_at", null)
+      .select("id").maybeSingle();
+    if (completionError) throw new Error("Task completion could not be saved.");
+    if (!completedTask) throw new AgentTaskCancelledError();
     await event(admin, id, "task.completed");
     return {
       taskId: id,
@@ -254,6 +319,25 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
       result,
     };
   } catch (error) {
+    let cancellationRequested = error instanceof AgentTaskCancelledError;
+    if (!cancellationRequested) {
+      const { data: lifecycle } = await admin.from("agent_tasks")
+        .select("status,cancellation_requested_at")
+        .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
+      cancellationRequested = lifecycle?.status === "cancelled" ||
+        isAgentTaskCancellationRequested(lifecycle?.cancellation_requested_at);
+    }
+    if (cancellationRequested) {
+      const cancelledAt = new Date().toISOString();
+      const { data: cancelledTask, error: cancelError } = await admin.from("agent_tasks")
+        .update({ status: "cancelled", completed_at: cancelledAt, updated_at: cancelledAt })
+        .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
+        .not("status", "in", '("completed","failed","cancelled")')
+        .select("id").maybeSingle();
+      if (cancelError) throw new Error("Task cancellation could not be persisted.");
+      if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
+      return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
+    }
     const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);

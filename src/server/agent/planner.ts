@@ -44,7 +44,7 @@ export async function createAgentPlan(
       { role: "user", content: task.trim() },
     ],
     temperature: 0.1,
-    maxOutputTokens: 1600,
+    maxOutputTokens: 2400,
   };
   const execution = agent
     ? await executeAgentWorkflow(userId, "planner", request, {
