@@ -64,8 +64,11 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     toolId: job.tool_id,
     deviceId: job.device_id,
     status: job.status,
-    result: job.result,
-    ...(job.error_code ? { errorCode: job.error_code } : {}),
+    result: {
+      status: job.status,
+      result: job.result,
+      ...(job.error_code ? { errorCode: job.error_code } : {}),
+    },
   }));
   const toolResults = [...localResults, ...deviceResults];
 
