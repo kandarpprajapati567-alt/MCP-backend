@@ -137,3 +137,23 @@ test("validates schema-defined additional properties and fails closed on malform
   assert.equal(parseAgentPlan(makePlan({ label: 42 }), available).ok, false);
   assert.equal(parseAgentPlan(makePlan({ label: "x".repeat(13) }), available).ok, false);
 });
+
+test("accepts expanded plans up to sixteen steps and eight registered tool calls", () => {
+  const steps = Array.from({ length: 16 }, (_, index) => ({
+    id: "step-" + (index + 1),
+    objective: "Perform bounded planning stage " + (index + 1) + ".",
+    expectedOutcome: "A recorded intermediate outcome.",
+  }));
+  const toolCalls = Array.from({ length: 8 }, (_, index) => ({
+    id: "call-" + (index + 1),
+    toolId: "text.word_count",
+    arguments: { text: "alpha beta" },
+  }));
+  const expanded = parseAgentPlan({ ...validPlan, steps, toolCalls }, undefined, {
+    maxSteps: 16,
+    maxToolCalls: 8,
+  });
+  assert.equal(expanded.ok, true);
+  assert.equal(parseAgentPlan({ ...validPlan, steps: [...steps, { ...steps[0], id: "step-17" }] }, undefined, { maxSteps: 16 }).ok, false);
+  assert.equal(parseAgentPlan({ ...validPlan, toolCalls: [...toolCalls, { ...toolCalls[0], id: "call-9" }] }, undefined, { maxToolCalls: 8 }).ok, false);
+});
