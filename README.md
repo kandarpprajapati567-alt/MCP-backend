@@ -117,7 +117,9 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 
 **Zero-budget reality:** mock tests and deterministic local/backend tools can run without a paid model. Genuine cloud inference requires a configured provider key and is subject to that provider's free quota, rate limits and billing. No unlimited free AI access is promised.
 
-### Agent execution and Agent Manager
+#- Agent Lab includes a dedicated Test Center with separate buttons for Word count, Keyword extraction, Text statistics and Tool permission boundary checks, plus a Run all tests action. Each test reports PASS/FAIL/SKIPPED from actual backend task results; deterministic tests require a Mock-provider Agent and assigned local tools.
+
+## Agent execution and Agent Manager
 - Structured task planning with strict validation of plans and tool arguments.
 - Persistent, owner-managed specialist Agent definitions with role and instruction guidance.
 - Per-Agent provider/model preferences, registered-tool allowlists, and bounded step/tool-call limits.
