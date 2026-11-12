@@ -3,7 +3,7 @@ import { parseDeviceJobDispatch } from "@/server/agent/device-contract";
 import { executeRegisteredTool } from "@/server/tools/registry";
 import { getProviderAdapter, listProviderAdapters } from "@/server/models/catalog";
 import { listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile } from "@/server/tools/github";
-import { searchWeb } from "@/server/tools/web-search";
+import { searchWeb } from "@/server/tools/web-search";\nimport { callRemoteMcpTool } from "@/server/mcp/remote";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,7 +22,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
   if (name === "github.list_commits") return listGitHubCommits(args);
   if (name === "github.list_files") return listGitHubFiles(args);
   if (name === "github.read_file") return readGitHubFile(args);
-  if (name === "web.search") return searchWeb(args);
+  if (name === "web.search") return searchWeb(args);\n  if (name.startsWith("remote_mcp.")) return callRemoteMcpTool(name, args);
   if (name === "models.list_providers") {
     if (Object.keys(args).length) throw new Error("models.list_providers does not accept arguments.");
     const providers = listProviderAdapters();
