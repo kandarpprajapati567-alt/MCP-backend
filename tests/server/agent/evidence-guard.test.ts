@@ -55,3 +55,17 @@ test("labels all failed tool outcomes as failed, including device job failures",
   assert.match(result, /android\.files\.read: failed/);
   assert.match(result, /The operation is complete\./);
 });
+
+test("does not authorize citations returned by failed tool calls", () => {
+  const result = guardSynthesisAnswer(
+    "The failed tool mentioned https://example.org/untrusted",
+    [{
+      callId: "call-1",
+      toolId: "web.search",
+      result: { ok: false, error: "request failed", url: "https://example.org/untrusted" },
+    }],
+  );
+  assert.match(result, /UNVERIFIED — NO SOURCE URL WAS RETURNED BY TOOLS/);
+  assert.doesNotMatch(result, /https:\/\/example\.org\/untrusted/);
+  assert.match(result, /\[unverified URL omitted\]/);
+});
