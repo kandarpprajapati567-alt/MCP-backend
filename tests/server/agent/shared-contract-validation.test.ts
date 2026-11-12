@@ -1,0 +1,105 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  isValidCapabilityManifestEntry,
+  isValidInvocationEnvelope,
+  isValidInvocationResult,
+} from "../../../src/shared/agent/validation";
+
+const capability = {
+  id: "android.files.read",
+  runtime: "android",
+  manifestVersion: 1,
+  description: "Read a user-selected file",
+  inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"], additionalProperties: false },
+  requiredPermissions: ["READ_FILES"],
+  sideEffect: false,
+  idempotent: true,
+  requiresUserApproval: true,
+};
+
+const invocation = {
+  contractVersion: 1,
+  invocationId: "inv-123",
+  taskId: "task-123",
+  toolCallId: "call-1",
+  targetRuntime: "android",
+  targetDeviceId: "device-1",
+  capabilityId: "android.files.read",
+  arguments: { uri: "content://selected/document" },
+  createdAt: "2026-11-12T10:00:00.000Z",
+  expiresAt: "2026-11-12T10:05:00.000Z",
+  idempotencyKey: "idem-123",
+};
+
+const result = {
+  contractVersion: 1,
+  invocationId: "inv-123",
+  taskId: "task-123",
+  toolCallId: "call-1",
+  runtime: "android",
+  status: "completed",
+  result: { bytesRead: 12 },
+  completedAt: "2026-11-12T10:01:00.000Z",
+  evidence: [{ kind: "execution", source: "android.files.read", summary: "Read 12 bytes" }],
+};
+
+test("accepts a strict Android capability manifest", () => {
+  assert.equal(isValidCapabilityManifestEntry(capability), true);
+});
+
+test("rejects a manifest that permits undeclared input properties", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: { ...capability.inputSchema, additionalProperties: true },
+  }), false);
+});
+
+test("rejects manifest required fields missing from properties", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: { ...capability.inputSchema, required: ["missing"] },
+  }), false);
+});
+
+test("accepts an unexpired, bounded Android invocation", () => {
+  assert.equal(isValidInvocationEnvelope(invocation, Date.parse("2026-11-12T10:02:00.000Z")), true);
+});
+
+test("rejects Android invocations without a device target", () => {
+  assert.equal(isValidInvocationEnvelope({ ...invocation, targetDeviceId: null }, Date.parse("2026-11-12T10:02:00.000Z")), false);
+});
+
+test("rejects expired or excessively long-lived invocations", () => {
+  assert.equal(isValidInvocationEnvelope(invocation, Date.parse("2026-11-12T10:06:00.000Z")), false);
+  assert.equal(isValidInvocationEnvelope({
+    ...invocation,
+    expiresAt: "2026-11-14T10:00:00.000Z",
+  }, Date.parse("2026-11-12T10:02:00.000Z")), false);
+});
+
+test("rejects web invocations that target a phone device", () => {
+  assert.equal(isValidInvocationEnvelope({
+    ...invocation,
+    targetRuntime: "web",
+    targetDeviceId: "device-1",
+  }, Date.parse("2026-11-12T10:02:00.000Z")), false);
+});
+
+test("accepts a completed result with bounded evidence", () => {
+  assert.equal(isValidInvocationResult(result), true);
+});
+
+test("rejects a failed result that claims a successful output", () => {
+  assert.equal(isValidInvocationResult({
+    ...result,
+    status: "failed",
+  }), false);
+});
+
+test("rejects untrusted results with oversized evidence", () => {
+  assert.equal(isValidInvocationResult({
+    ...result,
+    evidence: Array(21).fill(result.evidence[0]),
+  }), false);
+});
