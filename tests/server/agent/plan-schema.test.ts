@@ -149,11 +149,8 @@ test("accepts expanded plans up to sixteen steps and eight registered tool calls
     toolId: "text.word_count",
     arguments: { text: "alpha beta" },
   }));
-  const expanded = parseAgentPlan({ ...validPlan, steps, toolCalls }, undefined, {
-    maxSteps: 16,
-    maxToolCalls: 8,
-  });
+  const expanded = parseAgentPlan({ ...validPlan, steps, toolCalls });
   assert.equal(expanded.ok, true);
-  assert.equal(parseAgentPlan({ ...validPlan, steps: [...steps, { ...steps[0], id: "step-17" }] }, undefined, { maxSteps: 16 }).ok, false);
-  assert.equal(parseAgentPlan({ ...validPlan, toolCalls: [...toolCalls, { ...toolCalls[0], id: "call-9" }] }, undefined, { maxToolCalls: 8 }).ok, false);
+  assert.equal(parseAgentPlan({ ...validPlan, steps: [...steps, { ...steps[0], id: "step-17" }] }).ok, false);
+  assert.equal(parseAgentPlan({ ...validPlan, toolCalls: [...toolCalls, { ...toolCalls[0], id: "call-9" }] }).ok, false);
 });
