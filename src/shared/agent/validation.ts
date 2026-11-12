@@ -41,10 +41,24 @@ export function isValidCapabilityManifestEntry(
   const schema = value.inputSchema;
   if (!isRecord(schema) || schema.type !== "object" ||
       !isRecord(schema.properties) || schema.additionalProperties !== false) return false;
-  if (jsonByteLength(schema) > MAX_SCHEMA_BYTES) return false;
+  const properties = schema.properties;
+  if (jsonByteLength(schema) > MAX_SCHEMA_BYTES || Object.keys(properties).length > 64) return false;
+  for (const property of Object.values(properties)) {
+    if (!isRecord(property) || !["string", "number", "integer", "boolean"].includes(String(property.type))) return false;
+    if (property.type === "string") {
+      if (property.maxLength !== undefined && (!Number.isInteger(property.maxLength) || (property.maxLength as number) < 0 || (property.maxLength as number) > 12_000)) return false;
+      if (property.minLength !== undefined && (!Number.isInteger(property.minLength) || (property.minLength as number) < 0 || (property.minLength as number) > 12_000)) return false;
+      if (typeof property.maxLength === "number" && typeof property.minLength === "number" && property.minLength > property.maxLength) return false;
+    } else if (property.minimum !== undefined || property.maximum !== undefined) {
+      if (property.minimum !== undefined && (typeof property.minimum !== "number" || !Number.isFinite(property.minimum))) return false;
+      if (property.maximum !== undefined && (typeof property.maximum !== "number" || !Number.isFinite(property.maximum))) return false;
+      if (typeof property.minimum === "number" && typeof property.maximum === "number" && property.minimum > property.maximum) return false;
+    }
+  }
   if (schema.required !== undefined &&
-      (!Array.isArray(schema.required) ||
-       schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(schema.properties, item)))) return false;
+      (!Array.isArray(schema.required) || schema.required.length > Object.keys(properties).length ||
+       new Set(schema.required).size !== schema.required.length ||
+       schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(properties, item)))) return false;
   if (!Array.isArray(value.requiredPermissions) || value.requiredPermissions.length > 32 ||
       value.requiredPermissions.some((permission) => !isBoundedText(permission, 100))) return false;
   return typeof value.sideEffect === "boolean" &&
@@ -60,6 +74,7 @@ export function isValidInvocationEnvelope(value: unknown, now = Date.now()): val
   if (value.targetRuntime !== "web" && value.targetRuntime !== "android") return false;
   if (value.targetDeviceId !== null && !isBoundedText(value.targetDeviceId, 128)) return false;
   if (value.targetRuntime === "web" && value.targetDeviceId !== null) return false;
+  if (value.targetRuntime === "android" && value.targetDeviceId === null) return false;
   if (!isRecord(value.arguments) || jsonByteLength(value.arguments) > MAX_ARGUMENT_BYTES) return false;
   if (typeof value.createdAt !== "string" || typeof value.expiresAt !== "string") return false;
   const createdAt = Date.parse(value.createdAt);
