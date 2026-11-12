@@ -12,7 +12,7 @@ const validMessage: NormalizedChannelMessageV1 = {
   version: 1,
   channel: "telegram",
   providerEventId: "update-123",
-  ownerId: "owner-1",
+  ownerId: "00000000-0000-4000-8000-000000000001",
   externalUserId: "telegram-user-456",
   conversationId: "chat-789",
   text: "Summarize my latest project status",
@@ -38,7 +38,7 @@ test("rejects unlinked/invalid identity fields, control characters, and invalid 
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, externalUserId: "user\nforged" }).ok, false);
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, conversationId: "" }).ok, false);
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "yesterday" }).ok, false);
-  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-99-99T30:61:61Z" }).ok, false);
+  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-99-99T30:61:61Z" }).ok, false);\n  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-02-31T12:00:00Z" }).ok, false);
 });
 
 test("bounds text and rejects empty messages", () => {
@@ -58,7 +58,7 @@ test("event deduplication key is stable and scoped by channel", () => {
 test("session scope isolates owners, channels, senders, and conversations", () => {
   const first = createChannelSessionScopeKey(validMessage);
   assert.equal(first, createChannelSessionScopeKey(validMessage));
-  assert.notEqual(first, createChannelSessionScopeKey({ ...validMessage, ownerId: "owner-2" }));
+  assert.notEqual(first, createChannelSessionScopeKey({ ...validMessage, ownerId: "00000000-0000-4000-8000-000000000002" }));
   assert.notEqual(first, createChannelSessionScopeKey({ ...validMessage, channel: "discord" }));
   assert.notEqual(first, createChannelSessionScopeKey({ ...validMessage, externalUserId: "another-user" }));
   assert.notEqual(first, createChannelSessionScopeKey({ ...validMessage, conversationId: "another-chat" }));
