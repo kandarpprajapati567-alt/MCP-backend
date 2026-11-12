@@ -4,7 +4,6 @@ import { executeAgentWorkflow, executeUserWorkflow } from "../ai/routing/runtime
 import type { AgentDefinitionInput } from "./definition-schema";
 import type { AIGenerationRequest } from "../ai/providers/types";
 import { TOOL_CATALOG } from "../tools/registry";
-import { listRemoteAgentToolsSafe } from "../mcp/remote";
 import { parseAgentPlan, type AgentAvailableTool, type AgentPlan } from "./plan-schema";
 import { buildPlannerSystemPrompt } from "./prompt-context";
 
@@ -24,7 +23,7 @@ export async function createAgentPlan(
     throw new Error("Task must be between 1 and 4000 characters.");
   }
 
-  const remoteTools = await listRemoteAgentToolsSafe();
+  const { listRemoteAgentToolsSafe } = await import("../mcp/remote");\n  const remoteTools = await listRemoteAgentToolsSafe();
   const registeredTools = [
     ...TOOL_CATALOG.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
     ...remoteTools.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
