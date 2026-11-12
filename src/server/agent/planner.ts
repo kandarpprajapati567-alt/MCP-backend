@@ -23,10 +23,15 @@ export async function createAgentPlan(
     throw new Error("Task must be between 1 and 4000 characters.");
   }
 
-  const backendTools: AgentAvailableTool[] = TOOL_CATALOG
+  const { listRemoteAgentToolsSafe } = await import("../mcp/remote");
+  const remoteTools = await listRemoteAgentToolsSafe();
+  const registeredTools = [
+    ...TOOL_CATALOG.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
+    ...remoteTools.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
+  ];
+  const backendTools: AgentAvailableTool[] = registeredTools
     .filter((tool) => tool.id !== "device.dispatch_tool" && !tool.id.startsWith("agent.") &&
-      (!agent || agent.allowedTools.includes(tool.id)))
-    .map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description }));
+      (!agent || agent.allowedTools.includes(tool.id)));
   const permittedDeviceTools = agent
     ? deviceTools.filter((tool) => agent.allowedTools.includes(tool.id))
     : deviceTools;

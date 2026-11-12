@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };
+type RemoteServer = { id: string; name: string; endpoint: string; enabled: boolean; tools: Array<{ id: string; description: string }>; createdAt: string };
 
 export default function ConnectionsPage() {
   const [token, setToken] = useState("");
@@ -13,6 +14,11 @@ export default function ConnectionsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [remoteName, setRemoteName] = useState("");
+  const [remoteEndpoint, setRemoteEndpoint] = useState("");
+  const [remoteToken, setRemoteToken] = useState("");
+  const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([]);
+  const [testingServerId, setTestingServerId] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
     return fetch(path, { ...init, cache: "no-store", headers: {
@@ -27,6 +33,8 @@ export default function ConnectionsPage() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Connections could not be loaded.");
     setConnections(data.connections ?? []);
+    const remoteResponse = await request("/api/v1/connections/remote-mcp");
+    if (remoteResponse.ok) { const remoteData = await remoteResponse.json(); setRemoteServers(remoteData.servers ?? []); } else { setRemoteServers([]); }
   }
 
   async function connectOwner() {
@@ -44,6 +52,46 @@ export default function ConnectionsPage() {
       if (!response.ok) throw new Error(data.error ?? "Web Search could not be connected.");
       setApiKey(""); await refresh(); setMessage("Web Search connected. The API key is stored encrypted and is never returned.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Web Search connection failed."); }
+    finally { setBusy(false); }
+  }
+
+  async function connectRemoteMcp() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await request("/api/v1/connections/remote-mcp", { method: "POST", body: JSON.stringify({ name: remoteName, endpoint: remoteEndpoint, ...(remoteToken ? { bearerToken: remoteToken } : {}) }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Remote MCP connection failed.");
+      setRemoteName(""); setRemoteEndpoint(""); setRemoteToken("");
+      await refresh(); setMessage("Remote MCP connected. " + (data.tools?.length ?? 0) + " read-only tool(s) discovered.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Remote MCP connection failed."); }
+    finally { setBusy(false); }
+  }
+
+  async function testRemoteMcp(server: RemoteServer) {
+    setTestingServerId(server.id); setError(""); setMessage("");
+    try {
+      const response = await request("/api/v1/connections/remote-mcp", {
+        method: "POST",
+        body: JSON.stringify({ action: "test", serverId: server.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.connected !== true) throw new Error(data.error ?? "Remote MCP connection test failed.");
+      await refresh();
+      setMessage(server.name + " connection test passed. " + (data.tools?.length ?? 0) + " read-only tool(s) discovered.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Remote MCP connection test failed.");
+    } finally { setTestingServerId(""); }
+  }
+
+  async function disconnectRemoteMcp(server: RemoteServer) {
+    if (!window.confirm("Disconnect remote MCP server '" + server.name + "'?")) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await request("/api/v1/connections/remote-mcp", { method: "DELETE", body: JSON.stringify({ serverId: server.id }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Remote MCP disconnect failed.");
+      await refresh(); setMessage(server.name + " disconnected.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Remote MCP disconnect failed."); }
     finally { setBusy(false); }
   }
 
@@ -85,6 +133,22 @@ export default function ConnectionsPage() {
           <button disabled={busy || apiKey.length < 8} onClick={() => void saveTavily()} className="rounded-xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">Connect Web Search</button>
         </div>)}
       </section>)}
+    <section className="space-y-4 rounded-2xl border border-border bg-zinc-950/70 p-5">
+      <div><p className="text-xs uppercase tracking-wide text-zinc-500">MCP</p><h2 className="mt-1 text-lg font-semibold text-white">Remote MCP servers</h2><p className="mt-1 text-sm text-zinc-400">Register public HTTPS Streamable HTTP servers. DNS is pinned to validated public IPv4 addresses, redirects are blocked, bearer credentials are encrypted, and only explicitly read-only tools are exposed.</p></div>
+      <form onSubmit={(event) => { event.preventDefault(); void connectRemoteMcp(); }} className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1 text-xs text-zinc-400">Server name<input required maxLength={80} value={remoteName} onChange={(event) => setRemoteName(event.target.value)} placeholder="Research MCP" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" /></label>
+        <label className="space-y-1 text-xs text-zinc-400">HTTPS endpoint<input required type="url" value={remoteEndpoint} onChange={(event) => setRemoteEndpoint(event.target.value)} placeholder="https://mcp.example.com/mcp" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" /></label>
+        <label className="space-y-1 text-xs text-zinc-400 sm:col-span-2">Bearer token (optional)<input type="password" autoComplete="off" value={remoteToken} onChange={(event) => setRemoteToken(event.target.value)} placeholder="Server access token" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" /></label>
+        <div className="sm:col-span-2"><button disabled={busy || !remoteName.trim() || !remoteEndpoint.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Connecting…" : "Validate & connect server"}</button></div>
+      </form>
+      <p className="text-xs text-amber-300/80">HTTPS port 443 only · public IPv4 DNS only · no redirects · 12-second timeout · 1 MB response cap. Write-capable or unannotated tools are excluded.</p>
+      {remoteServers.map((server) => <div key={server.id} className="space-y-2 rounded-xl border border-border/80 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-white">{server.name}</p><p className="mt-1 break-all text-xs text-zinc-500">{server.endpoint}</p></div><div className="flex gap-2"><button type="button" disabled={busy || !!testingServerId} onClick={() => void testRemoteMcp(server)} className="rounded-lg border border-cyan-800 px-3 py-2 text-xs text-cyan-200 disabled:opacity-40">{testingServerId === server.id ? "Testing…" : "Test connection"}</button><button type="button" disabled={busy || !!testingServerId} onClick={() => void disconnectRemoteMcp(server)} className="rounded-lg border border-red-900/60 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Disconnect</button></div></div>
+        <p className="text-xs text-zinc-500">{server.tools.length} read-only tool(s) discovered</p>
+        <div className="flex flex-wrap gap-2">{server.tools.map((tool) => <code key={tool.id} title={tool.description} className="rounded-md bg-black/40 px-2 py-1 text-xs text-cyan-200">{tool.id}</code>)}</div>
+      </div>)}
+      {remoteServers.length === 0 && <p className="text-xs text-zinc-500">No remote MCP servers connected.</p>}
+    </section>
     </>}
     {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
     {message && <p role="status" className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}

@@ -11,16 +11,20 @@ function json(body: unknown, status = 200) { return NextResponse.json(body, { st
 export async function GET(request: Request) {
   if (!verifyOwnerRequest(request)) return json({ error: "Unauthorized." }, 401);
   try {
-    const { data, error } = await createAdminClient().from("integration_connections")
-      .select("provider,enabled,created_at,updated_at")
-      .eq("owner_id", PERSONAL_OWNER_ID).order("provider");
-    if (error) return json({ error: "Connections are unavailable. Apply the Connections migration." }, 503);
-    const configured = new Set((data ?? []).filter((row) => row.enabled).map((row) => row.provider));
+    const admin = createAdminClient();
+    const [integrationResult, remoteResult] = await Promise.all([
+      admin.from("integration_connections").select("provider,enabled,created_at,updated_at").eq("owner_id", PERSONAL_OWNER_ID).order("provider"),
+      admin.from("remote_mcp_servers").select("id,enabled,discovered_tools").eq("owner_id", PERSONAL_OWNER_ID),
+    ]);
+    if (integrationResult.error) return json({ error: "Connections are unavailable. Apply the Connections migration." }, 503);
+    const configured = new Set((integrationResult.data ?? []).filter((row) => row.enabled).map((row) => row.provider));
+    const remoteServers = remoteResult.error ? [] : (remoteResult.data ?? []).filter((row) => row.enabled);
+    const remoteToolCount = remoteServers.reduce((count, row) => count + (Array.isArray(row.discovered_tools) ? row.discovered_tools.length : 0), 0);
     return json({
       connections: [
         { id: "github", name: "GitHub", category: "Developer", connected: Boolean(process.env.GITHUB_READ_TOKEN), status: process.env.GITHUB_READ_TOKEN ? "connected" : "needs_credential", tools: ["github.list_branches", "github.list_commits", "github.list_files", "github.read_file"], setup: "Configure GITHUB_READ_TOKEN on the backend with read-only repository access." },
         { id: "tavily", name: "Web Search", category: "Research", connected: configured.has("tavily"), status: configured.has("tavily") ? "connected" : "not_connected", tools: ["web.search"], setup: "Connect a Tavily API key below." },
-        { id: "mcp_remote", name: "Remote MCP Servers", category: "MCP", connected: false, status: "coming_soon", tools: [], setup: "Remote MCP server discovery and secure connection management is the next connector." },
+        { id: "mcp_remote", name: "Remote MCP Servers", category: "MCP", connected: remoteServers.length > 0, status: remoteResult.error ? "migration_required" : remoteServers.length > 0 ? "connected" : "not_connected", tools: [], setup: remoteResult.error ? "Apply the Remote MCP migration to enable secure server registration." : remoteServers.length + " connected server(s) · " + remoteToolCount + " read-only tool(s) discovered. Add servers below." },
       ],
     });
   } catch {
