@@ -65,7 +65,7 @@ function isStrictIsoTimestamp(value: unknown): value is string {
   if (year < 1000 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false;
   const calendarDate = new Date(Date.UTC(year, month - 1, day));
   if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return false;
-  const offset = value.match(/([+-])(\\d{2}):(\\d{2})$/);
+  const offset = value.match(/([+-])(\d{2}):(\d{2})$/);
   return !offset || (Number(offset[2]) <= 23 && Number(offset[3]) <= 59);
 }
 
