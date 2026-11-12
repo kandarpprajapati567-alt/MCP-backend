@@ -124,7 +124,7 @@ async function openRemoteSession(url: URL, token?: string) {
   return { sessionId };
 }
 
-export export async function registerRemoteMcpServer(input: { name: string; endpoint: string; bearerToken?: string }) {
+export async function registerRemoteMcpServer(input: { name: string; endpoint: string; bearerToken?: string }) {
   const name = input.name.trim();
   if (!name || name.length > 80) throw new Error("Server name must be between 1 and 80 characters.");
   if (input.bearerToken !== undefined && (input.bearerToken.length < 8 || input.bearerToken.length > 4096 || input.bearerToken.trim() !== input.bearerToken)) {
