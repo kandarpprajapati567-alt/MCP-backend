@@ -47,3 +47,66 @@ test("enforces Agent-specific maximum step and tool-call counts", () => {
   assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 0 }).ok, false);
   assert.equal(parseAgentPlan(withToolCall, undefined, { maxToolCalls: 1 }).ok, true);
 });
+
+
+test("validates nested objects and array items instead of accepting unchecked containers", () => {
+  const available = [{
+    id: "device.configure",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        settings: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["safe", "balanced"] },
+            retries: { type: "integer", minimum: 0, maximum: 3 },
+          },
+          required: ["mode"],
+          additionalProperties: false,
+        },
+        targets: {
+          type: "array",
+          minItems: 1,
+          maxItems: 2,
+          items: { type: "string", pattern: "^[a-z0-9-]+$" },
+        },
+      },
+      required: ["settings", "targets"],
+      additionalProperties: false,
+    },
+  }];
+  const makePlan = (args: Record<string, unknown>) => ({
+    ...validPlan,
+    toolCalls: [{ id: "call-1", toolId: "device.configure", arguments: args }],
+  });
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", retries: 2 },
+    targets: ["sensor-1", "sensor-2"],
+  }), available).ok, true);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "unsafe", retries: 2 },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", retries: 9 },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe", unexpected: true },
+    targets: ["sensor-1"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe" },
+    targets: ["sensor one"],
+  }), available).ok, false);
+
+  assert.equal(parseAgentPlan(makePlan({
+    settings: { mode: "safe" },
+    targets: [],
+  }), available).ok, false);
+});
