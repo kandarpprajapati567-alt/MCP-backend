@@ -41,6 +41,7 @@ export default function AgentLabPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agentId, setAgentId] = useState("");
   const [taskInput, setTaskInput] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -97,14 +98,18 @@ export default function AgentLabPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage(""); setDetail(null);
     try {
+      const requestKey = idempotencyKey || crypto.randomUUID();
+      setIdempotencyKey(requestKey);
       const response = await api("/api/v1/agent/tasks", {
         method: "POST",
+        headers: { "Idempotency-Key": requestKey },
         body: JSON.stringify({ task: taskInput, ...(agentId ? { agentId } : {}) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Agent task failed.");
       setMessage(data.status === "completed" ? "Task completed. Inspect the execution trace below." : data.status === "waiting_for_device" ? "Task is waiting for a connected device." : "Task submitted.");
       setTaskInput("");
+      setIdempotencyKey("");
       await refresh();
       if (data.taskId) await openTask(data.taskId);
     } catch (cause) {
@@ -227,7 +232,7 @@ export default function AgentLabPage() {
               </label>
               {selectedAgent && <p className="text-xs text-zinc-500">Assigned tools: {selectedAgent.allowed_tools?.length ? selectedAgent.allowed_tools.join(", ") : "none — this Agent is tool-free"}</p>}
               <label className="block space-y-1 text-xs text-zinc-400">Task / test prompt
-                <textarea required minLength={1} maxLength={4000} rows={4} value={taskInput} onChange={(event) => setTaskInput(event.target.value)} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
+                <textarea required minLength={1} maxLength={4000} rows={4} value={taskInput} onChange={(event) => { setTaskInput(event.target.value); setIdempotencyKey(""); }} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
               </label>
               <div className="flex flex-wrap gap-2">
                 <button disabled={busy || !taskInput.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Running…" : "Run Agent test"}</button>
