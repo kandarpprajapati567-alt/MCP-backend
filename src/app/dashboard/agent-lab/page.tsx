@@ -20,6 +20,7 @@ type Task = {
   failed_stage?: string;
   created_at: string;
 };
+type SuiteResult = { name: string; status: "passed" | "failed" | "skipped"; detail: string };
 type TaskDetail = {
   task: Record<string, unknown>;
   events: Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>;
@@ -44,6 +45,8 @@ export default function AgentLabPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [suiteBusy, setSuiteBusy] = useState(false);
+  const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
 
   async function api(path: string, init: RequestInit = {}) {
     return fetch(path, {
@@ -109,6 +112,54 @@ export default function AgentLabPage() {
     } finally { setBusy(false); }
   }
 
+  async function runDeterministicSuite() {
+    if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
+      setError("Select a Mock-provider Agent before running the no-cost deterministic suite.");
+      return;
+    }
+    setSuiteBusy(true); setSuiteResults([]); setError(""); setMessage("");
+    const results: SuiteResult[] = [];
+    const checks = [
+      { name: "Word count", tool: "text.word_count", prompt: "Count words in: alpha beta gamma delta", verify: (value: unknown) => (value as { wordCount?: number })?.wordCount === 4 },
+      { name: "Keyword extraction", tool: "text.extract_keywords", prompt: "Extract keywords from: renewable energy solar power solar panels wind power", verify: (value: unknown) => (value as { keywords?: Array<{ keyword: string; count: number }> })?.keywords?.some((item) => item.keyword === "solar" && item.count === 2) === true },
+      { name: "Text statistics", tool: "text.text_stats", prompt: "Text stats for: Futuristic System builds reliable AI agents. Agents use approved tools!", verify: (value: unknown) => {
+        const source = "Futuristic System builds reliable AI agents. Agents use approved tools!";
+        const stats = value as { characters?: number; words?: number; sentences?: number };
+        return stats?.characters === source.length && stats.words === source.trim().split(/\\s+/u).length && stats.sentences === 2;
+      } },
+    ];
+    try {
+      for (const check of checks) {
+        if (!selectedAgent.allowed_tools?.includes(check.tool)) {
+          results.push({ name: check.name, status: "skipped", detail: "Tool is not assigned to this Agent." });
+          continue;
+        }
+        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: check.prompt, agentId: selectedAgent.id }) });
+        const data = await response.json();
+        const toolResult = Array.isArray(data.toolResults) ? data.toolResults.find((item: { toolId?: string }) => item.toolId === check.tool) : undefined;
+        const passed = response.ok && data.status === "completed" && toolResult && check.verify(toolResult.result);
+        results.push({ name: check.name, status: passed ? "passed" : "failed", detail: passed ? "Expected tool output verified." : data.error ?? "Expected tool output did not match." });
+      }
+      const denied = checks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
+      if (denied) {
+        const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }) });
+        const data = await response.json();
+        const passed = !response.ok && data.status === "failed";
+        results.push({ name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected." : "An unassigned tool request was not rejected as expected." });
+      } else {
+        results.push({ name: "Tool permission boundary", status: "skipped", detail: "All three local tools are assigned; remove one temporarily to test denial." });
+      }
+      setSuiteResults(results);
+      const passedCount = results.filter((item) => item.status === "passed").length;
+      const failedCount = results.filter((item) => item.status === "failed").length;
+      setMessage("Deterministic suite finished: " + passedCount + " passed, " + failedCount + " failed, " + results.filter((item) => item.status === "skipped").length + " skipped.");
+      await refresh();
+    } catch (cause) {
+      setSuiteResults(results);
+      setError(cause instanceof Error ? cause.message : "Deterministic suite could not complete.");
+    } finally { setSuiteBusy(false); }
+  }
+
   async function openTask(id: string) {
     setError("");
     try {
@@ -165,6 +216,13 @@ export default function AgentLabPage() {
                 <button type="button" disabled={busy} onClick={() => void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."))} className="rounded-xl border border-border px-4 py-2.5 text-sm text-zinc-300">Refresh data</button>
               </div>
             </form>
+            <div className="border-t border-border pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-sm font-semibold text-white">Deterministic test suite</p><p className="mt-1 text-xs text-zinc-500">No-cost checks for local tools and allowlist enforcement. Requires a Mock-provider Agent.</p></div>
+                <button type="button" disabled={suiteBusy || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running suite…" : "Run safe test suite"}</button>
+              </div>
+              {suiteResults.length > 0 && <ol className="mt-3 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 p-3"><span className="text-xs text-zinc-200">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"rounded-full px-2.5 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status}</span></li>)}</ol>}
+            </div>
             <div className="border-t border-border pt-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Quick test prompts · requires assigned tool</p>
               <div className="flex flex-wrap gap-2">
