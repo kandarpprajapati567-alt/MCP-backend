@@ -284,6 +284,10 @@ export async function listRemoteAgentTools() {
   );
 }
 
+export async function listRemoteAgentToolsSafe() {
+  try { return await listRemoteAgentTools(); } catch { return []; }
+}
+
 export async function disconnectRemoteMcpServer(serverId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(serverId)) throw new Error("A valid remote MCP server ID is required.");
   const { error, count } = await createAdminClient().from("remote_mcp_servers")
