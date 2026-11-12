@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyOwnerRequest } from "@/server/security/owner-auth";
 import { readJsonBody } from "@/server/http/read-json";
-import { disconnectRemoteMcpServer, listRemoteMcpServers, registerRemoteMcpServer } from "@/server/mcp/remote";
+import { disconnectRemoteMcpServer, listRemoteMcpServers, registerRemoteMcpServer, testRemoteMcpServer } from "@/server/mcp/remote";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -21,6 +21,18 @@ export async function POST(request: Request) {
     : json({ error: "Invalid JSON body." }, 400);
   if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) return json({ error: "A JSON object is required." }, 400);
   const input = parsed.value as Record<string, unknown>;
+  if (input.action === "test") {
+    if (Object.keys(input).some((key) => !["action", "serverId"].includes(key)) || typeof input.serverId !== "string") {
+      return json({ error: "A serverId is required to test a remote MCP connection." }, 400);
+    }
+    try {
+      const result = await testRemoteMcpServer(input.serverId);
+      return json({ connected: true, checkedAt: result.checkedAt, tools: result.tools });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Remote MCP connection test failed.";
+      return json({ connected: false, error: message.slice(0, 240) }, 400);
+    }
+  }
   if (Object.keys(input).some((key) => !["name", "endpoint", "bearerToken"].includes(key)) ||
       typeof input.name !== "string" || typeof input.endpoint !== "string" ||
       (input.bearerToken !== undefined && typeof input.bearerToken !== "string")) {
