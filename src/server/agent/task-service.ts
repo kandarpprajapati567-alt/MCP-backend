@@ -228,7 +228,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 1800,
     };
     const synthesis = agent
       ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
