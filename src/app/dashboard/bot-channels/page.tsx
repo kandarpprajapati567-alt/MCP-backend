@@ -57,9 +57,15 @@ export default function BotChannelsPage() {
       }
       if (!response.ok && !data.results) throw new Error(data.error ?? `Test request failed (HTTP ${response.status}).`);
       setConnected(true);
-      if (testId === "all") setResults(data.results ?? []);
-      else setResults((current) => [...current.filter((item) => item.id !== testId), ...(data.results ?? [])]);
-      setSummary(data.summary);
+      const nextResults = testId === "all"
+        ? (data.results ?? [])
+        : [...results.filter((item) => item.id !== testId), ...(data.results ?? [])];
+      setResults(nextResults);
+      const passed = nextResults.filter((item) => item.status === "passed").length;
+      const failed = nextResults.filter((item) => item.status === "failed").length;
+      setSummary(testId === "all"
+        ? data.summary
+        : { total: nextResults.length, passed, failed, status: failed === 0 ? "passed" : "failed" });
       setNote(data.note ?? "");
       if (data.summary?.failed) setError(`${data.summary.failed} check(s) failed. Inspect the report below.`);
     } catch (cause) {
