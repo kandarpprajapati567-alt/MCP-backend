@@ -61,3 +61,34 @@ test("validates remote tool arguments against required keys, types and bounds", 
   assert.equal(validateRemoteToolArguments(tool.inputSchema, { query: "agent", limit: 6 }), false);
   assert.equal(validateRemoteToolArguments(tool.inputSchema, { limit: 3 }), false);
 });
+
+
+test("fails closed on malformed remote tool schema bounds", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  const base = (property: Record<string, unknown>) => ({
+    name: "bounded_lookup",
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: "object", properties: { query: property }, required: ["query"] },
+  });
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string", minLength: 8, maxLength: 4 })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string", minLength: 1.5, maxLength: 20 })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "integer", minimum: 9, maximum: 2 })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "number", minimum: "0", maximum: 2 })), null);
+});
+
+test("rejects oversized, nested, and unsafe remote tool schemas", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  const base = (properties: Record<string, unknown>) => ({
+    name: "lookup",
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: "object", properties },
+  });
+  assert.equal(sanitizeRemoteTool(id, base({ nested: { type: "object", properties: {} } })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ "bad-key!": { type: "string" } })), null);
+  assert.equal(sanitizeRemoteTool(id, base(Object.fromEntries(Array.from({ length: 25 }, (_, index) => ["field" + index, { type: "string" }])))), null);
+  assert.equal(sanitizeRemoteTool(id, {
+    name: "not safe",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {} },
+  }), null);
+});
