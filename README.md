@@ -177,7 +177,7 @@ Owner APIs require the owner master token. Device pairing-claim and device-work 
 
 Supported protocol methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 
-Current registered MCP tools include text processing, persistent memory, device coordination, Agent Manager, model-provider discovery, and four read-only GitHub tools: `github.list_branches`, `github.list_commits`, `github.list_files`, and `github.read_file`.
+Current registered MCP tools include text processing, persistent memory, device coordination, Agent Manager, model-provider discovery, and four read-only GitHub tools: `github.list_branches`, `github.list_commits`, `github.list_files`, and `github.read_file`. Owner-managed remote MCP connections support encrypted bearer credentials and dynamic discovery of explicitly read-only tools. Remote tools enter the Agent planner and MCP tool catalog after schema sanitization and per-Agent allowlisting. See `docs/REMOTE-MCP.md` for endpoint restrictions and the remote-server trust boundary.
 
 ## Deployment
 
