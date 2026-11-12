@@ -70,7 +70,7 @@ export function parseNormalizedChannelMessageV1(input: unknown): ChannelMessageP
     return { ok: false, error: "Unsupported channel." };
   }
   if (!isOpaqueId(input.providerEventId)) return { ok: false, error: "Invalid provider event ID." };
-  if (!isOpaqueId(input.ownerId)) return { ok: false, error: "Invalid resolved owner ID." };
+  if (typeof input.ownerId !== "string" || !UUID.test(input.ownerId)) return { ok: false, error: "Invalid resolved owner ID." };
   if (!isOpaqueId(input.externalUserId)) return { ok: false, error: "Invalid linked external user ID." };
   if (!isOpaqueId(input.conversationId)) return { ok: false, error: "Invalid conversation ID." };
   if (typeof input.text !== "string" || input.text.trim().length === 0 ||
