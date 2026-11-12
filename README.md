@@ -5,7 +5,7 @@
 
 **One personal AI platform. Multiple interfaces. One secure orchestration layer.**
 
-Futuristic System connects an Android client, a web Command Centre, AI providers, approved tools, persistent context, and future messaging bots through one owner-controlled backend.
+Futuristic System is designed to connect an Android client, a web Command Centre, AI providers, approved tools, persistent context, and future messaging bots through one owner-controlled backend.
 
 <br/>
 
@@ -29,7 +29,7 @@ Futuristic System is being built as a personal AI platform: one system that can 
 
 This repository contains the **website Command Centre and central backend**. It does not contain the Android application source.
 
-The backend is the shared control plane: it authenticates owner requests, plans tasks, selects configured AI providers, validates and routes approved tools, stores task history and memory, exposes capabilities through MCP, and queues work for paired devices. The Android app is a separate client that can perform explicitly permitted local actions. Future bots will be additional clients of the same Agent Engine—not separate AI brains.
+The backend is the shared control plane: it authenticates owner requests, plans tasks, selects configured AI providers, validates and routes approved tools, stores task history and memory, exposes capabilities through MCP, and queues work for paired devices. The Android app is intended to be a separate client for explicitly permitted local actions; its end-to-end runtime integration is still subject to device-side implementation and validation. Future bots will be additional clients of the same Agent Engine—not separate AI brains.
 
 ### The problem it solves
 
@@ -270,7 +270,7 @@ The backend's reach is limited to configured integrations and capabilities expli
 | Public web research | Tavily-backed `web.search` only when a Tavily key is connected; results are returned as bounded source references/excerpts. |
 | GitHub | Read-only inspection of the fixed Futuristic System MCP Backend repository when the server-side read token is configured. It is not arbitrary GitHub write access. |
 | Remote MCP | Only owner-registered HTTPS endpoints that pass connection restrictions; current discovery intentionally exposes read-only annotated tools after schema sanitization. |
-| Android / Windows device | Only a paired, recently online device's advertised capabilities. Jobs are queued by the backend and must be permission-checked and executed by the client. The actual client implementation determines what is possible. |
+| Paired device | Only a paired, recently online device's advertised capabilities. The backend has a device-bridge contract for Android/Windows-style clients; actual client support must be demonstrated. Jobs are queued by the backend and must be permission-checked and executed by the client. |
 | External clients | MCP clients with valid owner authorization can discover/call only the backend's registered MCP tools. The owner token must remain server-side. |
 
 The backend **cannot automatically** read arbitrary phone files, camera/microphone streams, contacts, SMS, notifications, installed-app data, or control Android settings. It cannot bypass Android permissions, root the phone, execute arbitrary APKs, or access unregistered devices. A future feature must be implemented in the client, exposed as a bounded tool, permission-gated locally and tested end to end before it is described as available.
