@@ -305,20 +305,6 @@ export default function AgentLabPage() {
             if (!cleanup.ok) throw new Error("Permission check fixture cleanup failed (HTTP " + cleanup.status + "). Remove temporary Agent " + probeName + " in Agent Manager.");
           }
         }
-
-        const denied = deterministicChecks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
-        if (!denied) {
-          result = { name: "Tool permission boundary", status: "skipped", detail: "All tested local tools are assigned. Remove one tool from this Agent to verify denial." };
-        } else {
-          const response = await api("/api/v1/agent/tasks", {
-            method: "POST",
-            headers: { "Idempotency-Key": crypto.randomUUID() },
-            body: JSON.stringify({ task: denied.prompt, agentId: selectedAgent.id }),
-          });
-          const data = await response.json();
-          const passed = !response.ok && data.status === "failed";
-          result = { name: "Tool permission boundary", status: passed ? "passed" : "failed", detail: passed ? "Unassigned tool request was rejected by the Agent pipeline." : data.error ?? "An unassigned tool request was not rejected as expected." };
-        }
       } else {
         const check = deterministicChecks.find((item) => item.id === checkId);
         if (!check) throw new Error("Unknown deterministic test.");
