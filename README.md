@@ -17,7 +17,7 @@ Futuristic System is designed to connect an Android client, a web Command Centre
 
 <br/>
 
-**Project status:** Backend and Agent foundation in active development · Android end-to-end validation pending · Bot channels planned after Agent Engine hardening
+**Project status:** Backend and Agent foundation in active development · Android end-to-end validation pending · Universal Bot Gateway contract foundation in progress; production channels remain gated on Agent security and end-to-end verification
 
 </div>
 

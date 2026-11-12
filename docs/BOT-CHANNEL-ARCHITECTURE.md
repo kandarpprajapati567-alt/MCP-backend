@@ -2,6 +2,20 @@
 
 **Status: Planned. No production Telegram, WhatsApp, Discord or website-chat bot is implemented by this document.**
 
+## 0. Implemented foundation (2026-11-12)
+
+The first shared contract slice is now implemented in `src/server/channels/message-contract.ts`:
+
+- Versioned `NormalizedChannelMessageV1` envelope for Telegram, Discord, WhatsApp, website and Android channel identifiers.
+- Strict validation of required identity, conversation, event, timestamp and bounded text fields.
+- Unknown fields fail closed; raw provider payloads, credentials, tool arguments and unreviewed attachments are not accepted.
+- Stable SHA-256 event deduplication key scoped to channel + provider event ID.
+- Stable SHA-256 session scope scoped to owner + channel + external sender + conversation.
+- Contract regression tests are part of `npm test`.
+- Owner-authenticated `POST /api/v1/channels/test` runs deterministic checks, and **Dashboard → Bot Gateway** exposes individual Test buttons plus Run All Tests.
+
+This is a **shared contract foundation only**. It does not yet verify provider webhook signatures, resolve/link identities, persist deduplication records, submit Agent tasks or deliver replies. The dashboard is a contract Test Center and status view, not a live bot connection manager yet. Those remain explicit implementation gates; no channel should be shown as connected until its full end-to-end criteria pass.
+
 ## 1. Product decision
 
 Futuristic System will use **one shared Agent Engine and multiple channel adapters**. A Telegram bot, Discord bot, WhatsApp Business integration, website chat and Android assistant must not grow separate planners, tool permissions, memory stores or execution engines.
