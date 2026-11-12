@@ -41,7 +41,7 @@ export function normalizeRemoteMcpEndpoint(value: unknown): URL {
   let url: URL;
   try { url = new URL(value); } catch { throw new Error("A valid HTTPS MCP endpoint is required."); }
   if (url.protocol !== "https:" || url.username || url.password || url.hash ||
-      (url.port && url.port !== "443") || url.search || !url.hostname || isIP(url.hostname) !== 0 ||
+      (url.port && url.port !== "443") || url.search || !url.hostname || url.hostname.startsWith("[") || isIP(url.hostname) !== 0 ||
       url.hostname === "localhost" || url.hostname.endsWith(".localhost") || url.hostname.endsWith(".local")) {
     throw new Error("Remote MCP endpoints must use a public HTTPS hostname on port 443 without embedded credentials.");
   }
