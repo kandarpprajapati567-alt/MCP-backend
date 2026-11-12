@@ -32,3 +32,26 @@ test("does not treat a tool-reported failure as a source reference", () => {
   assert.match(result, /UNVERIFIED — NO SOURCE URL WAS RETURNED BY TOOLS/);
   assert.match(result, /\[unverified URL omitted\]/);
 });
+
+test("labels mixed tool outcomes as partial and lists failed operations", () => {
+  const result = guardSynthesisAnswer("One operation succeeded.", [
+    { callId: "call-1", toolId: "web.search", result: { ok: true, items: [] } },
+    { callId: "call-2", toolId: "github.read_file", result: { ok: false, error: "not found" } },
+  ]);
+  assert.match(result, /EXECUTION STATUS: PARTIAL — 1 of 2 tool operation\(s\) did not succeed/);
+  assert.match(result, /github\.read_file: failed/);
+  assert.match(result, /Do not describe failed operations as completed/);
+});
+
+test("labels all failed tool outcomes as failed, including device job failures", () => {
+  const result = guardSynthesisAnswer("The operation is complete.", [
+    {
+      callId: "call-1",
+      toolId: "android.files.read",
+      result: { status: "failed", result: null, errorCode: "PERMISSION_DENIED" },
+    },
+  ]);
+  assert.match(result, /EXECUTION STATUS: FAILED — 1 of 1 tool operation\(s\) did not succeed/);
+  assert.match(result, /android\.files\.read: failed/);
+  assert.match(result, /The operation is complete\./);
+});
