@@ -133,3 +133,13 @@ test("rejects a result without evidence metadata", () => {
   const { evidence: _evidence, ...incomplete } = result;
   assert.equal(isValidInvocationResult(incomplete), false);
 });
+
+test("rejects unsupported property schema keywords", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: {
+      ...capability.inputSchema,
+      properties: { uri: { type: "string", pattern: ".*" } },
+    },
+  }), false);
+});
