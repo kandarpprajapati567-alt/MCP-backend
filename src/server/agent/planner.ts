@@ -3,7 +3,8 @@ import "server-only";
 import { executeAgentWorkflow, executeUserWorkflow } from "../ai/routing/runtime-executor";
 import type { AgentDefinitionInput } from "./definition-schema";
 import type { AIGenerationRequest } from "../ai/providers/types";
-import { TOOL_CATALOG } from "../tools/registry";\nimport { listRemoteAgentToolsSafe } from "../mcp/remote";
+import { TOOL_CATALOG } from "../tools/registry";
+import { listRemoteAgentToolsSafe } from "../mcp/remote";
 import { parseAgentPlan, type AgentAvailableTool, type AgentPlan } from "./plan-schema";
 import { buildPlannerSystemPrompt } from "./prompt-context";
 
