@@ -141,3 +141,82 @@ export function createChannelSessionScopeKey(message: NormalizedChannelMessageV1
     message.conversationId,
   ]);
 }
+
+export type ChannelContractCheckId =
+  | "valid_envelope"
+  | "reject_unknown_fields"
+  | "event_deduplication"
+  | "session_isolation"
+  | "timestamp_validation";
+
+export type ChannelContractCheckResult = {
+  id: ChannelContractCheckId;
+  name: string;
+  status: "passed" | "failed";
+  detail: string;
+};
+
+const SELF_TEST_MESSAGE: NormalizedChannelMessageV1 = {
+  version: 1,
+  channel: "telegram",
+  providerEventId: "self-test-event-1",
+  ownerId: "00000000-0000-4000-8000-000000000001",
+  externalUserId: "self-test-user",
+  conversationId: "self-test-conversation",
+  text: "Run channel gateway contract self-test",
+  receivedAt: "2026-11-12T18:00:00.000Z",
+};
+
+/** Deterministic, no-network checks exposed through the owner-authenticated Test Center API. */
+export function runChannelContractSelfTests(testId?: ChannelContractCheckId): ChannelContractCheckResult[] {
+  const checks: Array<{ id: ChannelContractCheckId; name: string; run: () => boolean; detail: string }> = [
+    {
+      id: "valid_envelope",
+      name: "Valid normalized message",
+      run: () => parseNormalizedChannelMessageV1(SELF_TEST_MESSAGE).ok,
+      detail: "A correctly scoped v1 message is accepted.",
+    },
+    {
+      id: "reject_unknown_fields",
+      name: "Reject provider payload leakage",
+      run: () => !parseNormalizedChannelMessageV1({ ...SELF_TEST_MESSAGE, accessToken: "must-not-pass" }).ok,
+      detail: "Unknown fields, credentials and unreviewed provider data are rejected.",
+    },
+    {
+      id: "event_deduplication",
+      name: "Event replay key",
+      run: () => {
+        const first = createChannelEventDeduplicationKey("telegram", "event-1");
+        return first === createChannelEventDeduplicationKey("telegram", "event-1") &&
+          first !== createChannelEventDeduplicationKey("discord", "event-1");
+      },
+      detail: "Repeated provider events map to the same channel-scoped key.",
+    },
+    {
+      id: "session_isolation",
+      name: "Conversation isolation",
+      run: () => {
+        const first = createChannelSessionScopeKey(SELF_TEST_MESSAGE);
+        return first !== createChannelSessionScopeKey({ ...SELF_TEST_MESSAGE, externalUserId: "other-user" }) &&
+          first !== createChannelSessionScopeKey({ ...SELF_TEST_MESSAGE, channel: "discord" });
+      },
+      detail: "Different senders and channels cannot share the same session scope.",
+    },
+    {
+      id: "timestamp_validation",
+      name: "Strict timestamp validation",
+      run: () => !parseNormalizedChannelMessageV1({ ...SELF_TEST_MESSAGE, receivedAt: "2026-02-31T12:00:00Z" }).ok,
+      detail: "Impossible calendar dates are rejected.",
+    },
+  ];
+  return checks
+    .filter((check) => !testId || check.id === testId)
+    .map((check) => {
+      try {
+        const passed = check.run();
+        return { id: check.id, name: check.name, status: passed ? "passed" : "failed", detail: check.detail };
+      } catch {
+        return { id: check.id, name: check.name, status: "failed", detail: "The self-test threw unexpectedly." };
+      }
+    });
+}
