@@ -10,18 +10,18 @@ export type LocalAgentPlan = {
 function extractInput(task: string, toolId: string): string {
   const patterns: Record<string, RegExp[]> = {
     "text.word_count": [
-      /^(?:please\\s+)?count\\s+words?\\s+(?:in|of)\\s*:?\\s*(.+)$/i,
-      /^(?:please\\s+)?count\\s+words?\\s*[:\\-]\\s*(.+)$/i,
-      /^(?:please\\s+)?word\\s+count\\s*[:\\-]\\s*(.+)$/i,
+      /^(?:please\s+)?count\s+words?\s+(?:in|of)\s*:?\s*(.+)$/i,
+      /^(?:please\s+)?count\s+words?\s*[:\-]\s*(.+)$/i,
+      /^(?:please\s+)?word\s+count\s*[:\-]\s*(.+)$/i,
     ],
     "text.extract_keywords": [
-      /^(?:please\\s+)?extract\\s+keywords?\\s+from\\s*:?\\s*(.+)$/i,
-      /^(?:please\\s+)?keywords?\\s*[:\\-]\\s*(.+)$/i,
+      /^(?:please\s+)?extract\s+keywords?\s+from\s*:?\s*(.+)$/i,
+      /^(?:please\s+)?keywords?\s*[:\-]\s*(.+)$/i,
     ],
     "text.text_stats": [
-      /^(?:please\\s+)?(?:text\\s+stats|text\\s+statistics)\\s+(?:for|of|in)\\s*:?\\s*(.+)$/i,
-      /^(?:please\\s+)?(?:text\\s+stats|text\\s+statistics)\\s*[:\\-]\\s*(.+)$/i,
-      /^(?:please\\s+)?character\\s+count\\s+(?:for|of|in)\\s*:?\\s*(.+)$/i,
+      /^(?:please\s+)?(?:text\s+stats|text\s+statistics)\s+(?:for|of|in)\s*:?\s*(.+)$/i,
+      /^(?:please\s+)?(?:text\s+stats|text\s+statistics)\s*[:\-]\s*(.+)$/i,
+      /^(?:please\s+)?character\s+count\s+(?:for|of|in)\s*:?\s*(.+)$/i,
     ],
   };
   for (const pattern of patterns[toolId] ?? []) {
