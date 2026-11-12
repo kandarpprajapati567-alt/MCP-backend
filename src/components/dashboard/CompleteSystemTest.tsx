@@ -77,7 +77,7 @@ export function CompleteSystemTest({ token }: Props) {
 
   async function runLiveTest() {
     const confirmed = window.confirm(
-      "LIVE TEST WARNING\n\nThis runs a real task for each eligible enabled Agent. It may use OpenAI/OpenRouter credits and creates task-history records. Only Agents whose entire assigned tool list is marked read-only are eligible. Agents with side-effect tools are skipped. Continue?"
+      "LIVE TEST WARNING\n\nThis runs a real task for each eligible enabled Agent. It may use OpenAI/OpenRouter or connected integration credits and creates task-history records. Only Agents whose entire assigned tool list is marked read-only are eligible. Agents with side-effect tools are skipped. Continue?"
     );
     if (!confirmed) return;
 
