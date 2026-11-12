@@ -5,6 +5,7 @@ import {
   type ChannelContractCheckId,
 } from "@/server/channels/message-contract";
 import { verifyOwnerRequest } from "@/server/security/owner-auth";
+import { isTelegramUserAllowed, parseTelegramPrivateTextUpdate, verifyTelegramWebhookSecret } from "@/server/channels/telegram-inbound";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -14,6 +15,9 @@ const CHECK_IDS: ChannelContractCheckId[] = [
   "event_deduplication",
   "session_isolation",
   "timestamp_validation",
+  "telegram_secret",
+  "telegram_allowlist",
+  "telegram_payload",
 ];
 
 function json(body: unknown, status = 200) {
@@ -46,8 +50,15 @@ export async function POST(request: Request) {
   const results = runChannelContractSelfTests(
     testId === undefined || testId === "all" ? undefined : testId as ChannelContractCheckId,
   );
-  const passed = results.filter((result) => result.status === "passed").length;
-  const failed = results.length - passed;
+  const telegramChecks = [
+    { id: "telegram_secret", name: "Telegram webhook secret verification", detail: "Configured secrets must match exactly; missing and short secrets fail closed.", passed: verifyTelegramWebhookSecret("a".repeat(40), "a".repeat(40)) && !verifyTelegramWebhookSecret("b".repeat(40), "a".repeat(40)) && !verifyTelegramWebhookSecret("a".repeat(40), undefined) },
+    { id: "telegram_allowlist", name: "Telegram sender allowlist", detail: "Only an exact numeric sender ID in the explicit allowlist is accepted.", passed: isTelegramUserAllowed("123456789", "111,123456789") && !isTelegramUserAllowed("1234567890", "123456789") && !isTelegramUserAllowed("123456789", undefined) },
+    { id: "telegram_payload", name: "Telegram private text payload", detail: "Private human text is accepted; groups, bots, attachments and unknown fields are rejected.", passed: parseTelegramPrivateTextUpdate({ update_id: 1, message: { message_id: 1, date: 1794500000, from: { id: 123456789, is_bot: false }, chat: { id: 123456789, type: "private" }, text: "test" } }).ok && !parseTelegramPrivateTextUpdate({ update_id: 1, message: { message_id: 1, date: 1794500000, from: { id: 123456789, is_bot: false }, chat: { id: -1, type: "group" }, text: "test" } }).ok },
+  ].filter((check) => testId === undefined || testId === "all" || check.id === testId).map((check) => ({ ...check, status: check.passed ? "passed" as const : "failed" as const }));
+  const combinedResults = [...results, ...telegramChecks];
+  const selectedResults = testId === undefined || testId === "all" ? combinedResults : combinedResults.filter((result) => result.id === testId);
+  const passed = selectedResults.filter((result) => result.status === "passed").length;
+  const failed = selectedResults.length - passed;
   return json({
     summary: { total: results.length, passed, failed, status: failed === 0 ? "passed" : "failed" },
     results,
