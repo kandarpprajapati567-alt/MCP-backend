@@ -85,7 +85,7 @@ flowchart TD
     X --> S
     S --> DB[("Supabase: tasks / events / memory")]
     S --> O["Result + Evidence Status"]
-    O -. "independent verifier is next hardening phase" .-> O
+    S -. "next hardening phase" .-> V2["Independent claim verifier"]
 ```
 
 The system separates **intelligence**, **orchestration**, **tools**, **storage**, and **local execution**. A server-side task request is not permission to access a phone. The backend can queue only registered capabilities for a paired device; the client must enforce its own permission and consent checks.
@@ -97,7 +97,7 @@ The system separates **intelligence**, **orchestration**, **tools**, **storage**
 3. **Route** — select a workflow-specific provider/model or an approved tool.
 4. **Validate** — check tool names and arguments against known schemas.
 5. **Execute** — run backend tools on the server, or queue device work for a connected device.
-6. **Verify and synthesize** — combine returned evidence and execution results.
+6. **Synthesize** — produce an evidence-labelled result from returned tool outputs. An independent claim verifier and cross-source contradiction checks remain planned hardening work.
 7. **Persist** — retain task events and permitted memory for continuity.
 
 The device bridge is a coordination contract, not remote unrestricted control. The backend does not directly access a phone's files, camera, microphone, sensors, installed apps, contacts, messages, or Android permissions. Only capabilities actually implemented and advertised by a paired client can be queued; local authorization and execution remain on that device.
@@ -125,6 +125,7 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
 - Allow-listed backend tools, task status, event history, and result synthesis.
 - Failure diagnostics in task history: failed execution stage (`planning`, `policy_validation`, `tool_execution`, `synthesis`, or `finalization`) plus a sanitized, user-safe error message. Unexpected internal errors remain generic; credentials and arbitrary exception details are not exposed.
+- Evidence-aware synthesis guard and nested tool-schema hardening are under [PR #30](https://github.com/kandarpprajapati567-alt/MCP-backend/pull/30). The PR is open and not merged; do not treat these changes as deployed production behavior.
 - Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
 
 ### Model Context Protocol
@@ -316,7 +317,7 @@ The order is deliberate: **finish a trustworthy Agent Engine first; then connect
 - [ ] Android assistant/chat interface using the same backend Agent Engine
 - [ ] Per-channel tool allowlists, user consent, rate limits, abuse controls and audit history
 
-**Bot status:** Telegram, WhatsApp, Discord and website chat bots are roadmap items. No live bot integration is claimed in this repository today. Messaging providers may require their own accounts, approvals, credentials and usage fees; a ₹0 budget does not guarantee free production messaging.
+**Bot status:** Telegram, WhatsApp, Discord and website chat bots are roadmap items. No live bot integration is claimed in this repository today. The shared gateway, normalized channel contract, identity linking, webhook verification, session isolation and rollout gates are documented in [Bot Channel Architecture](docs/BOT-CHANNEL-ARCHITECTURE.md). Messaging providers may require their own accounts, approvals, credentials and usage fees; a ₹0 budget does not guarantee free production messaging.
 
 ### Phase 4 — Research and local intelligence
 - [ ] YouTube metadata/transcript research where legally and technically accessible
@@ -324,7 +325,7 @@ The order is deliberate: **finish a trustworthy Agent Engine first; then connect
 - [ ] Source-grounded study/research workflows and handwritten-notes generation pipeline
 - [ ] Public multi-user authentication and release hardening
 
-Roadmap checkboxes represent repository evidence, not aspirations. A feature is marked complete only after its implementation and relevant tests are verified.
+Roadmap checkboxes represent repository evidence, not aspirations. A feature is marked complete only after its implementation and relevant tests are verified. See [Agent Trust & Capability Levels](docs/AGENT_TRUST_LEVELS.md) for the evidence-based assurance ladder and [Bot Channel Architecture](docs/BOT-CHANNEL-ARCHITECTURE.md) for the planned channel gateway.
 
 ## Repository structure
 
