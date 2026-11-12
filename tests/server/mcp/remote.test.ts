@@ -25,7 +25,7 @@ test("rejects HTTP, credentials, fragments, nonstandard ports and IP literals", 
 });
 
 test("blocks private, loopback, link-local, shared, documentation and multicast IPv4 ranges", () => {
-  for (const address of ["10.0.0.1", "127.0.0.1", "169.254.1.1", "172.16.0.1", "192.168.1.1", "100.64.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "198.18.0.1", "224.0.0.1", "0.1.2.3"]) {
+  for (const address of ["10.0.0.1", "127.0.0.1", "169.254.1.1", "172.16.0.1", "192.168.1.1", "100.64.0.1", "192.0.2.1", "192.88.99.1", "198.51.100.1", "203.0.113.1", "198.18.0.1", "224.0.0.1", "0.1.2.3"]) {
     assert.equal(isPublicIpv4Address(address), false, address);
   }
   for (const address of ["1.1.1.1", "8.8.8.8", "93.184.216.34"]) {
