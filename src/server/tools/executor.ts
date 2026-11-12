@@ -23,7 +23,10 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
   if (name === "github.list_files") return listGitHubFiles(args);
   if (name === "github.read_file") return readGitHubFile(args);
   if (name === "web.search") return searchWeb(args);
-  if (name.startsWith("remote_mcp.")) {\n    const { callRemoteMcpTool } = await import("@/server/mcp/remote");\n    return callRemoteMcpTool(name, args);\n  }
+  if (name.startsWith("remote_mcp.")) {
+    const { callRemoteMcpTool } = await import("@/server/mcp/remote");
+    return callRemoteMcpTool(name, args);
+  }
   if (name === "models.list_providers") {
     if (Object.keys(args).length) throw new Error("models.list_providers does not accept arguments.");
     const providers = listProviderAdapters();
