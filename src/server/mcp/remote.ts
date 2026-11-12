@@ -161,6 +161,32 @@ export async function registerRemoteMcpServer(input: { name: string; endpoint: s
   return { server: data, tools };
 }
 
+export async function testRemoteMcpServer(serverId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(serverId)) throw new Error("A valid remote MCP server ID is required.");
+  const admin = createAdminClient();
+  const { data: server, error } = await admin.from("remote_mcp_servers")
+    .select("id,endpoint_url,encrypted_secret,iv,auth_tag,key_version,enabled")
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("id", serverId).maybeSingle();
+  if (error || !server || !server.enabled) throw new Error("Remote MCP server is not connected.");
+  const endpoint = normalizeRemoteMcpEndpoint(server.endpoint_url);
+  const token = server.encrypted_secret
+    ? decryptProviderSecret({ encrypted_secret: server.encrypted_secret, iv: server.iv, auth_tag: server.auth_tag, key_version: server.key_version })
+    : undefined;
+  const { sessionId } = await openRemoteSession(endpoint, token);
+  const response = await postRemoteMcp(endpoint, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, token, sessionId, MCP_PROTOCOL_VERSION);
+  const result = rpcResult(response.payload);
+  if (!Array.isArray(result.tools) || result.tools.length > 100 || result.nextCursor !== undefined) {
+    throw new Error("Remote MCP tools/list response is invalid, paginated, or exceeds the 100-tool limit.");
+  }
+  const tools = result.tools.map((tool) => sanitizeRemoteTool(serverId, tool)).filter((tool): tool is RemoteMcpTool => tool !== null);
+  if (!tools.length) throw new Error("Connection responded, but no explicitly read-only tools were discovered.");
+  const { error: updateError } = await admin.from("remote_mcp_servers")
+    .update({ discovered_tools: tools, protocol_version: MCP_PROTOCOL_VERSION })
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("id", serverId);
+  if (updateError) throw new Error("Remote MCP responded, but its tool manifest could not be refreshed.");
+  return { connected: true, checkedAt: new Date().toISOString(), tools };
+}
+
 export async function listRemoteMcpServers() {
   const { data, error } = await createAdminClient().from("remote_mcp_servers")
     .select("id,name,endpoint_url,enabled,discovered_tools,created_at,updated_at")
