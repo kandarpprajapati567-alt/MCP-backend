@@ -103,3 +103,33 @@ test("rejects untrusted results with oversized evidence", () => {
     evidence: Array(21).fill(result.evidence[0]),
   }), false);
 });
+
+test("rejects nested or unsupported JSON Schema constructs", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: {
+      type: "object",
+      properties: { value: { type: "object", properties: { nested: { type: "string" } } } },
+      additionalProperties: false,
+    },
+  }), false);
+});
+
+test("rejects duplicate required keys", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: { ...capability.inputSchema, required: ["uri", "uri"] },
+  }), false);
+});
+
+test("rejects Android invocation without an explicit paired-device target", () => {
+  assert.equal(isValidInvocationEnvelope({
+    ...invocation,
+    targetDeviceId: null,
+  }, Date.parse("2026-11-12T10:02:00.000Z")), false);
+});
+
+test("rejects a result without evidence metadata", () => {
+  const { evidence: _evidence, ...incomplete } = result;
+  assert.equal(isValidInvocationResult(incomplete), false);
+});
