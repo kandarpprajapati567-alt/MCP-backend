@@ -117,7 +117,7 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 
 **Zero-budget reality:** mock tests and deterministic local/backend tools can run without a paid model. Genuine cloud inference requires a configured provider key and is subject to that provider's free quota, rate limits and billing. No unlimited free AI access is promised.
 
-#- Agent Lab includes a dedicated Test Center with separate buttons for Word count, Keyword extraction, Text statistics and Tool permission boundary checks, plus a Run all tests action. Each test reports PASS/FAIL/SKIPPED from actual backend task results; deterministic tests require a Mock-provider Agent and assigned local tools.
+- Agent Lab includes a dedicated Test Center with separate buttons for Word count, Keyword extraction, Text statistics, Tool permission boundary, Task idempotency and Cancellation safety, plus a Run all tests action. Tests report PASS/FAIL/SKIPPED from actual backend task/API results; task-level checks require a Mock-provider Agent and at least one assigned deterministic local text tool.
 
 ## Agent execution and Agent Manager
 - Structured task planning with strict validation of plans and tool arguments.
@@ -204,7 +204,7 @@ Owner APIs require the owner master token. Device pairing-claim and device-work 
 
 Supported protocol methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 
-Current registered capabilities include bounded text processing, owner memory, device registry/dispatch, Agent task submission/status, provider discovery, read-only GitHub repository inspection, and Tavily-backed web search when configured. Owner-managed remote MCP connections support encrypted bearer credentials, connection testing, sanitized discovery and per-Agent allowlisting. Only the remote tools that pass the current read-only contract are exposed; remote server annotations are not cryptographic proof of safety. The Agent Lab includes **Run Agent test** and **Run safe test suite** controls. See `docs/REMOTE-MCP.md` and `docs/CONNECTIONS-HUB.md` for exact restrictions.
+Current registered capabilities include bounded text processing, owner memory, device registry/dispatch, Agent task submission/status, provider discovery, read-only GitHub repository inspection, and Tavily-backed web search when configured. Owner-managed remote MCP connections support encrypted bearer credentials, connection testing, sanitized discovery and per-Agent allowlisting. Only the remote tools that pass the current read-only contract are exposed; remote server annotations are not cryptographic proof of safety. The Agent Lab includes separate **Test** buttons for each deterministic text check, permission boundary, task idempotency and terminal-task cancellation safety, plus **Run all tests**. Each result is based on real owner-authenticated backend responses; skipped tests are not counted as passes. See `docs/REMOTE-MCP.md` and `docs/CONNECTIONS-HUB.md` for exact restrictions.
 
 ## Deployment
 
