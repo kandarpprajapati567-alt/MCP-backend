@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await submitAgentTask(input.task, input.agentId as string | undefined, idempotencyKey);
-    const status = result.replayed ? 200 : result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
+    const status = ("replayed" in result && result.replayed) ? 200 : result.status === "failed" ? 500 : result.status === "waiting_for_device" ? 202 : 201;
     return json(result, status);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Unable to submit task.";
