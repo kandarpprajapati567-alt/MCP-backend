@@ -357,17 +357,25 @@ export default function AgentLabPage() {
   }
 
   async function runDeterministicSuite() {
-    if (!selectedAgent || selectedAgent.provider_preference !== "mock") {
-      setError("Select a Mock-provider Agent before running the no-cost deterministic suite.");
-      return;
-    }
     setSuiteBusy(true); setSuiteResults([]); setError(""); setMessage("");
     try {
-      for (const check of deterministicChecks) await runDeterministicCheck(check.id);
-      await runDeterministicCheck("permission_boundary");
-      await runDeterministicCheck("idempotency");
-      await runDeterministicCheck("cancellation_guard");
-      setMessage("Test run finished. Review each individual result below; skipped tests are not counted as passed.");
+      for (const tool of tools) await runToolRegistryCheck(tool.id);
+      if (selectedAgent?.provider_preference === "mock") {
+        for (const check of deterministicChecks) await runDeterministicCheck(check.id);
+        await runDeterministicCheck("permission_boundary");
+        await runDeterministicCheck("idempotency");
+        await runDeterministicCheck("cancellation_guard");
+      } else {
+        const reason = "Skipped: prepare/select the free Mock Test Agent to run task-execution checks. Registry contract checks above did run.";
+        setSuiteResults((current) => [
+          ...current,
+          ...deterministicChecks.map((check) => ({ name: check.name, status: "skipped" as const, detail: reason })),
+          { name: "Tool permission boundary", status: "skipped" as const, detail: reason },
+          { name: "Task idempotency", status: "skipped" as const, detail: reason },
+          { name: "Cancellation safety", status: "skipped" as const, detail: reason },
+        ]);
+      }
+      setMessage("Full Test Center run finished. Registry contracts and eligible execution checks are reported separately; SKIPPED is never counted as PASS.");
       await refresh();
     } finally { setSuiteBusy(false); }
   }
@@ -452,7 +460,7 @@ export default function AgentLabPage() {
                   {selectedAgent && <p className="mt-2 text-[11px] text-zinc-400">Selected: {selectedAgent.name} · {selectedAgent.provider_preference}</p>}
                   {!selectedAgent && <p className="mt-2 text-[11px] text-amber-300">No Agent selected. Prepare the free Test Agent to enable deterministic tests.</p>}
                 </div>
-                <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running all tests…" : "Run all tests"}</button>
+                <button type="button" disabled={suiteBusy || activeTest !== null || busy} onClick={() => void runDeterministicSuite()} className="rounded-xl border border-cyan-800 px-4 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">{suiteBusy ? "Running all tests…" : "Run all tests"}</button>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {deterministicChecks.map((check) => {
