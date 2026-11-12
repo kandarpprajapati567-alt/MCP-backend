@@ -164,7 +164,7 @@ async function openRemoteSession(url: URL, token?: string) {
   return { sessionId };
 }
 
-function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpTool | null {
+export function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpTool | null {
   if (!isRecord(raw) || typeof raw.name !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u.test(raw.name) ||
       !isRecord(raw.annotations) || raw.annotations.readOnlyHint !== true || raw.annotations.destructiveHint === true ||
