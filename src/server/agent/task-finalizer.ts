@@ -93,18 +93,23 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   if (lifecycleError) throw new Error("Task lifecycle state could not be checked.");
   if (lifecycle?.status === "cancelled" || lifecycle?.cancellation_requested_at) {
     const cancelledAt = new Date().toISOString();
-    await admin.from("agent_tasks").update({
+    const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
       status: "cancelled",
       completed_at: cancelledAt,
       updated_at: cancelledAt,
     }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
-      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null);
-    await admin.from("agent_task_events").insert({
-      task_id: taskId,
-      owner_id: PERSONAL_OWNER_ID,
-      event_type: "task.cancelled",
-      payload: { cooperative: true, stage: "device_finalization" },
-    });
+      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+      .select("id").maybeSingle();
+    if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
+    if (cancelledTask) {
+      const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
+        task_id: taskId,
+        owner_id: PERSONAL_OWNER_ID,
+        event_type: "task.cancelled",
+        payload: { cooperative: true, stage: "device_finalization" },
+      });
+      if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
+    }
     return true;
   }
 
@@ -144,18 +149,23 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
       .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle();
     if (latestLifecycle?.status === "cancelled" || latestLifecycle?.cancellation_requested_at) {
       const cancelledAt = new Date().toISOString();
-      await admin.from("agent_tasks").update({
+      const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
         status: "cancelled",
         completed_at: cancelledAt,
         updated_at: cancelledAt,
       }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
-        .eq("status", "synthesizing").not("cancellation_requested_at", "is", null);
-      await admin.from("agent_task_events").insert({
-        task_id: taskId,
-        owner_id: PERSONAL_OWNER_ID,
-        event_type: "task.cancelled",
-        payload: { cooperative: true, stage: "device_finalization" },
-      });
+        .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+        .select("id").maybeSingle();
+      if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
+      if (cancelledTask) {
+        const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
+          task_id: taskId,
+          owner_id: PERSONAL_OWNER_ID,
+          event_type: "task.cancelled",
+          payload: { cooperative: true, stage: "device_finalization" },
+        });
+        if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
+      }
       return true;
     }
     const message = safeAgentFailureMessage(error);
@@ -189,19 +199,22 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   if (updateError) throw new Error("Task completion could not be saved.");
   if (!completedTask) {
     const cancelledAt = new Date().toISOString();
-    const { error: cancelUpdateError } = await admin.from("agent_tasks").update({
+    const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
       status: "cancelled",
       completed_at: cancelledAt,
       updated_at: cancelledAt,
     }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
-      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null);
+      .eq("status", "synthesizing").not("cancellation_requested_at", "is", null)
+      .select("id").maybeSingle();
     if (cancelUpdateError) throw new Error("Task cancellation could not be persisted.");
-    await admin.from("agent_task_events").insert({
+    if (!cancelledTask) return false;
+    const { error: cancelledEventError } = await admin.from("agent_task_events").insert({
       task_id: taskId,
       owner_id: PERSONAL_OWNER_ID,
       event_type: "task.cancelled",
       payload: { cooperative: true, stage: "device_finalization" },
     });
+    if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
     return true;
   }
 
