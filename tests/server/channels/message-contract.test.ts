@@ -38,7 +38,8 @@ test("rejects unlinked/invalid identity fields, control characters, and invalid 
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, externalUserId: "user\nforged" }).ok, false);
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, conversationId: "" }).ok, false);
   assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "yesterday" }).ok, false);
-  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-99-99T30:61:61Z" }).ok, false);\n  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-02-31T12:00:00Z" }).ok, false);
+  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-99-99T30:61:61Z" }).ok, false);
+  assert.equal(parseNormalizedChannelMessageV1({ ...validMessage, receivedAt: "2026-02-31T12:00:00Z" }).ok, false);
 });
 
 test("bounds text and rejects empty messages", () => {
