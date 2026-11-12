@@ -1,6 +1,7 @@
 import { verifyOwnerRequest } from "../security/owner-auth";
 import { TOOL_CATALOG } from "../tools/registry";
-import { executeMcpTool } from "./tools";\nimport { listRemoteAgentToolsSafe } from "./remote";
+import { executeMcpTool } from "./tools";
+import { listRemoteAgentToolsSafe } from "./remote";
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2026-07-28", "2025-11-25"] as const;
 const SERVER_INFO = { name: "futuristic-system-mcp", version: "0.2.0" };
