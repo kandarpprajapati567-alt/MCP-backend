@@ -138,7 +138,76 @@ export default function AgentLabPage() {
     setSuiteResults((current) => [...current.filter((item) => item.name !== (deterministicChecks.find((check) => check.id === checkId)?.name ?? "Tool permission boundary"))]);
     try {
       let result: SuiteResult;
-      if (checkId === "permission_boundary") {
+      if (checkId === "idempotency") {
+        const assignedCheck = deterministicChecks.find((check) => selectedAgent.allowed_tools?.includes(check.tool));
+        if (!assignedCheck) {
+          result = { name: "Task idempotency", status: "skipped", detail: "Assign at least one deterministic text tool to this Agent before testing task replay." };
+        } else {
+          const key = crypto.randomUUID();
+          const body = JSON.stringify({ task: assignedCheck.prompt, agentId: selectedAgent.id });
+          const firstResponse = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": key },
+            body,
+          });
+          const firstData = await firstResponse.json();
+          if (!firstResponse.ok || typeof firstData.taskId !== "string") {
+            result = { name: "Task idempotency", status: "failed", detail: firstData.error ?? "The initial idempotent task could not be created." };
+          } else {
+            const replayResponse = await api("/api/v1/agent/tasks", {
+              method: "POST",
+              headers: { "Idempotency-Key": key },
+              body,
+            });
+            const replayData = await replayResponse.json();
+            const mismatchResponse = await api("/api/v1/agent/tasks", {
+              method: "POST",
+              headers: { "Idempotency-Key": key },
+              body: JSON.stringify({ task: assignedCheck.prompt + " mismatch", agentId: selectedAgent.id }),
+            });
+            const mismatchData = await mismatchResponse.json();
+            const passed = replayResponse.ok &&
+              replayData.replayed === true &&
+              replayData.taskId === firstData.taskId &&
+              mismatchResponse.status === 409;
+            result = {
+              name: "Task idempotency",
+              status: passed ? "passed" : "failed",
+              detail: passed
+                ? "Same key + same request replayed the original task; changed request with that key was rejected (409). Task " + firstData.taskId + "."
+                : "Replay or key-reuse protection failed. Replay status: " + replayResponse.status + "; mismatch status: " + mismatchResponse.status + "; " + (mismatchData.error ?? replayData.error ?? "Unexpected response."),
+            };
+          }
+        }
+      } else if (checkId === "cancellation_guard") {
+        const assignedCheck = deterministicChecks.find((check) => selectedAgent.allowed_tools?.includes(check.tool));
+        if (!assignedCheck) {
+          result = { name: "Cancellation safety", status: "skipped", detail: "Assign at least one deterministic text tool to this Agent before testing terminal-task protection." };
+        } else {
+          const createResponse = await api("/api/v1/agent/tasks", {
+            method: "POST",
+            headers: { "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({ task: assignedCheck.prompt, agentId: selectedAgent.id }),
+          });
+          const created = await createResponse.json();
+          if (!createResponse.ok || created.status !== "completed" || typeof created.taskId !== "string") {
+            result = { name: "Cancellation safety", status: "failed", detail: created.error ?? "Could not create a completed fixture task; observed status: " + String(created.status ?? createResponse.status) + "." };
+          } else {
+            const cancelResponse = await api("/api/v1/agent/tasks/" + created.taskId + "/cancel", { method: "POST" });
+            const cancelled = await cancelResponse.json();
+            const passed = cancelResponse.status === 409 &&
+              cancelled.status === "completed" &&
+              cancelled.cancelled === false;
+            result = {
+              name: "Cancellation safety",
+              status: passed ? "passed" : "failed",
+              detail: passed
+                ? "The real cancellation endpoint refused to alter an already-completed task (HTTP 409). Task " + created.taskId + "."
+                : "Terminal-task protection failed. HTTP " + cancelResponse.status + "; observed status: " + String(cancelled.status ?? "unknown") + "; " + (cancelled.error ?? cancelled.message ?? "Unexpected response."),
+            };
+          }
+        }
+      } else if (checkId === "permission_boundary") {
         const denied = deterministicChecks.find((check) => !selectedAgent.allowed_tools?.includes(check.tool));
         if (!denied) {
           result = { name: "Tool permission boundary", status: "skipped", detail: "All tested local tools are assigned. Remove one tool from this Agent to verify denial." };
@@ -172,9 +241,20 @@ export default function AgentLabPage() {
       setSuiteResults((current) => [...current.filter((item) => item.name !== result.name), result]);
       setMessage(result.name + ": " + result.status.toUpperCase() + " — " + result.detail);
       if (result.status === "failed") setError(result.name + " failed. Inspect its report and task history.");
-      await refresh();
+      await refresh().catch(() => undefined);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The selected test could not complete.");
+      const detail = cause instanceof Error ? cause.message : "The selected test could not complete.";
+      const names: Record<string, string> = {
+        word_count: "Word count",
+        keyword_extraction: "Keyword extraction",
+        text_statistics: "Text statistics",
+        permission_boundary: "Tool permission boundary",
+        idempotency: "Task idempotency",
+        cancellation_guard: "Cancellation safety",
+      };
+      const name = names[checkId] ?? "Agent test";
+      setSuiteResults((current) => [...current.filter((item) => item.name !== name), { name, status: "failed", detail }]);
+      setError(name + " failed: " + detail);
     } finally { setActiveTest(null); }
   }
 
@@ -187,6 +267,8 @@ export default function AgentLabPage() {
     try {
       for (const check of deterministicChecks) await runDeterministicCheck(check.id);
       await runDeterministicCheck("permission_boundary");
+      await runDeterministicCheck("idempotency");
+      await runDeterministicCheck("cancellation_guard");
       setMessage("Test run finished. Review each individual result below; skipped tests are not counted as passed.");
       await refresh();
     } finally { setSuiteBusy(false); }
@@ -280,6 +362,14 @@ export default function AgentLabPage() {
                 <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
                   <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Tool permission boundary</p><p className="mt-1 text-[10px] text-zinc-500">Verify an unassigned tool is rejected</p>{suiteResults.find((item) => item.name === "Tool permission boundary") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Tool permission boundary")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Tool permission boundary")?.detail}</p>}</div>
                   <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock"} onClick={() => void runDeterministicCheck("permission_boundary")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "permission_boundary" ? "Testing…" : "Test"}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Task idempotency</p><p className="mt-1 text-[10px] text-zinc-500">Replay same key; reject changed payload</p>{suiteResults.find((item) => item.name === "Task idempotency") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Task idempotency")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Task idempotency")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !deterministicChecks.some((check) => selectedAgent.allowed_tools?.includes(check.tool))} onClick={() => void runDeterministicCheck("idempotency")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "idempotency" ? "Testing…" : "Test"}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 p-3">
+                  <div className="min-w-0"><p className="text-xs font-medium text-zinc-100">Cancellation safety</p><p className="mt-1 text-[10px] text-zinc-500">Completed tasks must remain terminal</p>{suiteResults.find((item) => item.name === "Cancellation safety") && <p className="mt-1 text-[10px] text-zinc-400">{suiteResults.find((item) => item.name === "Cancellation safety")?.status.toUpperCase()} · {suiteResults.find((item) => item.name === "Cancellation safety")?.detail}</p>}</div>
+                  <button type="button" disabled={suiteBusy || activeTest !== null || busy || !selectedAgent || selectedAgent.provider_preference !== "mock" || !deterministicChecks.some((check) => selectedAgent.allowed_tools?.includes(check.tool))} onClick={() => void runDeterministicCheck("cancellation_guard")} className="shrink-0 rounded-lg border border-cyan-900/70 px-3 py-2 text-[11px] font-semibold text-cyan-200 disabled:opacity-40">{activeTest === "cancellation_guard" ? "Testing…" : "Test"}</button>
                 </div>
               </div>
               {suiteResults.length > 0 && <div className="mt-3 rounded-lg border border-border/70 p-3"><p className="text-xs font-semibold text-zinc-200">Latest test report</p><ol className="mt-2 space-y-2">{suiteResults.map((item) => <li key={item.name} className="flex items-start justify-between gap-3 text-xs"><span className="text-zinc-300">{item.name}<span className="mt-1 block text-[11px] text-zinc-500">{item.detail}</span></span><span className={"shrink-0 rounded-full px-2 py-1 text-[10px] " + (item.status === "passed" ? "bg-emerald-500/15 text-emerald-300" : item.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-zinc-800 text-zinc-400")}>{item.status.toUpperCase()}</span></li>)}</ol></div>}
