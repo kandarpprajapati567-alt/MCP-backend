@@ -63,14 +63,20 @@ export function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpToo
         !["string", "number", "integer", "boolean"].includes(String(schema.type))) return null;
     const type = schema.type;
     if (type === "string") {
-      const maxLength = typeof schema.maxLength === "number" ? Math.min(4000, Math.max(1, schema.maxLength)) : 2000;
-      const minLength = typeof schema.minLength === "number" ? Math.max(0, Math.min(maxLength, schema.minLength)) : 0;
+      if ((schema.maxLength !== undefined && (typeof schema.maxLength !== "number" || !Number.isInteger(schema.maxLength) || schema.maxLength < 1)) ||
+          (schema.minLength !== undefined && (typeof schema.minLength !== "number" || !Number.isInteger(schema.minLength) || schema.minLength < 0))) return null;
+      const maxLength = typeof schema.maxLength === "number" ? Math.min(4000, schema.maxLength) : 2000;
+      const minLength = typeof schema.minLength === "number" ? schema.minLength : 0;
+      if (minLength > maxLength) return null;
       properties[key] = { type, maxLength, minLength };
     } else if (type === "number" || type === "integer") {
+      if ((schema.minimum !== undefined && (typeof schema.minimum !== "number" || !Number.isFinite(schema.minimum))) ||
+          (schema.maximum !== undefined && (typeof schema.maximum !== "number" || !Number.isFinite(schema.maximum))) ||
+          (typeof schema.minimum === "number" && typeof schema.maximum === "number" && schema.minimum > schema.maximum)) return null;
       properties[key] = {
         type,
-        ...(typeof schema.minimum === "number" && Number.isFinite(schema.minimum) ? { minimum: schema.minimum } : {}),
-        ...(typeof schema.maximum === "number" && Number.isFinite(schema.maximum) ? { maximum: schema.maximum } : {}),
+        ...(typeof schema.minimum === "number" ? { minimum: schema.minimum } : {}),
+        ...(typeof schema.maximum === "number" ? { maximum: schema.maximum } : {}),
       };
     } else {
       properties[key] = { type: "boolean" };
