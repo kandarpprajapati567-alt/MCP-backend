@@ -137,10 +137,10 @@ export function parseAgentPlan(
   allowedTools: readonly AgentAvailableTool[] = DEFAULT_TOOLS,
   limits: { maxSteps?: number; maxToolCalls?: number } = {},
 ): PlanParseResult {
-  const maxSteps = limits.maxSteps ?? 8;
-  const maxToolCalls = limits.maxToolCalls ?? 4;
-  if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 8 ||
-      !Number.isInteger(maxToolCalls) || maxToolCalls < 0 || maxToolCalls > 4) {
+  const maxSteps = limits.maxSteps ?? 16;
+  const maxToolCalls = limits.maxToolCalls ?? 8;
+  if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 16 ||
+      !Number.isInteger(maxToolCalls) || maxToolCalls < 0 || maxToolCalls > 8) {
     return { ok: false, error: "Agent execution limits are invalid." };
   }
   if (!isRecord(value) || !hasExactKeys(value, ["version", "goal", "steps", "toolCalls"])) {
@@ -161,8 +161,8 @@ export function parseAgentPlan(
       return { ok: false, error: "Each step must contain only id, objective, and expectedOutcome." };
     }
     const { id, objective, expectedOutcome } = raw;
-    if (typeof id !== "string" || !/^step-[1-8]$/.test(id) || seen.has(id)) {
-      return { ok: false, error: "Step IDs must be unique values from step-1 through step-8." };
+    if (typeof id !== "string" || !/^step-(?:[1-9]|1[0-6])$/.test(id) || seen.has(id)) {
+      return { ok: false, error: "Step IDs must be unique values from step-1 through step-16." };
     }
     if (typeof objective !== "string" || !objective.trim() || objective.length > 500) {
       return { ok: false, error: "Each objective must be between 1 and 500 characters." };
@@ -185,8 +185,8 @@ export function parseAgentPlan(
     if (!isRecord(raw) || !hasExactKeys(raw, ["id", "toolId", "arguments"])) {
       return { ok: false, error: "Tool calls must contain only id, toolId, and arguments." };
     }
-    if (typeof raw.id !== "string" || !/^call-[1-4]$/.test(raw.id) || callIds.has(raw.id)) {
-      return { ok: false, error: "Tool call IDs must be unique call-1 through call-4." };
+    if (typeof raw.id !== "string" || !/^call-[1-8]$/.test(raw.id) || callIds.has(raw.id)) {
+      return { ok: false, error: "Tool call IDs must be unique call-1 through call-8." };
     }
     if (typeof raw.toolId !== "string" || !allowed.has(raw.toolId)) {
       return { ok: false, error: "Plan requested a tool that is not currently available." };
