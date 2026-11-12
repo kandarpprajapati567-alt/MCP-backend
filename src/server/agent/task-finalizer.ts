@@ -5,6 +5,7 @@ import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/r
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 
@@ -111,8 +112,8 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     result = synthesis.route.providerId === "mock"
-      ? "Device execution finished. AI synthesis is unavailable; verified results are preserved below.\n" + JSON.stringify(toolResults, null, 2)
-      : synthesis.result.text;
+      ? "AI synthesis unavailable. No model-generated conclusion was produced. Raw device tool outcomes follow; they are observations and are not independently verified.\n" + JSON.stringify(toolResults, null, 2)
+      : guardSynthesisAnswer(synthesis.result.text, toolResults);
   } catch (error) {
     const message = safeAgentFailureMessage(error);
     const now = new Date().toISOString();
