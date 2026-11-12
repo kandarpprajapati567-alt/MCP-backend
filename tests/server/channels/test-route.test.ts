@@ -24,8 +24,8 @@ test("channel Test Center endpoint runs the real selected contract checks for ow
     }));
     const data = await response.json() as { summary: { total: number; passed: number; failed: number }; results: Array<{ status: string }> };
     assert.equal(response.status, 200);
-    assert.equal(data.summary.total, 5);
-    assert.equal(data.summary.passed, 5);
+    assert.equal(data.summary.total, 8);
+    assert.equal(data.summary.passed, 8);
     assert.equal(data.summary.failed, 0);
     assert.ok(data.results.every((result) => result.status === "passed"));
   } finally {
