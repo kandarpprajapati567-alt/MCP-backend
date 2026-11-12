@@ -4,7 +4,7 @@ import {
   CHANNEL_MESSAGE_MAX_TEXT_LENGTH,
   createChannelEventDeduplicationKey,
   createChannelSessionScopeKey,
-  parseNormalizedChannelMessageV1,
+  parseNormalizedChannelMessageV1,\n  runChannelContractSelfTests,
   type NormalizedChannelMessageV1,
 } from "../../../src/server/channels/message-contract";
 
@@ -70,4 +70,13 @@ test("rejects non-object input", () => {
   assert.equal(parseNormalizedChannelMessageV1(null).ok, false);
   assert.equal(parseNormalizedChannelMessageV1([]).ok, false);
   assert.equal(parseNormalizedChannelMessageV1("message").ok, false);
+});
+
+
+test("owner Test Center self-tests execute every channel contract check", () => {
+  const results = runChannelContractSelfTests();
+  assert.equal(results.length, 5);
+  assert.ok(results.every((result) => result.status === "passed"));
+  assert.equal(runChannelContractSelfTests("session_isolation")[0]?.status, "passed");
+  assert.equal(runChannelContractSelfTests("unknown" as never).length, 0);
 });
