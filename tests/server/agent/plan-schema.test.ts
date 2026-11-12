@@ -68,7 +68,7 @@ test("validates nested objects and array items instead of accepting unchecked co
           type: "array",
           minItems: 1,
           maxItems: 2,
-          items: { type: "string", pattern: "^[a-z0-9-]+$" },
+          items: { type: "string", enum: ["sensor-1", "sensor-2"] },
         },
       },
       required: ["settings", "targets"],
@@ -102,7 +102,7 @@ test("validates nested objects and array items instead of accepting unchecked co
 
   assert.equal(parseAgentPlan(makePlan({
     settings: { mode: "safe" },
-    targets: ["sensor one"],
+    targets: ["unknown-sensor"],
   }), available).ok, false);
 
   assert.equal(parseAgentPlan(makePlan({
