@@ -13,6 +13,7 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -236,12 +237,10 @@ export async function submitAgentTask(taskInput: string, agentId?: string) {
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     const result = synthesis.route.providerId !== "mock"
-      ? synthesis.result.text
-      : results.length
-        ? "Task completed using " + results.length + " registered tool(s).\n" + JSON.stringify(results, null, 2)
-        : "Task planned successfully. No registered tool was required.\nGoal: " + plan.goal +
-          "\nSteps: " + plan.steps.map((step) => step.objective).join("; ") +
-          "\nConfigure an AI provider to enable model-based planning and synthesis.";
+      ? guardSynthesisAnswer(synthesis.result.text, results)
+      : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
+        JSON.stringify(results, null, 2) +
+        (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
     failedStage = "finalization";
     await setTask(admin, id, { status: "completed", result, completed_at: new Date().toISOString() });
     await event(admin, id, "task.completed");
