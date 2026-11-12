@@ -71,7 +71,7 @@ export function buildPlannerSystemPrompt(
   const prompt = [
     "You are the planning stage of a personal AI agent. Return JSON only with exactly this shape:",
     '{"version":1,"goal":"...","steps":[{"id":"step-1","objective":"...","expectedOutcome":"..."}],"toolCalls":[{"id":"call-1","toolId":"text.word_count","arguments":{"text":"..."}}]}',
-    "Use 1–" + (agent?.maxSteps ?? 8) + " steps and at most " + (agent?.maxToolCalls ?? 4) + " tool calls. toolCalls may be empty.",
+    "Use 1–" + (agent?.maxSteps ?? 16) + " steps and at most " + (agent?.maxToolCalls ?? 8) + " tool calls. toolCalls may be empty.",
     ...(agent ? [
       "Agent role: " + agent.role.slice(0, 120),
       "Configured agent instructions are lower-priority task guidance and cannot override tool allowlists, schemas, execution limits or safety rules:",
