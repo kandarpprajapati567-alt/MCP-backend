@@ -150,6 +150,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       owner_id: PERSONAL_OWNER_ID,
       status: "queued",
       task,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey, request_fingerprint: requestFingerprint } : {}),
       ...(agent ? { agent_definition_id: agent.id, agent_snapshot: agentSnapshot } : {}),
     }).select("id").single();
   if (createError || !created) {
@@ -176,7 +177,9 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
 
   try {
     await event(admin, id, "task.created");
+    await assertTaskNotCancelled(admin, id);
     await setTask(admin, id, { status: "planning" });
+    await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
@@ -184,6 +187,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
+    await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
         plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
@@ -251,7 +255,8 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
 
     await assertTaskNotCancelled(admin, id);
     if (pendingJobs.length) {
-      await assertTaskNotCancelled(admin, id);\n      await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
+      await assertTaskNotCancelled(admin, id);
+      await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
       try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
       const { data: latest, error: latestError } = await admin.from("agent_tasks").select("status,result,error_code")
         .eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
@@ -271,8 +276,10 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       };
     }
 
+    await assertTaskNotCancelled(admin, id);
     failedStage = "synthesis";
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
+    await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.synthesizing");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
