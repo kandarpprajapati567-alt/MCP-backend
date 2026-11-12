@@ -23,7 +23,8 @@ export async function createAgentPlan(
     throw new Error("Task must be between 1 and 4000 characters.");
   }
 
-  const { listRemoteAgentToolsSafe } = await import("../mcp/remote");\n  const remoteTools = await listRemoteAgentToolsSafe();
+  const { listRemoteAgentToolsSafe } = await import("../mcp/remote");
+  const remoteTools = await listRemoteAgentToolsSafe();
   const registeredTools = [
     ...TOOL_CATALOG.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
     ...remoteTools.map((tool) => ({ id: tool.id, inputSchema: tool.inputSchema, description: tool.description })),
