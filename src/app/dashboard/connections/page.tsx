@@ -18,6 +18,7 @@ export default function ConnectionsPage() {
   const [remoteEndpoint, setRemoteEndpoint] = useState("");
   const [remoteToken, setRemoteToken] = useState("");
   const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([]);
+  const [testingServerId, setTestingServerId] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
     return fetch(path, { ...init, cache: "no-store", headers: {
@@ -64,6 +65,22 @@ export default function ConnectionsPage() {
       await refresh(); setMessage("Remote MCP connected. " + (data.tools?.length ?? 0) + " read-only tool(s) discovered.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Remote MCP connection failed."); }
     finally { setBusy(false); }
+  }
+
+  async function testRemoteMcp(server: RemoteServer) {
+    setTestingServerId(server.id); setError(""); setMessage("");
+    try {
+      const response = await request("/api/v1/connections/remote-mcp", {
+        method: "POST",
+        body: JSON.stringify({ action: "test", serverId: server.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.connected !== true) throw new Error(data.error ?? "Remote MCP connection test failed.");
+      await refresh();
+      setMessage(server.name + " connection test passed. " + (data.tools?.length ?? 0) + " read-only tool(s) discovered.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Remote MCP connection test failed.");
+    } finally { setTestingServerId(""); }
   }
 
   async function disconnectRemoteMcp(server: RemoteServer) {
@@ -126,7 +143,7 @@ export default function ConnectionsPage() {
       </form>
       <p className="text-xs text-amber-300/80">HTTPS port 443 only · public IPv4 DNS only · no redirects · 12-second timeout · 1 MB response cap. Write-capable or unannotated tools are excluded.</p>
       {remoteServers.map((server) => <div key={server.id} className="space-y-2 rounded-xl border border-border/80 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-white">{server.name}</p><p className="mt-1 break-all text-xs text-zinc-500">{server.endpoint}</p></div><button type="button" disabled={busy} onClick={() => void disconnectRemoteMcp(server)} className="rounded-lg border border-red-900/60 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Disconnect</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-white">{server.name}</p><p className="mt-1 break-all text-xs text-zinc-500">{server.endpoint}</p></div><div className="flex gap-2"><button type="button" disabled={busy || testingServerId === server.id} onClick={() => void testRemoteMcp(server)} className="rounded-lg border border-cyan-800 px-3 py-2 text-xs text-cyan-200 disabled:opacity-40">{testingServerId === server.id ? "Testing…" : "Test connection"}</button><button type="button" disabled={busy || !!testingServerId} onClick={() => void disconnectRemoteMcp(server)} className="rounded-lg border border-red-900/60 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Disconnect</button></div></div>
         <p className="text-xs text-zinc-500">{server.tools.length} read-only tool(s) discovered</p>
         <div className="flex flex-wrap gap-2">{server.tools.map((tool) => <code key={tool.id} title={tool.description} className="rounded-md bg-black/40 px-2 py-1 text-xs text-cyan-200">{tool.id}</code>)}</div>
       </div>)}
