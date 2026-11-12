@@ -40,3 +40,10 @@ test("rejects unknown fields instead of silently ignoring misspelled policy", ()
     error: "Agent definition contains unsupported fields.",
   });
 });
+
+test("accepts the expanded but bounded Agent execution capacity", () => {
+  const parsed = parseAgentDefinition({ ...valid, maxSteps: 16, maxToolCalls: 8 });
+  assert.equal(parsed.ok, true);
+  assert.equal(parseAgentDefinition({ ...valid, maxSteps: 17 }).ok, false);
+  assert.equal(parseAgentDefinition({ ...valid, maxToolCalls: 9 }).ok, false);
+});
