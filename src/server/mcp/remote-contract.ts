@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 type JsonRecord = Record<string, unknown>;
 type RemoteInputSchema = {
   type: "object";
