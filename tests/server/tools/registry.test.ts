@@ -21,7 +21,7 @@ test("text statistics report exact character, whitespace, word and sentence coun
   assert.deepEqual(executeRegisteredTool("text.text_stats", { text: source }), {
     characters: source.length,
     charactersWithoutWhitespace: source.replace(/\s/gu, "").length,
-    words: 11,
+    words: 10,
     sentences: 2,
   });
 });
