@@ -38,12 +38,13 @@ export function isValidCapabilityManifestEntry(
   if (value.runtime !== "web" && value.runtime !== "android") return false;
   if (!Number.isInteger(value.manifestVersion) || (value.manifestVersion as number) < 1) return false;
   if (!isBoundedText(value.description, 500)) return false;
-  if (!isRecord(value.inputSchema) || value.inputSchema.type !== "object" ||
-      !isRecord(value.inputSchema.properties) || value.inputSchema.additionalProperties !== false) return false;
-  if (jsonByteLength(value.inputSchema) > MAX_SCHEMA_BYTES) return false;
-  if (value.inputSchema.required !== undefined &&
-      (!Array.isArray(value.inputSchema.required) ||
-       value.inputSchema.required.some((item) => typeof item !== "string" || !Object.hasOwn(value.inputSchema!.properties as object, item)))) return false;
+  const schema = value.inputSchema;
+  if (!isRecord(schema) || schema.type !== "object" ||
+      !isRecord(schema.properties) || schema.additionalProperties !== false) return false;
+  if (jsonByteLength(schema) > MAX_SCHEMA_BYTES) return false;
+  if (schema.required !== undefined &&
+      (!Array.isArray(schema.required) ||
+       schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(schema.properties, item)))) return false;
   if (!Array.isArray(value.requiredPermissions) || value.requiredPermissions.length > 32 ||
       value.requiredPermissions.some((permission) => !isBoundedText(permission, 100))) return false;
   return typeof value.sideEffect === "boolean" &&
@@ -76,10 +77,10 @@ export function isValidInvocationResult(value: unknown): value is AgentInvocatio
   if (!["completed", "failed", "denied", "expired", "cancelled"].includes(String(value.status))) return false;
   if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return false;
   if (value.errorCode !== undefined && !isBoundedText(value.errorCode, 100)) return false;
-  if (value.evidence !== undefined && (!Array.isArray(value.evidence) || value.evidence.length > MAX_EVIDENCE_ITEMS ||
+  if (!Array.isArray(value.evidence) || value.evidence.length > MAX_EVIDENCE_ITEMS ||
       value.evidence.some((item) => !isRecord(item) ||
         !isBoundedText(item.kind, 80) || !isBoundedText(item.source, 200) ||
-        !isBoundedText(item.summary, 500)))) return false;
+        !isBoundedText(item.summary, 500))) return false;
   if (value.status !== "completed" && value.result !== undefined) return false;
   return true;
 }
