@@ -51,7 +51,7 @@ export function normalizeRemoteMcpEndpoint(value: unknown): URL {
   let url: URL;
   try { url = new URL(value); } catch { throw new Error("A valid HTTPS MCP endpoint is required."); }
   if (url.protocol !== "https:" || url.username || url.password || url.hash ||
-      (url.port && url.port !== "443") || !url.hostname || isIP(url.hostname) !== 0 ||
+      (url.port && url.port !== "443") || url.search || !url.hostname || isIP(url.hostname) !== 0 ||
       url.hostname === "localhost" || url.hostname.endsWith(".localhost") || url.hostname.endsWith(".local")) {
     throw new Error("Remote MCP endpoints must use a public HTTPS hostname on port 443 without embedded credentials.");
   }
@@ -235,7 +235,7 @@ export async function registerRemoteMcpServer(input: { name: string; endpoint: s
   const { sessionId } = await openRemoteSession(endpoint, input.bearerToken);
   const response = await postRemoteMcp(endpoint, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }, input.bearerToken, sessionId, MCP_PROTOCOL_VERSION);
   const result = rpcResult(response.payload);
-  if (!Array.isArray(result.tools) || result.tools.length > 100) throw new Error("Remote MCP tools/list response is invalid or exceeds 100 tools.");
+  if (!Array.isArray(result.tools) || result.tools.length > 100 || result.nextCursor !== undefined) throw new Error("Remote MCP tools/list response is invalid, paginated, or exceeds the 100-tool limit.");
   const tools = result.tools.map((tool) => sanitizeRemoteTool(serverId, tool)).filter((tool): tool is RemoteMcpTool => tool !== null);
   if (!tools.length) throw new Error("No safe read-only tools were discovered. Only tools explicitly marked readOnlyHint are accepted.");
   const encrypted = input.bearerToken ? encryptProviderSecret(input.bearerToken) : null;
