@@ -47,7 +47,6 @@ export function CompleteSystemTest({ token }: Props) {
     setSummary("");
     const checks: Array<{ id: string; label: string; path: string; validate: (data: any, response: Response) => string | null }> = [
       { id: "health", label: "Website API + database", path: "/api/v1/health", validate: (d, r) => r.ok && d.status === "ok" && d.services?.database === "ok" ? null : `HTTP ${r.status}; status=${d.status ?? "unknown"}; database=${d.services?.database ?? "unknown"}` },
-      { id: "render", label: "Render backend", path: "/api/v1/system/health", validate: (d) => d.reachable && d.body?.status === "ok" ? null : d.error ?? `Backend unavailable or degraded (HTTP ${d.httpStatus ?? "unknown"}).` },
       { id: "tools", label: "Registered tool catalog", path: "/api/v1/tools", validate: (d, r) => r.ok && Array.isArray(d.tools) && d.tools.length > 0 ? null : d.error ?? "Tool catalog missing or empty." },
       { id: "agents", label: "Agent definitions registry", path: "/api/v1/agents", validate: (d, r) => r.ok && Array.isArray(d.agents) ? null : d.error ?? "Agent definitions could not be loaded." },
       { id: "providers", label: "Provider adapters + configuration", path: "/api/v1/ai/providers/health", validate: (d, r) => r.ok && Array.isArray(d.providers) ? null : d.error ?? "Provider diagnostics unavailable." },
@@ -162,7 +161,7 @@ export function CompleteSystemTest({ token }: Props) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300">End-to-end diagnostics</p>
           <h2 className="mt-1 text-lg font-semibold text-white">Complete System Test</h2>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-400">Test backend, database, tools, Agent configuration, providers, connections, devices and task-history access from one place.</p>
+          <p className="mt-1 max-w-2xl text-sm text-zinc-400">Test the website API, database, tools, Agent configuration, providers, connections, devices and task-history access from one place.</p>
         </div>
         <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs text-cyan-200">Owner connected</span>
       </div>
