@@ -100,7 +100,7 @@ export default function AgentsPage() {
 
   function beginCreate() {
     setEditingId(null);
-    setDraft(emptyDraft);
+    setDraft({ ...emptyDraft, allowedTools: tools.filter((tool) => !tool.sideEffect).map((tool) => tool.id) });
     setShowEditor(true);
     setError("");
     setMessage("");
@@ -280,7 +280,10 @@ export default function AgentsPage() {
               </div>
               <fieldset className="space-y-2 rounded-xl border border-border p-3">
                 <legend className="px-1 text-xs text-zinc-400">Allowed tools</legend>
-                <p className="text-xs text-zinc-500">Only selected registered tools can be proposed by this Agent. No selection means tool-free execution.</p>
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-zinc-500">Selected tools are the only tools this Agent may call. New Agents start with registered read-only tools; write/device actions always require explicit selection.</p><button type="button" onClick={() => setDraft({ ...draft, allowedTools: tools.filter((tool) => !tool.sideEffect).map((tool) => tool.id) })} className="rounded-lg border border-border px-3 py-1.5 text-xs text-cyan-200">Select safe read-only tools</button></div>
+                <p className="text-xs font-medium text-cyan-200">{draft.allowedTools.length} of {tools.length} tools selected</p>
+                {tools.length === 0 && <p role="status" className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">No registered tools were returned by the backend. Refresh or check the Tools page before creating this Agent.</p>}
+                {tools.length > 0 && draft.allowedTools.length === 0 && <p role="alert" className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">This Agent is tool-free. Assign at least one tool if it needs to perform tool-based work.</p>}
                 <div className="grid gap-2 sm:grid-cols-2">
                   {tools.map((tool) => (
                     <label key={tool.id} className="flex items-start gap-2 rounded-lg border border-border/70 p-2 text-xs text-zinc-300">
@@ -333,7 +336,8 @@ export default function AgentsPage() {
                     <div className="rounded-lg border border-border p-2"><p className="text-zinc-500">Provider</p><p className="mt-1 capitalize text-zinc-200">{agent.provider_preference}</p></div>
                     <div className="rounded-lg border border-border p-2"><p className="text-zinc-500">Execution limits</p><p className="mt-1 text-zinc-200">{agent.max_steps} steps · {agent.max_tool_calls} calls</p></div>
                   </div>
-                  <p className="mt-3 line-clamp-2 text-xs text-zinc-500">{agent.instructions}</p>
+                  <p className="mt-3 text-xs text-zinc-400">{(agent.allowed_tools ?? []).length} tool(s) assigned{(agent.allowed_tools ?? []).length === 0 ? " · tool-free Agent" : ""}</p>
+                  <p className="mt-2 line-clamp-2 text-xs text-zinc-500">{agent.instructions}</p>
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                     <button type="button" disabled={busy} onClick={() => beginEdit(agent)} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Edit</button>
                     <button type="button" disabled={busy} onClick={() => void toggleAgent(agent)} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">{agent.enabled ? "Pause" : "Enable"}</button>
