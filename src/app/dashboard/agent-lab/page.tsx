@@ -109,6 +109,7 @@ export default function AgentLabPage() {
       if (data.taskId) await openTask(data.taskId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Task execution failed.");
+      await refresh().catch(() => undefined);
     } finally { setBusy(false); }
   }
 
@@ -152,11 +153,13 @@ export default function AgentLabPage() {
       setSuiteResults(results);
       const passedCount = results.filter((item) => item.status === "passed").length;
       const failedCount = results.filter((item) => item.status === "failed").length;
-      setMessage("Deterministic suite finished: " + passedCount + " passed, " + failedCount + " failed, " + results.filter((item) => item.status === "skipped").length + " skipped.");
+      const summary = "Deterministic suite finished: " + passedCount + " passed, " + failedCount + " failed, " + results.filter((item) => item.status === "skipped").length + " skipped.";
+      if (failedCount > 0) setError(summary); else setMessage(summary);
       await refresh();
     } catch (cause) {
       setSuiteResults(results);
       setError(cause instanceof Error ? cause.message : "Deterministic suite could not complete.");
+      await refresh().catch(() => undefined);
     } finally { setSuiteBusy(false); }
   }
 
