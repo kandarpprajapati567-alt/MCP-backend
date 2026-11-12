@@ -39,39 +39,67 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
   return Object.keys(value).length === keys.length && keys.every((key) => key in value);
 }
 
-function validateArguments(schema: AgentAvailableTool["inputSchema"], args: Record<string, unknown>): boolean {
-  if (schema.type !== "object") return false;
-  const properties = schema.properties;
-  const keys = Object.keys(args);
-  if (schema.additionalProperties === false && keys.some((key) => !(key in properties))) return false;
+const MAX_SCHEMA_DEPTH = 8;
 
-  for (const required of schema.required ?? []) {
-    if (!(required in args)) return false;
-  }
+function validateSchemaValue(schema: unknown, value: unknown, depth = 0): boolean {
+  if (!isRecord(schema) || typeof schema.type !== "string" || depth > MAX_SCHEMA_DEPTH) return false;
 
-  for (const [key, value] of Object.entries(args)) {
-    const property = properties[key];
-    if (!isRecord(property) || typeof property.type !== "string") return false;
-    if (property.type === "string") {
+  if (Array.isArray(schema.enum) && !schema.enum.some((candidate) =>
+    JSON.stringify(candidate) === JSON.stringify(value))) return false;
+
+  switch (schema.type) {
+    case "string": {
       if (typeof value !== "string") return false;
-      if (typeof property.maxLength === "number" && value.length > property.maxLength) return false;
-      if (typeof property.minLength === "number" && value.length < property.minLength) return false;
-    } else if (property.type === "number" || property.type === "integer") {
-      if (typeof value !== "number" || !Number.isFinite(value)) return false;
-      if (property.type === "integer" && !Number.isInteger(value)) return false;
-      if (typeof property.minimum === "number" && value < property.minimum) return false;
-      if (typeof property.maximum === "number" && value > property.maximum) return false;
-    } else if (property.type === "boolean") {
-      if (typeof value !== "boolean") return false;
-    } else if (property.type === "object") {
-      if (!isRecord(value)) return false;
-    } else if (property.type === "array") {
-      if (!Array.isArray(value)) return false;
-    } else {
-      return false;
+      if (typeof schema.minLength === "number" && value.length < schema.minLength) return false;
+      if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return false;
+      if (typeof schema.pattern === "string") {
+        try {
+          if (!new RegExp(schema.pattern, "u").test(value)) return false;
+        } catch {
+          return false;
+        }
+      }
+      return true;
     }
+    case "number":
+    case "integer": {
+      if (typeof value !== "number" || !Number.isFinite(value)) return false;
+      if (schema.type === "integer" && !Number.isInteger(value)) return false;
+      if (typeof schema.minimum === "number" && value < schema.minimum) return false;
+      if (typeof schema.maximum === "number" && value > schema.maximum) return false;
+      return true;
+    }
+    case "boolean":
+      return typeof value === "boolean";
+    case "object": {
+      if (!isRecord(value)) return false;
+      const properties = isRecord(schema.properties) ? schema.properties : {};
+      const keys = Object.keys(value);
+      if (schema.additionalProperties === false && keys.some((key) => !(key in properties))) return false;
+      if (typeof schema.minProperties === "number" && keys.length < schema.minProperties) return false;
+      if (typeof schema.maxProperties === "number" && keys.length > schema.maxProperties) return false;
+      const required = Array.isArray(schema.required) ? schema.required : [];
+      if (required.some((key) => typeof key !== "string" || !(key in value))) return false;
+      return Object.entries(value).every(([key, child]) => {
+        const childSchema = properties[key];
+        if (childSchema === undefined) return schema.additionalProperties !== false;
+        return validateSchemaValue(childSchema, child, depth + 1);
+      });
+    }
+    case "array": {
+      if (!Array.isArray(value)) return false;
+      if (typeof schema.minItems === "number" && value.length < schema.minItems) return false;
+      if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return false;
+      if (schema.items === undefined) return true;
+      return value.every((item) => validateSchemaValue(schema.items, item, depth + 1));
+    }
+    default:
+      return false;
   }
+}
 
+function validateArguments(schema: AgentAvailableTool["inputSchema"], args: Record<string, unknown>): boolean {
+  if (schema.type !== "object" || !validateSchemaValue(schema, args)) return false;
   try {
     return Buffer.byteLength(JSON.stringify(args), "utf8") <= 16000;
   } catch {
