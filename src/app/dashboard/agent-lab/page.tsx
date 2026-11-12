@@ -187,11 +187,6 @@ export default function AgentLabPage() {
     try {
       for (const check of deterministicChecks) await runDeterministicCheck(check.id);
       await runDeterministicCheck("permission_boundary");
-      const finalResults = [
-        ...deterministicChecks.map((check) => ({ id: check.id, name: check.name })),
-        { id: "permission_boundary", name: "Tool permission boundary" },
-      ];
-      const passed = finalResults.filter((item) => suiteResults.find((result) => result.name === item.name)?.status === "passed").length;
       setMessage("Test run finished. Review each individual result below; skipped tests are not counted as passed.");
       await refresh();
     } finally { setSuiteBusy(false); }
