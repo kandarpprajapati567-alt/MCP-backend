@@ -45,6 +45,15 @@ Each task/agent/release is assessed separately across: safety and permissions; p
 
 A level is blocked if any mandatory safety dimension fails, regardless of average score. Non-safety scores must not compensate for a security failure.
 
+
+
+### Current lifecycle hardening in PR #30 (not yet deployed)
+
+- Optional owner-scoped idempotency keys bind one key to a SHA-256 fingerprint of the normalized task and selected Agent. Reusing a key for different work is rejected; repeated matching requests return the existing task.
+- Cancellation requests are persisted in the database. Queued and device-waiting tasks can be cancelled immediately; active inline execution checks cancellation between tool calls and before final completion.
+- Cancellation cannot interrupt an external provider or tool call that is already in flight. Claimed device jobs may still finish; their results remain auditable and do not revive a cancelled task.
+- Both capabilities require their forward Supabase migrations. Their presence in this branch is not proof that the live database has applied them.
+
 ## Evidence record
 
 Every certification run should store suite ID/version, agent version, policy version, tool registry version, source commit, deployment identifier, timestamps, environment, each check status (passed/failed/skipped/not applicable), redacted failure details, evidence references, evaluator version, deterministic test seed where applicable, resulting level, previous level, and explicit blockers.
@@ -75,9 +84,9 @@ Never store raw credentials, full authorization headers, passkeys, or unredacted
 Repository inspection found existing modules for agent definitions, planner, plan schema, sequential tool execution, task persistence/events, synthesis, device tool jobs, and finalization. These are useful foundations, but the presence of a module is not proof that the end-to-end system is secure or reliable.
 
 Known constraints observed in the current code include:
-- Agent definitions currently cap plans at 8 steps and 4 tool calls.
+- Agent definitions currently support bounded plans of up to 16 steps and 8 registered tool calls; tool calls execute sequentially.
 - The local fallback planner recognizes only a small set of text-processing intents; it is not a general-purpose offline planner.
-- The task submission route currently performs task work inline; long-running execution and cancellation need a deliberate durable-worker design.
+- Task submission still performs planning, backend tool execution and synthesis inline in the API request. The current PR adds optional idempotency keys and cooperative cancellation checkpoints, but a durable background worker, task lease/claim lifecycle, automatic retry policy and full-plan crash recovery remain unimplemented.
 - Device tools are discovered from recent online device capability records; capability metadata must be treated as untrusted and validated at the execution boundary.
 - Provider mock mode must never be represented as a real model execution.
 
