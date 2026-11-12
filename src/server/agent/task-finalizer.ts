@@ -106,7 +106,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         { role: "user", content: buildSynthesisUserContent(String(task.task ?? ""), task.plan, toolResults) },
       ],
       temperature: 0.2,
-      maxOutputTokens: 1400,
+      maxOutputTokens: 1800,
     };
     const synthesis = snapshot
       ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
