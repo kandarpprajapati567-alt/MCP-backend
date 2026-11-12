@@ -68,7 +68,9 @@ export function guardSynthesisAnswer(
     ...(removedUrls > 0 ? [String(removedUrls) + " URL(s) not present in tool evidence were removed."] : []),
   ];
 
+  const outcomeNotice = executionOutcomeNotice(toolResults);
   return [
+    ...(outcomeNotice ? [outcomeNotice] : []),
     "Evidence status: " + status,
     ...limitations,
     "",
