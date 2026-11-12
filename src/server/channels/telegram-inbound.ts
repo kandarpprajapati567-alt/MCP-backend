@@ -69,8 +69,8 @@ export function parseTelegramPrivateTextUpdate(input: unknown): TelegramParseRes
   }
   const sender = from as Record<string, unknown>;
   const conversation = chat as Record<string, unknown>;
-  if (Object.keys(sender).some((key) => !["id", "is_bot"].includes(key)) ||
-      Object.keys(conversation).some((key) => !["id", "type"].includes(key))) {
+  if (Object.keys(sender).some((key) => !["id", "is_bot", "first_name", "last_name", "username", "language_code", "is_premium", "added_to_attachment_menu"].includes(key)) ||
+      Object.keys(conversation).some((key) => !["id", "type", "first_name", "last_name", "username"].includes(key))) {
     return { ok: false, error: "Unsupported Telegram identity fields." };
   }
   if (!Number.isSafeInteger(sender.id) || (sender.id as number) <= 0 ||
