@@ -154,3 +154,35 @@ test("accepts expanded plans up to sixteen steps and eight registered tool calls
   assert.equal(parseAgentPlan({ ...validPlan, steps: [...steps, { ...steps[0], id: "step-17" }] }).ok, false);
   assert.equal(parseAgentPlan({ ...validPlan, toolCalls: [...toolCalls, { ...toolCalls[0], id: "call-9" }] }).ok, false);
 });
+
+
+test("rejects adversarially deep schemas and malformed numeric constraints", () => {
+  let nestedSchema: Record<string, unknown> = { type: "string", maxLength: 10 };
+  let nestedValue: unknown = "safe";
+  for (let index = 0; index < 10; index += 1) {
+    nestedSchema = { type: "object", properties: { child: nestedSchema }, required: ["child"], additionalProperties: false };
+    nestedValue = { child: nestedValue };
+  }
+  const deepTool = [{ id: "device.deep", inputSchema: { type: "object" as const, properties: { payload: nestedSchema }, required: ["payload"], additionalProperties: false } }];
+  const deepPlan = { ...validPlan, toolCalls: [{ id: "call-1", toolId: "device.deep", arguments: { payload: nestedValue } }] };
+  assert.equal(parseAgentPlan(deepPlan, deepTool).ok, false);
+
+  const malformedTool = [{ id: "device.bounds", inputSchema: {
+    type: "object" as const,
+    properties: { count: { type: "integer", minimum: "0", maximum: 5 } },
+    required: ["count"],
+    additionalProperties: false,
+  } }];
+  const malformedPlan = { ...validPlan, toolCalls: [{ id: "call-1", toolId: "device.bounds", arguments: { count: 2 } }] };
+  assert.equal(parseAgentPlan(malformedPlan, malformedTool).ok, false);
+});
+
+test("rejects oversized serialized tool arguments and cyclic argument objects", () => {
+  const large = { ...validPlan, toolCalls: [{ id: "call-1", toolId: "text.word_count", arguments: { text: "x".repeat(12000) + " ".repeat(5000) } }] };
+  assert.equal(parseAgentPlan(large).ok, false);
+
+  const cyclic: Record<string, unknown> = { text: "safe" };
+  cyclic.self = cyclic;
+  const cyclicPlan = { ...validPlan, toolCalls: [{ id: "call-1", toolId: "text.word_count", arguments: cyclic }] };
+  assert.equal(parseAgentPlan(cyclicPlan).ok, false);
+});
