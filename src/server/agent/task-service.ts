@@ -319,7 +319,15 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       result,
     };
   } catch (error) {
-    if (error instanceof AgentTaskCancelledError) {
+    let cancellationRequested = error instanceof AgentTaskCancelledError;
+    if (!cancellationRequested) {
+      const { data: lifecycle } = await admin.from("agent_tasks")
+        .select("status,cancellation_requested_at")
+        .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
+      cancellationRequested = lifecycle?.status === "cancelled" ||
+        isAgentTaskCancellationRequested(lifecycle?.cancellation_requested_at);
+    }
+    if (cancellationRequested) {
       const cancelledAt = new Date().toISOString();
       const { data: cancelledTask, error: cancelError } = await admin.from("agent_tasks")
         .update({ status: "cancelled", completed_at: cancelledAt, updated_at: cancelledAt })
