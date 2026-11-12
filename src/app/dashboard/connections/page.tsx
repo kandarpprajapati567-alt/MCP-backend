@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
-type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };\ntype RemoteServer = { id: string; name: string; endpoint: string; enabled: boolean; tools: Array<{ id: string; description: string }>; createdAt: string };
+type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };
+type RemoteServer = { id: string; name: string; endpoint: string; enabled: boolean; tools: Array<{ id: string; description: string }>; createdAt: string };
 
 export default function ConnectionsPage() {
   const [token, setToken] = useState("");
@@ -12,7 +13,11 @@ export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");\n  const [remoteName, setRemoteName] = useState("");\n  const [remoteEndpoint, setRemoteEndpoint] = useState("");\n  const [remoteToken, setRemoteToken] = useState("");\n  const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([]);
+  const [message, setMessage] = useState("");
+  const [remoteName, setRemoteName] = useState("");
+  const [remoteEndpoint, setRemoteEndpoint] = useState("");
+  const [remoteToken, setRemoteToken] = useState("");
+  const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([]);
 
   async function request(path: string, init: RequestInit = {}) {
     return fetch(path, { ...init, cache: "no-store", headers: {
@@ -26,7 +31,9 @@ export default function ConnectionsPage() {
     const response = await request("/api/v1/connections");
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Connections could not be loaded.");
-    setConnections(data.connections ?? []);\n    const remoteResponse = await request("/api/v1/connections/remote-mcp");\n    if (remoteResponse.ok) { const remoteData = await remoteResponse.json(); setRemoteServers(remoteData.servers ?? []); } else { setRemoteServers([]); }
+    setConnections(data.connections ?? []);
+    const remoteResponse = await request("/api/v1/connections/remote-mcp");
+    if (remoteResponse.ok) { const remoteData = await remoteResponse.json(); setRemoteServers(remoteData.servers ?? []); } else { setRemoteServers([]); }
   }
 
   async function connectOwner() {
