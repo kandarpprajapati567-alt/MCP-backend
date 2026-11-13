@@ -265,3 +265,45 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 @keyframes nebula-drift{from{transform:translate3d(-2%,1%,0) scale(1)}to{transform:translate3d(3%,-2%,0) scale(1.08)}}@keyframes stars-drift{from{transform:translate3d(0,0,0) rotate(13deg)}to{transform:translate3d(3%,-2%,0) rotate(13deg)}}@keyframes energy-travel{to{stroke-dashoffset:-190}}@keyframes core-float{0%,100%{transform:rotate(45deg) translateY(0)}50%{transform:rotate(45deg) translateY(-8px)}}@keyframes orbit-spin{to{transform:rotate(332deg)}}@keyframes core-pulse{0%{transform:scale(.72);opacity:.75}100%{transform:scale(1.35);opacity:0}}
 @media(max-width:767px){.app-shell.is-home-map .app-sidebar-map{display:none}.galaxy-map-top{top:14px;right:14px;left:68px}.galaxy-wordmark strong{font-size:8px}.galaxy-wordmark small{font-size:7px}.galaxy-live-indicator{display:none}.galaxy-session-button{min-height:31px;padding:0 8px;font-size:7px}.galaxy-universe{width:100vw;height:74vh;min-height:480px}.galaxy-node{width:66px;height:66px}.galaxy-node-symbol{font-size:20px}.galaxy-core{transform:translate(-50%,-50%) scale(.72)}.node-providers{top:25%;left:18%}.node-android{top:56%;left:10%}.node-agents{top:13%;left:50%}.node-bots{top:29%;left:86%}.node-mcp{top:62%;left:87%}.node-memory{top:84%;left:50%}.node-external{top:78%;left:19%}.galaxy-map-footer{right:12px;bottom:12px;left:12px;flex-wrap:wrap;font-size:7px}.galaxy-map-footer span:last-child{display:none}.galaxy-map-controls{right:12px;bottom:54px}.galaxy-map-controls button{width:30px;height:30px}.galaxy-connect-panel{top:56px;right:12px}.galaxy-inspector{right:12px;bottom:100px}}
 @media(prefers-reduced-motion:reduce){.galaxy-nebula,.galaxy-stars-b,.galaxy-link-path,.galaxy-flow-particle,.core-crystal,.core-orbit-two,.core-pulse,.agent-avatar-orbit,.bot-satellites{animation:none!important}.galaxy-universe,.galaxy-node{transition:none!important}}
+
+
+/* Node-focused personal system map and live work panel. */
+.galaxy-inspector-cinematic{width:min(390px,calc(100vw - 36px));max-height:min(76vh,720px);overflow:auto;padding:18px;border-color:rgba(145,183,255,.3);background:linear-gradient(155deg,rgba(12,20,48,.97),rgba(5,9,24,.96) 62%,rgba(24,15,48,.94));box-shadow:0 28px 90px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.08);animation:inspector-arrive .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes inspector-arrive{from{opacity:0;transform:translate3d(22px,12px,0) scale(.97);filter:blur(5px)}to{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}}
+.galaxy-inspector-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.galaxy-inspector-head>div{min-width:0}
+.galaxy-inspector-head>div>strong{display:block;margin-top:7px;color:#f0f4ff;font-size:17px;letter-spacing:-.035em}
+.galaxy-inspector-head>div>small{display:block;margin-top:5px;color:#91e5d2;font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+.galaxy-inspector-kicker{color:#8298d9;font-size:8px;font-weight:800;letter-spacing:.2em}
+.galaxy-inspector-head>button{position:static;flex:0 0 30px;width:30px;height:30px;border:1px solid rgba(159,177,255,.2);border-radius:9px;background:rgba(255,255,255,.04);font-size:19px}
+.galaxy-inspector-description{margin:12px 0 15px;color:#9eaccd;font-size:10px;line-height:1.65}
+.personal-map{position:relative;overflow:hidden;padding:14px;border:1px solid rgba(142,165,245,.16);border-radius:13px;background:radial-gradient(ellipse at 50% 0,rgba(87,117,207,.18),transparent 68%),rgba(4,9,24,.7)}
+.personal-map:before{position:absolute;top:72px;bottom:12px;left:27px;width:1px;background:linear-gradient(rgba(121,159,255,.65),rgba(121,159,255,.04));content:""}
+.personal-map-core{position:relative;z-index:1;display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid rgba(159,177,255,.12)}
+.personal-map-core>span{display:grid;width:34px;height:34px;place-items:center;border:1px solid rgba(141,174,255,.35);border-radius:11px;background:rgba(105,136,255,.13);color:#dce7ff}
+.personal-map-core>b{color:#e7edff;font-size:11px}
+.personal-map-core>small{margin-left:auto;color:#7587b8;font-size:7px;letter-spacing:.13em}
+.personal-map-links{position:relative;display:grid;gap:8px;padding-top:12px}
+.personal-map-node{position:relative;display:flex;align-items:center;gap:10px;min-height:42px;padding:7px 9px 7px 0}
+.personal-map-node>i{z-index:1;display:grid;flex:0 0 26px;height:26px;place-items:center;border:1px solid rgba(142,165,245,.28);border-radius:9px;background:#101a37;color:#b9ccff;font-style:normal;font-size:12px}
+.personal-map-node>span{min-width:0}
+.personal-map-node b,.personal-map-node small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.personal-map-node b{color:#dce5ff;font-size:10px;font-weight:650}
+.personal-map-node small{margin-top:3px;color:#8290b5;font-size:8px}
+.personal-node-agent{color:#d1b4ff!important}.personal-node-device{color:#8fe3d2!important}.personal-node-provider{color:#ffe0a1!important}
+.personal-map-empty{padding:12px;border:1px dashed rgba(142,165,245,.2);border-radius:9px;color:#8492b5;font-size:9px;line-height:1.6}
+.galaxy-work-now{margin-top:15px}
+.galaxy-work-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.galaxy-work-heading>b{color:#a9b9e6;font-size:8px;letter-spacing:.18em}
+.galaxy-work-heading>span{color:#91e5d2;font-size:8px;font-weight:800}
+.galaxy-task-item{margin-top:7px;padding:10px;border:1px solid rgba(142,165,245,.14);border-radius:10px;background:rgba(17,27,57,.56)}
+.galaxy-task-status{display:flex;align-items:center;gap:7px}
+.galaxy-task-status>b{color:#b9c9f1;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+.task-pulse{width:6px;height:6px;border-radius:50%;background:#72e2c2;box-shadow:0 0 10px rgba(114,226,194,.75);animation:task-pulse 1.6s ease-in-out infinite}
+@keyframes task-pulse{50%{opacity:.35;box-shadow:0 0 2px rgba(114,226,194,.25)}}
+.galaxy-task-item>p{margin-top:7px;color:#e0e8ff;font-size:10px;line-height:1.55}
+.galaxy-task-item>small{display:block;margin-top:6px;color:#7f8eb2;font-size:8px}
+.galaxy-work-empty{padding:12px;border:1px dashed rgba(142,165,245,.2);border-radius:9px;color:#8290b5;font-size:9px;line-height:1.6}
+.galaxy-inspector-foot{margin-top:12px;padding-top:10px;border-top:1px solid rgba(159,177,255,.12);color:#7182ac;font-size:7px;font-weight:800;letter-spacing:.16em}
+@media(max-width:767px){.galaxy-inspector-cinematic{right:10px;bottom:92px;width:min(360px,calc(100vw - 20px));max-height:66vh;padding:14px}.galaxy-inspector-head>div>strong{font-size:15px}.personal-map{padding:11px}}
+@media(prefers-reduced-motion:reduce){.galaxy-inspector-cinematic,.task-pulse{animation:none!important}}
