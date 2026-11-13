@@ -115,7 +115,12 @@ function createGeometry(
   const position = gl.createBuffer();
   const color = gl.createBuffer();
   const size = gl.createBuffer();
-  if (!position || !color || !size) return null;
+  if (!position || !color || !size) {
+    if (position) gl.deleteBuffer(position);
+    if (color) gl.deleteBuffer(color);
+    if (size) gl.deleteBuffer(size);
+    return null;
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER, position);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, color);
@@ -254,6 +259,7 @@ export function SpatialWebGLScene(props: Props) {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
     let start = 0;
+    let lastFrame = 0;
     let disposed = false;
     const geometries = [stars, topology, nodes];
 
@@ -271,6 +277,11 @@ export function SpatialWebGLScene(props: Props) {
 
     const render = (timestamp: number) => {
       if (disposed) return;
+      if (!reducedMotion && timestamp - lastFrame < 32) {
+        frame = window.requestAnimationFrame(render);
+        return;
+      }
+      lastFrame = timestamp;
       resize();
       if (!start) start = timestamp;
       const time = reducedMotion ? 0 : (timestamp - start) / 1000;
@@ -284,10 +295,13 @@ export function SpatialWebGLScene(props: Props) {
       drawGeometry(gl, program, topology, matrix, false);
       drawGeometry(gl, program, stars, matrix, true);
       drawGeometry(gl, program, nodes, matrix, true);
-      frame = window.requestAnimationFrame(render);
+      if (!reducedMotion) frame = window.requestAnimationFrame(render);
     };
 
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => {
+      resize();
+      if (reducedMotion) frame = window.requestAnimationFrame(render);
+    }) : null;
     observer?.observe(canvas);
     window.addEventListener("resize", resize);
     frame = window.requestAnimationFrame(render);
