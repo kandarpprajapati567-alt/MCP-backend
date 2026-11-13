@@ -1,7 +1,6 @@
 "use client";
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import type {FormEvent,PointerEvent as ReactPointerEvent,WheelEvent as ReactWheelEvent} from "react";
-import {SpatialWebGLScene} from "./SpatialWebGLScene";
 type Health={status?:string;version?:string;services?:{database?:string;authentication?:string}};
 type Device={device_id:string;display_name:string;platform:string;status:string;last_seen_at:string|null};
 type Agent={id:string;name:string;role?:string;enabled:boolean};
@@ -95,7 +94,6 @@ export function GalaxySystemMap(){
   {connectOpen&&!ownerReady&&<form className="galaxy-connect-panel" onSubmit={connect}><div><strong>Owner session</strong><p>Enter the owner key once. A short-lived HttpOnly session unlocks live map data.</p></div><input type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)} placeholder="Owner access key" aria-label="Owner access key"/><button type="submit" disabled={busy||token.length<32}>{busy?"CONNECTING…":"CONNECT"}</button>{error&&<p role="alert">{error}</p>}</form>}
   <div className={"galaxy-viewport"+(dragging?" is-dragging":"")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up} onWheel={wheel}>
    <div className={"galaxy-universe"+(activeTasks.length>0?" has-active-work":"")} style={{transform}}>
-    <SpatialWebGLScene agentsConnected={ownerReady&&enabledAgents.length>0} deviceConnected={ownerReady&&onlineDevices.length>0} databaseConnected={health.services?.database==="ok"} providersConfigured={ownerReady&&providers.length>0}/>
     <svg className="galaxy-links" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><linearGradient id="galaxyFlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4b75ff" stopOpacity=".05"/><stop offset="48%" stopColor="#b7a7ff" stopOpacity=".95"/><stop offset="100%" stopColor="#63e8d0" stopOpacity=".1"/></linearGradient><filter id="galaxyGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
      {ownerReady&&enabledAgents.length>0&&<path className="galaxy-link-path" d="M600 380 C590 270 590 185 600 110"/>}
      {ownerReady&&onlineDevices.length>0&&<path className="galaxy-link-path" d="M600 380 C450 410 300 420 160 450"/>}
