@@ -406,3 +406,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .personal-map-node{padding-left:4px}
 
 .galaxy-map-controls button{width:auto;min-width:52px;padding:0 8px;font-size:7px;letter-spacing:.1em;font-weight:700}
+
+/* The command core is a locator in the photographic field, not a cartoon object. */
+.galaxy-core{width:120px;height:120px;filter:none}
+.core-event-horizon{width:5px;height:5px;background:#f7f2e6;box-shadow:0 0 10px 3px rgba(255,246,220,.62)}
+.core-accretion-ring{width:28px;height:28px;border:1px solid rgba(245,237,218,.42);border-radius:50%;transform:none;box-shadow:0 0 12px rgba(255,240,210,.12)}
+.core-label{top:calc(100% + 5px)}
