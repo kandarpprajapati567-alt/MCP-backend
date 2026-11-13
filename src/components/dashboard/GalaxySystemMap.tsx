@@ -103,8 +103,7 @@ export function GalaxySystemMap(){
     </svg>
     <div className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")} role="img" aria-label="Central server"><div className="core-orbit core-orbit-one"/><div className="core-orbit core-orbit-two"/><div className="core-crystal"><span>✧</span></div><div className="core-pulse"/></div>
     {positions.map(position=>{const detail=detailMap[position.id];const active=selectedId===position.id;return <button key={position.id} type="button" title={detail.title+" · "+detail.status} aria-label={detail.title+": "+detail.status} onClick={()=>setSelectedId(active?null:position.id)} className={"galaxy-node "+position.className+(active?" is-selected":"")+(focusedId===position.id?" is-focused":"")}><span className="galaxy-node-ring"/><span className="galaxy-node-symbol">{position.symbol}</span>
-      {position.id==="agents"&&<span className="agent-avatar-orbit">{(enabledAgents.length?enabledAgents.slice(0,4):[{id:"agent-placeholder",name:"Agent"}]).map((agent,index)=><i key={agent.id} className={"agent-avatar avatar-"+index} title={agent.name}>{enabledAgents.length?agent.name.slice(0,1).toUpperCase():"✦"}</i>)}</span>}
-      {position.id==="bots"&&<span className="bot-satellites"><i/><i/><i/></span>}
+      {position.id==="agents"&&enabledAgents.length>0&&<span className="agent-avatar-orbit">{enabledAgents.slice(0,4).map((agent,index)=><i key={agent.id} className={"agent-avatar avatar-"+index} title={agent.name}>{agent.name.slice(0,1).toUpperCase()}</i>)}</span>}
      </button>;})}
    </div>
   </div>
