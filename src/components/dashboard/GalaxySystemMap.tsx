@@ -4,7 +4,8 @@ import type {FormEvent,PointerEvent as ReactPointerEvent,WheelEvent as ReactWhee
 type Health={status?:string;version?:string;services?:{database?:string;authentication?:string}};
 type Device={device_id:string;display_name:string;platform:string;status:string;last_seen_at:string|null};
 type Agent={id:string;name:string;role?:string;enabled:boolean};
-type Task={id:string;status:string;task:string;updated_at?:string;created_at:string;error_message?:string;failed_stage?:string;agent_definition_id?:string|null};
+type Task={id:string;status:string;task:string;updated_at?:string;created_at:string;error_message?:string;failed_stage?:string;agent_definition_id?:string|null;agent_snapshot?:{name?:string;role?:string}|null};
+type TaskEvent={event_type:string;created_at:string;payload?:Record<string,unknown>};
 type Provider={provider:string};
 type MapNode={id:string;title:string;description:string;status:string;symbol:string};
 const positions=[{id:"providers",className:"node-providers",symbol:"✦"},{id:"android",className:"node-android",symbol:"▯"},{id:"agents",className:"node-agents",symbol:"◈"},{id:"bots",className:"node-bots",symbol:"◉"},{id:"mcp",className:"node-mcp",symbol:"⌘"},{id:"memory",className:"node-memory",symbol:"▤"},{id:"external",className:"node-external",symbol:"◌"}];
@@ -13,6 +14,7 @@ export function GalaxySystemMap(){
  const [ownerReady,setOwnerReady]=useState(false);
  const [agents,setAgents]=useState<Agent[]>([]);
  const [tasks,setTasks]=useState<Task[]>([]);
+ const [taskActivity,setTaskActivity]=useState<Record<string,TaskEvent[]>>({});
  const [devices,setDevices]=useState<Device[]>([]);
  const [providers,setProviders]=useState<Provider[]>([]);
  const [token,setToken]=useState("");
@@ -33,14 +35,22 @@ export function GalaxySystemMap(){
    if(healthResponse.ok)setHealth(await healthResponse.json() as Health);
    const sessionResponse=await fetch("/api/v1/session",{cache:"no-store"});
    const session=sessionResponse.ok?await sessionResponse.json() as {authenticated?:boolean}:{};
-   if(!session.authenticated){setOwnerReady(false);setAgents([]);setTasks([]);setDevices([]);setProviders([]);return;}
+   if(!session.authenticated){setOwnerReady(false);setAgents([]);setTasks([]);setTaskActivity({});setDevices([]);setProviders([]);return;}
    const paths=["/api/v1/agents","/api/v1/agent/tasks","/api/v1/devices","/api/v1/ai/providers/keys"];
    const responses=await Promise.all(paths.map(path=>fetch(path,{cache:"no-store"})));
-   if(responses.some(response=>response.status===401)){setOwnerReady(false);setAgents([]);setTasks([]);setDevices([]);setProviders([]);return;}
+   if(responses.some(response=>response.status===401)){setOwnerReady(false);setAgents([]);setTasks([]);setTaskActivity({});setDevices([]);setProviders([]);return;}
    if(responses.some(response=>!response.ok))return;
    const [a,t,d,p]=await Promise.all(responses.map(response=>response.json()));
-   setAgents(Array.isArray(a.agents)?a.agents:[]);setTasks(Array.isArray(t.tasks)?t.tasks:[]);
+   const taskRows=Array.isArray(t.tasks)?t.tasks as Task[]:[];
+   setAgents(Array.isArray(a.agents)?a.agents:[]);setTasks(taskRows);
    setDevices(Array.isArray(d.devices)?d.devices:[]);setProviders(Array.isArray(p.providers)?p.providers:[]);setOwnerReady(true);
+   const monitored=taskRows.filter(task=>["queued","planning","executing","running","synthesizing","waiting_for_device","failed"].includes(task.status)).slice(0,8);
+   const activity=await Promise.all(monitored.map(async task=>{
+    try{const response=await fetch("/api/v1/agent/tasks/"+encodeURIComponent(task.id),{cache:"no-store"});if(!response.ok)return [task.id,[]] as const;
+     const detail=await response.json() as {events?:TaskEvent[]};return [task.id,Array.isArray(detail.events)?detail.events.slice(-4):[]] as const;
+    }catch{return [task.id,[]] as const;}
+   }));
+   setTaskActivity(Object.fromEntries(activity));
   }catch{/* Retain last verified snapshot; the next poll retries. */}
  },[]);
  useEffect(()=>{void refresh();const poll=window.setInterval(()=>void refresh(),10000);return()=>window.clearInterval(poll);},[refresh]);
@@ -49,6 +59,7 @@ export function GalaxySystemMap(){
  const onlineDevices=devices.filter(device=>device.status==="online"&&device.last_seen_at&&Date.now()-Date.parse(device.last_seen_at)<300000);
  const enabledAgents=agents.filter(agent=>agent.enabled);
  const activeTasks=tasks.filter(task=>["queued","planning","executing","running","synthesizing","waiting_for_device"].includes(task.status));
+ const recentFailures=tasks.filter(task=>task.status==="failed").slice(0,3);
  const detailMap:Record<string,MapNode>={
   core:{id:"core",title:"Central Server",description:"Shared backend for owner sessions, task lifecycle, device jobs and verified events.",status:health.status??"checking",symbol:"✧"},
   android:{id:"android",title:"Android Device",description:"Trusted Android client receives approved jobs and reports execution through its device-scoped credential.",status:ownerReady?(onlineDevices.length?"connected":"not paired / offline"):"owner session required",symbol:"▯"},
@@ -65,7 +76,7 @@ export function GalaxySystemMap(){
   try{const response=await fetch("/api/v1/session",{method:"POST",headers:{"x-fs-owner-token":token},cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.error??"Owner authentication failed.");setToken("");setConnectOpen(false);await refresh();}
   catch(cause){setError(cause instanceof Error?cause.message:"Could not establish owner session.");}finally{setBusy(false);}
  };
- const disconnect=async()=>{await fetch("/api/v1/session",{method:"DELETE",cache:"no-store"});setOwnerReady(false);setAgents([]);setTasks([]);setDevices([]);setProviders([]);};
+ const disconnect=async()=>{await fetch("/api/v1/session",{method:"DELETE",cache:"no-store"});setOwnerReady(false);setAgents([]);setTasks([]);setTaskActivity({});setDevices([]);setProviders([]);};
  function down(event:ReactPointerEvent<HTMLDivElement>){if((event.target as HTMLElement).closest("button,input,form"))return;dragOrigin.current={x:event.clientX,y:event.clientY,offsetX:offset.x,offsetY:offset.y};setDragging(true);event.currentTarget.setPointerCapture(event.pointerId);}
  function move(event:ReactPointerEvent<HTMLDivElement>){if(!dragOrigin.current)return;setOffset({x:dragOrigin.current.offsetX+event.clientX-dragOrigin.current.x,y:dragOrigin.current.offsetY+event.clientY-dragOrigin.current.y});}
  function up(event:ReactPointerEvent<HTMLDivElement>){dragOrigin.current=null;setDragging(false);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}
@@ -113,7 +124,8 @@ export function GalaxySystemMap(){
     </div>
    </div>
    <div className="galaxy-work-now"><div className="galaxy-work-heading"><b>WORKING NOW</b><span>{activeTasks.length} ACTIVE</span></div>
-    {activeTasks.length?activeTasks.slice(0,5).map(task=><article className="galaxy-task-item" key={task.id}><div className="galaxy-task-status"><i className="task-pulse"/><b>{task.status.replaceAll("_"," ")}</b></div><p>{task.task}</p><small>{task.updated_at?"Updated "+new Date(task.updated_at).toLocaleString():"Created "+new Date(task.created_at).toLocaleString()}</small></article>):<div className="galaxy-work-empty">No active task right now. New server-side work will appear here when it is queued or running.</div>}
+    {activeTasks.length?activeTasks.slice(0,5).map(task=>{const assigned=task.agent_snapshot?.name??agents.find(agent=>agent.id===task.agent_definition_id)?.name??(task.agent_definition_id?"Assigned Agent":"Default planner");const latestEvent=taskActivity[task.id]?.at(-1);return <article className="galaxy-task-item" key={task.id}><div className="galaxy-task-status"><i className="task-pulse"/><b>{task.status.replaceAll("_"," ")}</b></div><p>{task.task}</p><small>Agent: {assigned} · {task.updated_at?"Updated "+new Date(task.updated_at).toLocaleString():"Created "+new Date(task.created_at).toLocaleString()}</small>{latestEvent&&<small>Latest event: {latestEvent.event_type.replaceAll("_"," ")} · {new Date(latestEvent.created_at).toLocaleString()}</small>}{typeof latestEvent?.payload?.message==="string"&&<small>{latestEvent.payload.message}</small>}</article>;}):<div className="galaxy-work-empty">No active task right now. New server-side work will appear here when it is queued or running.</div>}
+    {recentFailures.length>0&&<div className="galaxy-recent-failures"><div className="galaxy-work-heading"><b>RECENT FAILURES</b><span>{recentFailures.length} NEED ATTENTION</span></div>{recentFailures.map(task=><article className="galaxy-task-item is-failed" key={task.id}><div className="galaxy-task-status"><b>FAILED · {task.failed_stage??"unknown stage"}</b></div><p>{task.task}</p><small>{task.error_message??"Failure details unavailable."}</small>{taskActivity[task.id]?.at(-1)&&<small>Latest event: {taskActivity[task.id].at(-1)!.event_type}</small>}</article>)}</div>}
    </div>
    {ownerReady&&<div className="galaxy-inspector-foot">LIVE OWNER SNAPSHOT · POLLED EVERY 10S</div>}
   </aside>}
