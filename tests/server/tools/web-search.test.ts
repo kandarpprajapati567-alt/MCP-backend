@@ -34,6 +34,7 @@ test("searches Tavily and returns bounded source references without exposing cre
   assert.equal(result.count, 1);
   assert.equal(result.results[0].url, "https://example.com/page");
   assert.equal(result.answer, "A short sourced answer.");
+  assert.ok(Number.isFinite(Date.parse(result.retrievedAt)));
   assert.equal(JSON.stringify(result).includes("tavily-test-key"), false);
 });
 
