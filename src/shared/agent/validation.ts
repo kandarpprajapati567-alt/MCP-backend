@@ -43,8 +43,77 @@ function jsonByteLength(value: unknown): number {
   }
 }
 
+function validatePortableSchema(schema: unknown, depth = 0): boolean {
+  if (!isRecord(schema) || depth > 8 || typeof schema.type !== "string") return false;
+  const enumValues = schema.enum;
+  if (enumValues !== undefined && (!Array.isArray(enumValues) || enumValues.length < 1 ||
+      enumValues.length > 100 || jsonByteLength(enumValues) > 4_000)) return false;
+
+  switch (schema.type) {
+    case "string": {
+      if (!hasOnlyKeys(schema, ["type"], ["description", "minLength", "maxLength", "enum"])) return false;
+      if (schema.description !== undefined && !isBoundedText(schema.description, 200)) return false;
+      if (schema.minLength !== undefined && (!Number.isInteger(schema.minLength) || (schema.minLength as number) < 0 || (schema.minLength as number) > 12_000)) return false;
+      if (schema.maxLength !== undefined && (!Number.isInteger(schema.maxLength) || (schema.maxLength as number) < 0 || (schema.maxLength as number) > 12_000)) return false;
+      if (typeof schema.minLength === "number" && typeof schema.maxLength === "number" && schema.minLength > schema.maxLength) return false;
+      if (enumValues !== undefined && enumValues.some((item) => typeof item !== "string" ||
+          (typeof schema.maxLength === "number" && item.length > schema.maxLength) ||
+          (typeof schema.minLength === "number" && item.length < schema.minLength))) return false;
+      return true;
+    }
+    case "number":
+    case "integer": {
+      if (!hasOnlyKeys(schema, ["type"], ["description", "minimum", "maximum", "enum"])) return false;
+      if (schema.description !== undefined && !isBoundedText(schema.description, 200)) return false;
+      if (schema.minimum !== undefined && (typeof schema.minimum !== "number" || !Number.isFinite(schema.minimum))) return false;
+      if (schema.maximum !== undefined && (typeof schema.maximum !== "number" || !Number.isFinite(schema.maximum))) return false;
+      if (typeof schema.minimum === "number" && typeof schema.maximum === "number" && schema.minimum > schema.maximum) return false;
+      if (enumValues !== undefined && enumValues.some((item) => typeof item !== "number" ||
+          !Number.isFinite(item) || (schema.type === "integer" && !Number.isInteger(item)) ||
+          (typeof schema.minimum === "number" && item < schema.minimum) ||
+          (typeof schema.maximum === "number" && item > schema.maximum))) return false;
+      return true;
+    }
+    case "boolean":
+      return hasOnlyKeys(schema, ["type"], ["description", "enum"]) &&
+        (schema.description === undefined || isBoundedText(schema.description, 200)) &&
+        (enumValues === undefined || enumValues.every((item) => typeof item === "boolean"));
+    case "object": {
+      if (!hasOnlyKeys(schema, ["type", "properties", "additionalProperties"], [
+        "description", "required", "minProperties", "maxProperties",
+      ])) return false;
+      if (schema.description !== undefined && !isBoundedText(schema.description, 200)) return false;
+      if (schema.additionalProperties !== false || !isRecord(schema.properties)) return false;
+      const properties = schema.properties;
+      const keys = Object.keys(properties);
+      if (keys.length > 64 || keys.some((key) => !key.trim() || key.length > 120)) return false;
+      if (!keys.every((key) => validatePortableSchema(properties[key], depth + 1))) return false;
+      if (schema.required !== undefined &&
+          (!Array.isArray(schema.required) || schema.required.length > keys.length ||
+           new Set(schema.required).size !== schema.required.length ||
+           schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(properties, item)))) return false;
+      if (schema.minProperties !== undefined && (!Number.isInteger(schema.minProperties) || (schema.minProperties as number) < 0 || (schema.minProperties as number) > 64)) return false;
+      if (schema.maxProperties !== undefined && (!Number.isInteger(schema.maxProperties) || (schema.maxProperties as number) < 0 || (schema.maxProperties as number) > 64)) return false;
+      if (typeof schema.minProperties === "number" && typeof schema.maxProperties === "number" && schema.minProperties > schema.maxProperties) return false;
+      return true;
+    }
+    case "array": {
+      if (!hasOnlyKeys(schema, ["type", "items"], ["description", "minItems", "maxItems", "uniqueItems"])) return false;
+      if (schema.description !== undefined && !isBoundedText(schema.description, 200)) return false;
+      if (!validatePortableSchema(schema.items, depth + 1)) return false;
+      if (schema.minItems !== undefined && (!Number.isInteger(schema.minItems) || (schema.minItems as number) < 0 || (schema.minItems as number) > 100)) return false;
+      if (schema.maxItems !== undefined && (!Number.isInteger(schema.maxItems) || (schema.maxItems as number) < 0 || (schema.maxItems as number) > 100)) return false;
+      if (typeof schema.minItems === "number" && typeof schema.maxItems === "number" && schema.minItems > schema.maxItems) return false;
+      if (schema.uniqueItems !== undefined && typeof schema.uniqueItems !== "boolean") return false;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
 /**
- * Validates the portable, normalized subset of a capability manifest.
+ * Validates a bounded portable JSON Schema subset for a capability manifest.
  * Runtime-specific permission checks must still happen in the owning runtime.
  */
 export function isValidCapabilityManifestEntry(
@@ -59,30 +128,9 @@ export function isValidCapabilityManifestEntry(
   if (!Number.isInteger(value.manifestVersion) || (value.manifestVersion as number) < 1) return false;
   if (!isBoundedText(value.description, 500)) return false;
   const schema = value.inputSchema;
-  if (!isRecord(schema) || schema.type !== "object" ||
-      !isRecord(schema.properties) || schema.additionalProperties !== false) return false;
-  const properties = schema.properties;
-  if (jsonByteLength(schema) > MAX_SCHEMA_BYTES || Object.keys(properties).length > 64) return false;
-  for (const property of Object.values(properties)) {
-    if (!isRecord(property) || !["string", "number", "integer", "boolean"].includes(String(property.type))) return false;
-    if (property.type === "string") {
-      if (!hasOnlyKeys(property, ["type"], ["minLength", "maxLength"])) return false;
-      if (property.maxLength !== undefined && (!Number.isInteger(property.maxLength) || (property.maxLength as number) < 0 || (property.maxLength as number) > 12_000)) return false;
-      if (property.minLength !== undefined && (!Number.isInteger(property.minLength) || (property.minLength as number) < 0 || (property.minLength as number) > 12_000)) return false;
-      if (typeof property.maxLength === "number" && typeof property.minLength === "number" && property.minLength > property.maxLength) return false;
-    } else if (property.type === "number" || property.type === "integer") {
-      if (!hasOnlyKeys(property, ["type"], ["minimum", "maximum"])) return false;
-      if (property.minimum !== undefined && (typeof property.minimum !== "number" || !Number.isFinite(property.minimum))) return false;
-      if (property.maximum !== undefined && (typeof property.maximum !== "number" || !Number.isFinite(property.maximum))) return false;
-      if (typeof property.minimum === "number" && typeof property.maximum === "number" && property.minimum > property.maximum) return false;
-    } else if (!hasOnlyKeys(property, ["type"])) {
-      return false;
-    }
-  }
-  if (schema.required !== undefined &&
-      (!Array.isArray(schema.required) || schema.required.length > Object.keys(properties).length ||
-       new Set(schema.required).size !== schema.required.length ||
-       schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(properties, item)))) return false;
+  if (!isRecord(schema) || schema.type !== "object" || schema.additionalProperties !== false ||
+      !isRecord(schema.properties) || jsonByteLength(schema) > MAX_SCHEMA_BYTES ||
+      !validatePortableSchema(schema)) return false;
   if (!Array.isArray(value.requiredPermissions) || value.requiredPermissions.length > 32 ||
       value.requiredPermissions.some((permission) => !isBoundedText(permission, 100)) ||
       new Set(value.requiredPermissions).size !== value.requiredPermissions.length) return false;
