@@ -73,7 +73,7 @@ const ROLE_ALIASES: Record<SpecialistAgentRole, readonly string[]> = {
 };
 
 export function resolveSpecialistAgentRole(role: string): SpecialistAgentRole | "general" {
-  const normalized = role.trim().toLowerCase().replace(/[\\s_-]+/gu, " ");
+  const normalized = role.trim().toLowerCase().replace(/[\s_-]+/gu, " ");
   for (const [id, aliases] of Object.entries(ROLE_ALIASES) as Array<[SpecialistAgentRole, readonly string[]]>) {
     if (aliases.includes(normalized)) return id;
   }
@@ -95,5 +95,5 @@ export function buildSpecialistRoleGuidance(role: string): string {
     "Specialist safety boundaries:",
     ...contract.mustNot.map((rule) => "- " + rule),
     "The specialist role describes responsibility only; actual tools, permissions, approvals, and execution limits remain enforced by the runtime.",
-  ].join("\\n");
+  ].join("\n");
 }
