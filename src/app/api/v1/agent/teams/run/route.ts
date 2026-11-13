@@ -55,9 +55,9 @@ export async function POST(request: Request) {
         agentId,
         taskId: result.taskId,
         status: result.status,
-        ...(typeof result.result === "string" ? { result: result.result } : {}),
-        ...(typeof result.message === "string" ? { message: result.message } : {}),
-        ...(typeof result.error === "string" ? { error: result.error } : {}),
+        ...("result" in result && typeof result.result === "string" ? { result: result.result } : {}),
+        ...("message" in result && typeof result.message === "string" ? { message: result.message } : {}),
+        ...("error" in result && typeof result.error === "string" ? { error: result.error } : {}),
       };
     } catch (cause) {
       return {
