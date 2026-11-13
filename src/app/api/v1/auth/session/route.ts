@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readJsonBody } from "@/server/http/read-json";
 import {
   createOwnerSessionToken,
+  isSameOriginRequest,
   OWNER_SESSION_COOKIE,
   OWNER_SESSION_TTL_SECONDS,
   verifyOwnerRequest,
@@ -16,6 +17,8 @@ function json(body: unknown, status = 200) {
 
 /** Exchange the master token once for a short-lived, HttpOnly same-site owner session. */
 export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) return json({ error: "Cross-origin session exchange is not allowed." }, 403);
+
   const parsed = await readJsonBody(request, 2048);
   if (!parsed.ok) return json({ error: parsed.reason === "too_large" ? "Request body too large." : "Invalid JSON body." }, parsed.reason === "too_large" ? 413 : 400);
   if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
