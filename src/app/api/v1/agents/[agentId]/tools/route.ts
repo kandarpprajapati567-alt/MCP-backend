@@ -91,7 +91,7 @@ export async function GET(request: Request, context: Context) {
     return json({
       agentId,
       ...buildAgentToolAccessReport(candidates, allowedTools),
-      policy: "Assignment is not a permission grant. Runtime validation, device-side consent and any required approval remain mandatory.",
+      policy: "The Agent allowlist is a scoped capability assignment; runtime validation, device OS permissions, device-side consent and any additional approval gates remain mandatory.",
     });
   } catch {
     return json({ error: "Agent tool access is temporarily unavailable." }, 503);
