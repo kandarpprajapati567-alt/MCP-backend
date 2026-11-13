@@ -6,6 +6,7 @@ type PlanetarySystemSceneProps = {
   zoom?: number;
   rotation?: number;
   active?: boolean;
+  selectedId?: string | null;
 };
 
 const vertexSource = `
@@ -18,6 +19,7 @@ precision highp float;
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_bodyCount;
+uniform float u_selected;
 uniform vec4 u_bodies[9];
 uniform vec4 u_colors[9];
 uniform float u_kinds[9];
@@ -94,6 +96,7 @@ void main(){
       float atmosphere=pow(max(0.0,1.0-normal.z),3.0);
       lit+=u_colors[i].rgb*atmosphere*.25;
       if(u_kinds[i]<.5) lit+=vec3(.14,.3,.55)*rim*.42;
+      if(float(i)==u_selected) lit+=vec3(.22,.34,.52)*pow(1.0-normal.z,1.7)*.85;
       color=mix(color,lit,1.0);
       float shadowEdge=smoothstep(.0,.16,normal.z);
       color*=.84+.16*shadowEdge;
@@ -118,10 +121,10 @@ const bodies = [
   { x:.205, y:.785, r:20, color:[.34,.52,.39], kind:0 },
 ];
 
-export function PlanetarySystemScene({ zoom=1, rotation=0, active=true }: PlanetarySystemSceneProps) {
+export function PlanetarySystemScene({ zoom=1, rotation=0, active=true, selectedId=null }: PlanetarySystemSceneProps) {
   const canvasRef=useRef<HTMLCanvasElement>(null);
-  const stateRef=useRef({zoom,rotation,active});
-  useEffect(()=>{stateRef.current={zoom,rotation,active};},[zoom,rotation,active]);
+  const stateRef=useRef({zoom,rotation,active,selectedId});
+  useEffect(()=>{stateRef.current={zoom,rotation,active,selectedId};},[zoom,rotation,active,selectedId]);
 
   useEffect(()=>{
     const canvas=canvasRef.current;
@@ -157,6 +160,7 @@ export function PlanetarySystemScene({ zoom=1, rotation=0, active=true }: Planet
       const resolution=gl.getUniformLocation(program,"u_resolution");
       const time=gl.getUniformLocation(program,"u_time");
       const count=gl.getUniformLocation(program,"u_bodyCount");
+      const selected=gl.getUniformLocation(program,"u_selected");
       const bodyLoc=gl.getUniformLocation(program,"u_bodies[0]");
       const colorLoc=gl.getUniformLocation(program,"u_colors[0]");
       const kindLoc=gl.getUniformLocation(program,"u_kinds[0]");
@@ -176,6 +180,8 @@ export function PlanetarySystemScene({ zoom=1, rotation=0, active=true }: Planet
         gl.uniform2f(resolution,width,height);
         gl.uniform1f(time,reduced.matches?0:now*.001);
         gl.uniform1f(count,bodies.length);
+        const selectedIndex=stateRef.current.selectedId=== "core" ? 0 : stateRef.current.selectedId === "moon" ? 1 : stateRef.current.selectedId === "agents" ? 2 : stateRef.current.selectedId === "providers" ? 3 : stateRef.current.selectedId === "android" ? 4 : stateRef.current.selectedId === "bots" ? 5 : stateRef.current.selectedId === "mcp" ? 6 : stateRef.current.selectedId === "memory" ? 7 : stateRef.current.selectedId === "external" ? 8 : -1;
+        gl.uniform1f(selected,selectedIndex);
         const scale=Math.min(width,height);
         const coords:number[]=[];const colors:number[]=[];const kinds:number[]=[];
         for(const body of bodies){
@@ -184,7 +190,7 @@ export function PlanetarySystemScene({ zoom=1, rotation=0, active=true }: Planet
           const rotatedX=x*Math.cos(angle)-y*Math.sin(angle);
           const rotatedY=x*Math.sin(angle)+y*Math.cos(angle);
           x=rotatedX*stateRef.current.zoom;y=rotatedY*stateRef.current.zoom;
-          coords.push(width*(.5+x),height*(.5-y),body.r*(width/1200)*stateRef.current.zoom,0);
+          coords.push(width*(.5+x),height*(.5-y),body.r*(scale/760)*stateRef.current.zoom,0);
           colors.push(body.color[0],body.color[1],body.color[2],1);
           kinds.push(body.kind);
         }
