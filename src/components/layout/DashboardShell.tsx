@@ -34,8 +34,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <p className="hidden text-[11px] text-zinc-500 sm:block">{current?.description ?? "Personal AI infrastructure"}</p>
           </div>
           <div className="flex-1" />
-          <span className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1.5 text-[11px] text-emerald-300 sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Production API
+          <span className="hidden items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-1.5 text-[11px] text-cyan-200 sm:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" /> Owner workspace
           </span>
           <Link href="/api/v1/health" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border bg-white/[0.03] px-3 py-2 text-xs font-medium text-zinc-300 transition hover:border-emerald-400/30 hover:text-emerald-300">
             API health ↗

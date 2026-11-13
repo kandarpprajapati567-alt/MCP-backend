@@ -229,6 +229,37 @@ export default function DashboardPage() {
         description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
 
+      <section className="command-deck relative overflow-hidden rounded-[28px] border border-cyan-300/15 p-5 sm:p-7">
+        <div className="command-deck-grid pointer-events-none absolute inset-0" />
+        <div className="relative grid gap-7 xl:grid-cols-[1.2fr_.8fr] xl:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="monitor-kicker"><span className="monitor-live-dot" /> SYSTEM CONTROL / OWNER CONSOLE</span>
+              <span className="rounded-full border border-white/10 bg-white/[.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.16em] text-slate-400">Private workspace</span>
+            </div>
+            <h2 className="mt-4 max-w-2xl text-3xl font-semibold leading-[1.08] tracking-[-.045em] text-white sm:text-4xl">Command your<br /><span className="text-cyan-200">AI infrastructure.</span></h2>
+            <p className="mt-4 max-w-xl text-sm leading-7 text-slate-400">A single operational view across orchestration, tools, model providers, devices and data services. Select a monitor to inspect its control surface.</p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <a href="/dashboard/system-map" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Open system map <span aria-hidden="true">↗</span></a>
+              <a href="/dashboard/agent-lab" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Launch Agent Lab</a>
+              <a href="/dashboard/bot-channels" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
+              <a href="/dashboard/agent-map" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] px-4 py-3 text-xs font-semibold text-violet-100 transition hover:bg-violet-300/[.12]">Agentic Map</a>
+              <a href="/dashboard/bot-map" className="rounded-xl border border-amber-200/20 bg-amber-200/[.05] px-4 py-3 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[.1]">Bot Network</a>
+              <a href="/dashboard/monitors" className="rounded-xl border border-cyan-200/20 bg-cyan-200/[.05] px-4 py-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-200/[.1]">AI Monitors</a>
+            </div>
+          </div>
+          <div className="monitor-wall">
+            <div className="monitor-wall-head"><span>INFRASTRUCTURE MONITORS</span><span>LIVE PROBE DATA</span></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="monitor-tile monitor-tile-primary"><span className="monitor-label">CORE API</span><strong>{backendStatus}</strong><span className="monitor-foot"><i className={backendStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> Health endpoint</span></div>
+              <div className="monitor-tile"><span className="monitor-label">DATABASE</span><strong>{databaseStatus}</strong><span className="monitor-foot"><i className={databaseStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> PostgreSQL</span></div>
+              <div className="monitor-tile"><span className="monitor-label">REGISTERED TOOLS</span><strong>{connected ? tools.length : "—"}</strong><span className="monitor-foot">Owner connection {connected ? "verified" : "required"}</span></div>
+              <div className="monitor-tile"><span className="monitor-label">AI PROVIDERS</span><strong>{connected ? providers.length : "—"}</strong><span className="monitor-foot">Credentials configured</span></div>
+            </div>
+            <div className="monitor-wall-foot"><span>AGENT RUNTIME <b>INTEGRATION IN PROGRESS</b></span><span>NO MOCK TELEMETRY</span></div>
+          </div>
+        </div>
+      </section>
       <SystemHealthCheck connected={connected} token={token} />
       {connected && <CompleteSystemTest token={token} />}
 
