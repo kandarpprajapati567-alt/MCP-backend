@@ -23,6 +23,21 @@ function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[]
     Object.keys(value).every((key) => allowed.has(key));
 }
 
+function isStrictIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" ||
+      !/^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,3})?(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$/.test(value)) {
+    return false;
+  }
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  return calendar.getUTCFullYear() === year &&
+    calendar.getUTCMonth() === month - 1 &&
+    calendar.getUTCDate() === day &&
+    Number.isFinite(Date.parse(value));
+}
+
 function jsonByteLength(value: unknown): number {
   try {
     const encoded = JSON.stringify(value);
@@ -109,7 +124,7 @@ export function isValidInvocationResult(value: unknown): value is AgentInvocatio
   if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
   if (value.runtime !== "web" && value.runtime !== "android") return false;
   if (!["completed", "failed", "denied", "expired", "cancelled"].includes(String(value.status))) return false;
-  if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return false;
+  if (!isStrictIsoTimestamp(value.completedAt)) return false;
   if (value.errorCode !== undefined && !isBoundedText(value.errorCode, 100)) return false;
   if (value.result !== undefined && jsonByteLength(value.result) > MAX_ARGUMENT_BYTES) return false;
   if (!Array.isArray(value.evidence) || value.evidence.length > MAX_EVIDENCE_ITEMS ||
