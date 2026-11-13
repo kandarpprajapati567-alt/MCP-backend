@@ -229,6 +229,25 @@ export default function DashboardPage() {
         description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
 
+      <section className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-[radial-gradient(ellipse_at_top_right,rgba(34,211,238,.13),transparent_45%),linear-gradient(120deg,rgba(10,22,38,.96),rgba(13,17,32,.96))] p-5 sm:p-6">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+          <div className="max-w-2xl">
+            <p className="text-[10px] font-bold uppercase tracking-[.22em] text-cyan-300">Command overview</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">Your AI infrastructure, in one place.</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Inspect how the dashboard, agent runtime, MCP tools, bot channels, providers and data services fit together. Open the system map for component-level status and controls.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a href="/dashboard/system-map" className="inline-flex items-center justify-center rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Explore system map ↗</a>
+            <a href="/dashboard/agent-lab" className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Agent Lab</a>
+            <a href="/dashboard/bot-channels" className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Orchestration</p><p className="mt-1 text-sm font-semibold text-white">Agent Runtime</p><p className="mt-1 text-[11px] text-amber-200">Integration in progress</p></div>
+          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Protocol</p><p className="mt-1 text-sm font-semibold text-white">MCP Server</p><p className="mt-1 text-[11px] text-emerald-200">Endpoint available</p></div>
+          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Channels</p><p className="mt-1 text-sm font-semibold text-white">Bot Gateway</p><p className="mt-1 text-[11px] text-amber-200">Contract tests available</p></div>
+        </div>
+      </section>
       <SystemHealthCheck connected={connected} token={token} />
       {connected && <CompleteSystemTest token={token} />}
 
