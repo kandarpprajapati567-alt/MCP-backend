@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SystemHealthCheck } from "@/components/dashboard/SystemHealthCheck";
 import { CompleteSystemTest } from "@/components/dashboard/CompleteSystemTest";
@@ -10,6 +11,10 @@ type Agent = { id: string; name: string; enabled: boolean };
 type Provider = { provider: string; updated_at: string };
 type Health = { status?: string; services?: { database?: string; authentication?: string } };
 type Tool = { id: string; description: string; permission: string; sideEffect: boolean };
+
+function Metric({ label, value, note }: { label: string; value: string | number; note: string }) {
+  return <div className="metric-card"><span className="metric-label">{label}</span><strong className="metric-value">{value}</strong><span className="metric-note">{note}</span></div>;
+}
 
 export default function DashboardPage() {
   const [token, setToken] = useState("");
@@ -34,435 +39,227 @@ export default function DashboardPage() {
   const [pairingExpiresAt, setPairingExpiresAt] = useState("");
   const [pairingBusy, setPairingBusy] = useState(false);
 
-  const api = useCallback(
-    async (path: string, init: RequestInit = {}) =>
-      fetch(path, {
-        ...init,
-        cache: "no-store",
-        headers: {
-          ...(init.headers ?? {}),
-          "x-fs-owner-token": token,
-          ...(init.body ? { "Content-Type": "application/json" } : {}),
-        },
-      }),
-    [token],
-  );
+  const api = useCallback(async (path: string, init: RequestInit = {}) =>
+    fetch(path, { ...init, cache: "no-store", headers: {
+      ...(init.headers ?? {}), "x-fs-owner-token": token,
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+    } }), [token]);
 
   const disconnect = useCallback(() => {
-    setToken("");
-    setConnected(false);
-    setTasks([]);
-    setAgents([]);
-    setSelectedAgentId("");
-    setAgentCatalogAvailable(true);
-    setProviders([]);
-    setTools([]);
-    setResult("");
+    setToken(""); setConnected(false); setTasks([]); setAgents([]); setSelectedAgentId("");
+    setAgentCatalogAvailable(true); setProviders([]); setTools([]); setResult("");
     setMessage("Backend disconnected.");
   }, []);
 
   const refresh = useCallback(async () => {
     const [taskResponse, providerResponse, toolResponse, agentResponse] = await Promise.all([
-      api("/api/v1/agent/tasks"),
-      api("/api/v1/ai/providers/keys"),
-      api("/api/v1/tools"),
-      api("/api/v1/agents"),
+      api("/api/v1/agent/tasks"), api("/api/v1/ai/providers/keys"),
+      api("/api/v1/tools"), api("/api/v1/agents"),
     ]);
     if ([taskResponse, providerResponse, toolResponse, agentResponse].some((response) => response.status === 401)) {
-      disconnect();
-      throw new Error("Owner master token was rejected. Connect again.");
+      disconnect(); throw new Error("Owner master token was rejected. Connect again.");
     }
-    if (!taskResponse.ok || !providerResponse.ok || !toolResponse.ok) {
-      throw new Error("Backend data is temporarily unavailable.");
-    }
-    const taskData = await taskResponse.json();
-    const providerData = await providerResponse.json();
-    const toolData = await toolResponse.json();
+    if (!taskResponse.ok || !providerResponse.ok || !toolResponse.ok) throw new Error("Backend data is temporarily unavailable.");
+    const [taskData, providerData, toolData] = await Promise.all([taskResponse.json(), providerResponse.json(), toolResponse.json()]);
     setTasks(taskData.tasks ?? []);
     if (agentResponse.ok) {
       const agentData = await agentResponse.json();
       const nextAgents = Array.isArray(agentData.agents) ? agentData.agents : [];
-      setAgents(nextAgents);
-      setAgentCatalogAvailable(true);
-      if (selectedAgentId && !nextAgents.some((agent: Agent) => agent.id === selectedAgentId && agent.enabled)) {
-        setSelectedAgentId("");
-      }
-    } else {
-      setAgents([]);
-      setSelectedAgentId("");
-      setAgentCatalogAvailable(false);
-    }
-    setProviders(providerData.providers ?? []);
-    setTools(toolData.tools ?? []);
+      setAgents(nextAgents); setAgentCatalogAvailable(true);
+      if (selectedAgentId && !nextAgents.some((agent: Agent) => agent.id === selectedAgentId && agent.enabled)) setSelectedAgentId("");
+    } else { setAgents([]); setSelectedAgentId(""); setAgentCatalogAvailable(false); }
+    setProviders(providerData.providers ?? []); setTools(toolData.tools ?? []);
   }, [api, disconnect, selectedAgentId]);
 
   useEffect(() => {
-    fetch("/api/v1/health", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: Health) => setHealth(data))
-      .catch(() => setHealth({ status: "unavailable" }));
+    fetch("/api/v1/health", { cache: "no-store" }).then((response) => response.json())
+      .then((data: Health) => setHealth(data)).catch(() => setHealth({ status: "unavailable" }));
   }, []);
-
   useEffect(() => {
     if (connected) void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."));
   }, [connected, refresh]);
 
   async function connect() {
-    setConnecting(true);
-    setError("");
-    setMessage("");
+    setConnecting(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/v1/tools", {
-        headers: { "x-fs-owner-token": masterKey },
-        cache: "no-store",
-      });
+      const response = await fetch("/api/v1/tools", { headers: { "x-fs-owner-token": masterKey }, cache: "no-store" });
       const raw = await response.text();
       let data: { error?: string; tools?: Tool[] } = {};
-      if (raw.trim()) {
-        try {
-          data = JSON.parse(raw) as { error?: string; tools?: Tool[] };
-        } catch {
-          throw new Error(`Backend returned an invalid response (HTTP ${response.status}). Refresh the page and try again; if it continues, check the Vercel deployment.`);
-        }
-      } else {
-        throw new Error(`Backend returned an empty response (HTTP ${response.status}). Refresh the page and try again.`);
-      }
+      if (!raw.trim()) throw new Error(`Backend returned an empty response (HTTP ${response.status}).`);
+      try { data = JSON.parse(raw) as { error?: string; tools?: Tool[] }; }
+      catch { throw new Error(`Backend returned an invalid response (HTTP ${response.status}). Check the Render service and retry.`); }
       if (!response.ok) throw new Error(data.error ?? `Connection failed (HTTP ${response.status}). Check the owner token.`);
       if (!Array.isArray(data.tools)) throw new Error("Backend response is missing the tool registry. Please retry.");
-      setToken(masterKey);
-      setTools(data.tools);
-      setConnected(true);
-      setMasterKey("");
-      setMessage("Connected to MCP backend. No four-day session is created.");
-    } catch (cause) {
-      setConnected(false);
-      setError(cause instanceof Error ? cause.message : "Could not connect.");
-    } finally {
-      setConnecting(false);
-    }
+      setToken(masterKey); setTools(data.tools); setConnected(true); setMasterKey("");
+      setMessage("Owner token verified. The connection is held in this page's memory only.");
+    } catch (cause) { setConnected(false); setError(cause instanceof Error ? cause.message : "Could not connect."); }
+    finally { setConnecting(false); }
   }
 
   async function createPairingCode() {
-    setPairingBusy(true);
-    setError("");
-    setMessage("");
-    setPairingCode("");
-    setPairingExpiresAt("");
+    setPairingBusy(true); setError(""); setMessage(""); setPairingCode(""); setPairingExpiresAt("");
     try {
       const response = await api("/api/v1/devices/pairing", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not create a pairing code.");
-      setPairingCode(data.pairingCode);
-      setPairingExpiresAt(data.expiresAt);
+      setPairingCode(data.pairingCode); setPairingExpiresAt(data.expiresAt);
       setMessage("One-time device pairing code created. It expires in five minutes.");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create a pairing code.");
-    } finally {
-      setPairingBusy(false);
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create a pairing code."); }
+    finally { setPairingBusy(false); }
   }
 
   async function runTask(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setRunning(true);
-    setError("");
-    setResult("");
+    event.preventDefault(); setRunning(true); setError(""); setResult("");
     try {
-      const response = await api("/api/v1/agent/tasks", {
-        method: "POST",
-        body: JSON.stringify({ task, ...(selectedAgentId ? { agentId: selectedAgentId } : {}) }),
-      });
+      const response = await api("/api/v1/agent/tasks", { method: "POST", body: JSON.stringify({ task, ...(selectedAgentId ? { agentId: selectedAgentId } : {}) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Task execution failed.");
-      setResult(data.status === "waiting_for_device"
-        ? data.message ?? "Task is waiting for a connected device."
-        : data.result ?? "Task completed.");
-      setTask("");
-      await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Task execution failed.");
-    } finally {
-      setRunning(false);
-    }
+      setResult(data.status === "waiting_for_device" ? data.message ?? "Task is waiting for a connected device." : data.result ?? "Task completed.");
+      setTask(""); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Task execution failed."); }
+    finally { setRunning(false); }
   }
 
   async function saveKey(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
+    event.preventDefault(); setError(""); setMessage("");
     try {
-      const response = await api("/api/v1/ai/providers/keys", {
-        method: "PUT",
-        body: JSON.stringify({ provider, apiKey }),
-      });
+      const response = await api("/api/v1/ai/providers/keys", { method: "PUT", body: JSON.stringify({ provider, apiKey }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not save provider key.");
-      setApiKey("");
-      setMessage(provider + " credential encrypted and saved.");
-      await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save provider key.");
-    }
+      setApiKey(""); setMessage(provider + " credential encrypted and saved."); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save provider key."); }
   }
 
   async function removeKey(name: string) {
     if (!window.confirm("Remove saved " + name + " credential?")) return;
     try {
-      const response = await api("/api/v1/ai/providers/keys", {
-        method: "DELETE",
-        body: JSON.stringify({ provider: name }),
-      });
+      const response = await api("/api/v1/ai/providers/keys", { method: "DELETE", body: JSON.stringify({ provider: name }) });
       if (!response.ok) throw new Error("Could not remove provider key.");
       await refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not remove provider key.");
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not remove provider key."); }
   }
 
   const databaseStatus = health.services?.database ?? "checking";
   const backendStatus = health.status ?? "checking";
+  const enabledAgents = agents.filter((agent) => agent.enabled).length;
+  const activeTasks = tasks.filter((item) => ["running", "in_progress", "processing"].includes(item.status)).length;
+  const failedTasks = tasks.filter((item) => ["failed", "error"].includes(item.status)).length;
 
   return (
-    <div className="dashboard-page mx-auto max-w-6xl space-y-6">
-      <PageHeader
-        title="System Overview"
-        description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
-      />
+    <div className="dashboard-page space-y-7">
+      <PageHeader title="Command overview" description="A clear operational picture of your AI system — service health, agent activity, model access and the tools available to your workspace." />
 
-      <section className="command-deck relative overflow-hidden rounded-[28px] border border-cyan-300/15 p-5 sm:p-7">
+      <section className="command-deck p-5 sm:p-8">
         <div className="command-deck-grid pointer-events-none absolute inset-0" />
-        <div className="relative grid gap-7 xl:grid-cols-[1.2fr_.8fr] xl:items-center">
+        <div className="relative grid gap-8 xl:grid-cols-[1.1fr_.9fr] xl:items-center">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="monitor-kicker"><span className="monitor-live-dot" /> SYSTEM CONTROL / OWNER CONSOLE</span>
-              <span className="rounded-full border border-white/10 bg-white/[.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.16em] text-slate-400">Private workspace</span>
-            </div>
-            <h2 className="mt-4 max-w-2xl text-3xl font-semibold leading-[1.08] tracking-[-.045em] text-white sm:text-4xl">Command your<br /><span className="text-cyan-200">AI infrastructure.</span></h2>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-slate-400">A single operational view across orchestration, tools, model providers, devices and data services. Select a monitor to inspect its control surface.</p>
+            <p className="eyebrow">Personal AI infrastructure <span className="px-1 text-stone-600">/</span> Owner console</p>
+            <h2 className="mt-4 max-w-2xl text-3xl font-semibold leading-[1.08] tracking-[-.045em] text-stone-100 sm:text-5xl">One workspace.<br /><span className="text-[#d8bd83]">Every system in view.</span></h2>
+            <p className="mt-4 max-w-xl text-sm leading-7 text-stone-400">Inspect the engine, connect approved providers, run an Agent task and trace what the backend actually reports. No decorative online indicators or invented telemetry.</p>
             <div className="mt-6 flex flex-wrap gap-2">
-              <a href="/dashboard/system-map" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Open system map <span aria-hidden="true">↗</span></a>
-              <a href="/dashboard/agent-lab" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Launch Agent Lab</a>
-              <a href="/dashboard/bot-channels" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
-              <a href="/dashboard/agent-map" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] px-4 py-3 text-xs font-semibold text-violet-100 transition hover:bg-violet-300/[.12]">Agentic Map</a>
-              <a href="/dashboard/bot-map" className="rounded-xl border border-amber-200/20 bg-amber-200/[.05] px-4 py-3 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[.1]">Bot Network</a>
-              <a href="/dashboard/monitors" className="rounded-xl border border-cyan-200/20 bg-cyan-200/[.05] px-4 py-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-200/[.1]">AI Monitors</a>
+              <Link href="/dashboard/agent-lab" className="action-primary">Open Agent workbench <span aria-hidden>↗</span></Link>
+              <Link href="/dashboard/system-map" className="action-secondary">System topology</Link>
+              <Link href="/dashboard/agent-map" className="action-secondary">Agent architecture</Link>
+              <Link href="/dashboard/bot-map" className="action-secondary">Bot architecture</Link>
             </div>
           </div>
           <div className="monitor-wall">
-            <div className="monitor-wall-head"><span>INFRASTRUCTURE MONITORS</span><span>LIVE PROBE DATA</span></div>
+            <div className="monitor-wall-head"><span>01 / SERVICE READOUT</span><span>PUBLIC HEALTH PROBE</span></div>
             <div className="grid grid-cols-2 gap-2">
               <div className="monitor-tile monitor-tile-primary"><span className="monitor-label">CORE API</span><strong>{backendStatus}</strong><span className="monitor-foot"><i className={backendStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> Health endpoint</span></div>
-              <div className="monitor-tile"><span className="monitor-label">DATABASE</span><strong>{databaseStatus}</strong><span className="monitor-foot"><i className={databaseStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> PostgreSQL</span></div>
-              <div className="monitor-tile"><span className="monitor-label">REGISTERED TOOLS</span><strong>{connected ? tools.length : "—"}</strong><span className="monitor-foot">Owner connection {connected ? "verified" : "required"}</span></div>
-              <div className="monitor-tile"><span className="monitor-label">AI PROVIDERS</span><strong>{connected ? providers.length : "—"}</strong><span className="monitor-foot">Credentials configured</span></div>
+              <div className="monitor-tile"><span className="monitor-label">DATABASE</span><strong>{databaseStatus}</strong><span className="monitor-foot"><i className={databaseStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> PostgreSQL health</span></div>
+              <div className="monitor-tile"><span className="monitor-label">REGISTERED TOOLS</span><strong>{connected ? tools.length : "—"}</strong><span className="monitor-foot">{connected ? "Owner data loaded" : "Owner access required"}</span></div>
+              <div className="monitor-tile"><span className="monitor-label">MODEL PROVIDERS</span><strong>{connected ? providers.length : "—"}</strong><span className="monitor-foot">Configured credentials</span></div>
             </div>
-            <div className="monitor-wall-foot"><span>AGENT RUNTIME <b>INTEGRATION IN PROGRESS</b></span><span>NO MOCK TELEMETRY</span></div>
+            <div className="monitor-wall-foot mt-3 border-t border-white/[.07] pt-3"><span>PRIVATE OWNER MODE</span><span>UNVERIFIED = NOT SHOWN AS LIVE</span></div>
           </div>
         </div>
       </section>
+
+      <div className="metric-grid">
+        <Metric label="Backend" value={backendStatus} note="Live /api/v1/health response" />
+        <Metric label="Database" value={databaseStatus} note="Supabase health indicator" />
+        <Metric label="Enabled agents" value={connected ? enabledAgents : "—"} note={connected ? agents.length + " definitions registered" : "Connect owner access"} />
+        <Metric label="Active tasks" value={connected ? activeTasks : "—"} note={connected ? failedTasks + " failed in returned history" : "Connect owner access"} />
+      </div>
+
       <SystemHealthCheck connected={connected} token={token} />
       {connected && <CompleteSystemTest token={token} />}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
-          <p className="text-xs text-zinc-500">Backend status</p>
-          <p className="mt-2 text-xl font-semibold text-white">{backendStatus}</p>
-          <p className="mt-1 text-xs text-zinc-500">Live health endpoint</p>
+      <section className="surface-card p-5 sm:p-6">
+        <div className="panel-heading">
+          <div><p className="eyebrow">Access layer</p><h2 className="mt-2">Secure backend connection</h2><p>Authenticate with the owner token. It stays in page memory and is never saved in browser storage.</p></div>
+          <span className={connected ? "workspace-status" : "rounded-full border border-[#c96b59]/30 bg-[#c96b59]/10 px-3 py-2 text-[10px] text-[#e3a092]"}>{connected ? "Owner verified" : "Disconnected"}</span>
         </div>
-        <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
-          <p className="text-xs text-zinc-500">Database</p>
-          <p className="mt-2 text-xl font-semibold text-white">{databaseStatus}</p>
-          <p className="mt-1 text-xs text-zinc-500">Supabase PostgreSQL</p>
-        </div>
-        <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
-          <p className="text-xs text-zinc-500">Registered tools</p>
-          <p className="mt-2 text-xl font-semibold text-white">{connected ? tools.length : "—"}</p>
-          <p className="mt-1 text-xs text-zinc-500">Allow-listed backend tools</p>
-        </div>
-        <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
-          <p className="text-xs text-zinc-500">AI providers</p>
-          <p className="mt-2 text-xl font-semibold text-white">{connected ? providers.length : "—"}</p>
-          <p className="mt-1 text-xs text-zinc-500">Encrypted server-side credentials</p>
-        </div>
+        {!connected ? <div className="flex flex-col gap-3 sm:flex-row">
+          <input type="password" autoComplete="off" value={masterKey} onChange={(event) => setMasterKey(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void connect(); }} placeholder="Enter FS_OWNER_TOKEN" aria-label="Owner master token" className="min-w-0 flex-1 px-4 py-3 text-sm" />
+          <button type="button" disabled={connecting || masterKey.length < 32} onClick={() => void connect()} className="action-primary">{connecting ? "Connecting…" : "Connect backend"}</button>
+        </div> : <div className="flex flex-wrap items-center gap-3"><p className="text-sm text-[#a9c2a7]">Authenticated owner session is active in this page.</p><button type="button" onClick={disconnect} className="action-secondary">Disconnect</button><button type="button" onClick={() => void refresh()} className="action-secondary">Refresh data ↻</button></div>}
+        <p className="mt-3 text-[10px] leading-5 text-stone-500">The owner token remains in memory only. Rotate it through the Render environment if it is exposed.</p>
       </section>
 
-      <section className="rounded-2xl border border-cyan-900/50 bg-gradient-to-br from-cyan-950/40 via-zinc-950/80 to-violet-950/30 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Backend connection</p>
-            <h2 className="mt-2 text-lg font-semibold text-white">Personal owner access</h2>
-            <p className="mt-1 text-sm text-zinc-400">No signup, login or expiring four-day session.</p>
+      {connected && <>
+        <section className="grid gap-5 xl:grid-cols-2">
+          <div className="surface-card p-5 sm:p-6">
+            <div className="panel-heading"><div><p className="eyebrow">Device bridge</p><h2 className="mt-2">Pair an Android device</h2><p>Generate a single-use code for the Futuristic System app. It expires after five minutes.</p></div><span className="text-2xl text-[#c2a66b]">⌁</span></div>
+            <button type="button" disabled={pairingBusy} onClick={() => void createPairingCode()} className="action-primary">{pairingBusy ? "Generating…" : pairingCode ? "Generate another code" : "Generate pairing code"}</button>
+            {pairingCode && <div className="mt-4 rounded-xl border border-[#c2a66b]/25 bg-[#c2a66b]/[.06] p-4">
+              <p className="text-[10px] text-stone-400">One-time pairing code · expires {new Date(pairingExpiresAt).toLocaleTimeString()}</p>
+              <p className="mt-3 break-all font-mono text-sm text-stone-100 select-all">{pairingCode}</p>
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void navigator.clipboard.writeText(pairingCode)} className="action-secondary">Copy code</button><button type="button" onClick={() => { setPairingCode(""); setPairingExpiresAt(""); }} className="action-secondary">Hide code</button></div>
+              <p className="mt-3 text-[10px] text-[#e1bd7e]">Treat this code like a password. Use it only in your own app.</p>
+            </div>}
           </div>
-          <span className={connected ? "rounded-full bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300" : "rounded-full bg-amber-400/10 px-3 py-1 text-xs text-amber-300"}>
-            {connected ? "Connected" : "Disconnected"}
-          </span>
-        </div>
-        {!connected ? (
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <input
-              type="password"
-              autoComplete="off"
-              value={masterKey}
-              onChange={(event) => setMasterKey(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") void connect(); }}
-              placeholder="Enter FS_OWNER_TOKEN"
-              aria-label="Owner master token"
-              className="min-w-0 flex-1 rounded-xl border border-border bg-black/40 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
-            />
-            <button
-              type="button"
-              disabled={connecting || masterKey.length < 32}
-              onClick={() => void connect()}
-              className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40"
-            >
-              {connecting ? "Connecting…" : "Connect backend"}
-            </button>
+          <div className="surface-card p-5 sm:p-6">
+            <div className="panel-heading"><div><p className="eyebrow">Model credentials</p><h2 className="mt-2">AI provider access</h2><p>Credentials are encrypted on the server and never returned to this page.</p></div><span className="text-2xl text-[#a58bb9]">◈</span></div>
+            <form onSubmit={saveKey} className="grid gap-3 sm:grid-cols-[130px_1fr]">
+              <select value={provider} onChange={(event) => setProvider(event.target.value)} className="px-3 py-3 text-sm"><option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option></select>
+              <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" placeholder="Paste provider API key" className="min-w-0 px-3 py-3 text-sm" />
+              <button disabled={!apiKey.trim()} className="action-primary sm:col-span-2">Save encrypted key</button>
+            </form>
+            <div className="mt-4 space-y-2">{providers.map((item) => <div key={item.provider} className="flex items-center justify-between gap-3 rounded-lg border border-white/[.08] px-3 py-3"><span className="text-xs capitalize text-stone-200">{item.provider} · configured</span><button type="button" onClick={() => void removeKey(item.provider)} className="text-[10px] font-semibold text-[#e3a092]">Remove</button></div>)}
+              {providers.length === 0 && <p className="text-xs text-stone-500">No provider credentials configured. Safe local tools remain available.</p>}</div>
           </div>
-        ) : (
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-emerald-300">Master token verified · connection active in this page</p>
-            <button type="button" onClick={disconnect} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Disconnect</button>
-          </div>
-        )}
-        <p className="mt-3 text-xs text-zinc-500">The master token remains in page memory only; it is not written to browser storage. Set or rotate it later in Render environment variables.</p>
-      </section>
-
-      {connected && (
-        <section className="rounded-2xl border border-cyan-900/50 bg-zinc-950/70 p-5 sm:p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Secure device pairing</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Connect your Android phone once</h2>
-          <p className="mt-1 text-sm text-zinc-400">Create a one-time code here, enter it in Futuristic System on your phone, and the app will keep its device credential securely for automatic reconnection.</p>
-          <button type="button" disabled={pairingBusy} onClick={() => void createPairingCode()} className="mt-4 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">
-            {pairingBusy ? "Creating code…" : pairingCode ? "Generate a new code" : "Generate pairing code"}
-          </button>
-          {pairingCode && (
-            <div className="mt-4 rounded-xl border border-border bg-black/40 p-4">
-              <p className="text-xs text-zinc-400">One-time code · expires {new Date(pairingExpiresAt).toLocaleTimeString()}</p>
-              <p className="mt-2 break-all font-mono text-sm text-white select-all">{pairingCode}</p>
-              <button type="button" onClick={() => void navigator.clipboard.writeText(pairingCode)} className="mt-3 rounded-lg border border-border px-3 py-2 text-xs text-zinc-200">Copy pairing code</button>
-              <button type="button" onClick={() => { setPairingCode(""); setPairingExpiresAt(""); }} className="ml-2 rounded-lg border border-border px-3 py-2 text-xs text-zinc-400">Hide code</button>
-              <p className="mt-3 text-xs text-amber-300">Treat this code like a password. Use it only in your own app. It can be used once.</p>
-            </div>
-          )}
         </section>
-      )}
 
-      {connected && (
-        <>
-          <section className="rounded-2xl border border-border bg-zinc-950/70 p-5 sm:p-6">
-            <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Agent runtime</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">Execute a task</h2>
-              <p className="mt-1 text-sm text-zinc-400">Task → planner → registered tools → synthesis → persistent history.</p>
-            </div>
-            <form onSubmit={runTask} className="space-y-3">
-              <label className="block space-y-2 text-sm text-zinc-300">
-                <span>Execution profile</span>
-                <select
-                  value={selectedAgentId}
-                  onChange={(event) => setSelectedAgentId(event.target.value)}
-                  disabled={!agentCatalogAvailable || agents.length === 0 || running}
-                  className="w-full rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white disabled:opacity-50"
-                >
-                  <option value="">Default planner (existing workflow)</option>
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id} disabled={!agent.enabled}>
-                      {agent.name}{agent.enabled ? "" : " (disabled)"}
-                    </option>
-                  ))}
-                </select>
-                {!agentCatalogAvailable && <span className="block text-xs text-amber-300">Agent definitions are unavailable until the Agent Manager database migration is applied.</span>}
-                {agentCatalogAvailable && agents.length === 0 && <span className="block text-xs text-zinc-500">No Agent definitions yet. Create one in Agent Manager.</span>}
-              </label>
-              <textarea
-                value={task}
-                onChange={(event) => setTask(event.target.value)}
-                maxLength={4000}
-                rows={4}
-                placeholder="Describe what the backend should do…"
-                className="w-full rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
-              />
-              <button disabled={running || !task.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">
-                {running ? "Executing task…" : "Run agent task"}
-              </button>
-            </form>
-            {result && <pre className="mt-4 whitespace-pre-wrap rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-200">{result}</pre>}
-          </section>
-
-          <section className="rounded-2xl border border-border bg-zinc-950/70 p-5 sm:p-6">
-            <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Model layer</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">AI provider credentials</h2>
-              <p className="mt-1 text-sm text-zinc-400">OpenAI and OpenRouter adapters are active. Keys are encrypted on the server and never returned to the browser.</p>
-            </div>
-            <form onSubmit={saveKey} className="grid gap-3 sm:grid-cols-[160px_1fr_auto]">
-              <select value={provider} onChange={(event) => setProvider(event.target.value)} className="rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white">
-                <option value="openai">OpenAI</option>
-                <option value="openrouter">OpenRouter</option>
+        <section className="surface-card p-5 sm:p-6">
+          <div className="panel-heading"><div><p className="eyebrow">Agent runtime</p><h2 className="mt-2">Submit a task</h2><p>Describe the outcome. The backend plans, validates, executes approved tools and records the result.</p></div><Link href="/dashboard/agent-lab" className="action-secondary">Advanced workbench ↗</Link></div>
+          <form onSubmit={runTask} className="space-y-3">
+            <label className="block space-y-2 text-[11px] font-semibold text-stone-300"><span>Execution profile</span>
+              <select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} disabled={!agentCatalogAvailable || agents.length === 0 || running} className="w-full px-4 py-3 text-sm">
+                <option value="">Default planner (existing workflow)</option>
+                {agents.map((agent) => <option key={agent.id} value={agent.id} disabled={!agent.enabled}>{agent.name}{agent.enabled ? "" : " (disabled)"}</option>)}
               </select>
-              <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} minLength={8} maxLength={4096} autoComplete="new-password" placeholder="Paste provider API key" className="min-w-0 rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white placeholder:text-zinc-600" />
-              <button disabled={!apiKey.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">Save encrypted key</button>
-            </form>
-            <div className="mt-4 space-y-2">
-              {providers.map((item) => (
-                <div key={item.provider} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                  <span className="text-sm capitalize text-zinc-200">{item.provider} · configured</span>
-                  <button type="button" onClick={() => void removeKey(item.provider)} className="text-xs text-red-300">Remove</button>
-                </div>
-              ))}
-              {providers.length === 0 && <p className="text-xs text-zinc-500">No provider credentials configured yet. Safe local tools remain available.</p>}
-            </div>
-          </section>
+              {!agentCatalogAvailable && <span className="block text-[10px] text-[#e1bd7e]">Agent definitions are unavailable until the Agent Manager database migration is applied.</span>}
+              {agentCatalogAvailable && agents.length === 0 && <span className="block text-[10px] text-stone-500">No Agent definitions yet. Create one in Agent Manager.</span>}
+            </label>
+            <textarea value={task} onChange={(event) => setTask(event.target.value)} maxLength={4000} rows={4} placeholder="Describe what the backend should do…" className="w-full px-4 py-3 text-sm" />
+            <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-[10px] text-stone-500">{task.length}/4000 characters</span><button disabled={running || !task.trim()} className="action-primary">{running ? "Executing task…" : "Run Agent task →"}</button></div>
+          </form>
+          {result && <pre className="mt-4 whitespace-pre-wrap rounded-xl border border-[#8aa78b]/25 bg-[#8aa78b]/[.06] p-4 text-sm text-[#c1d5bf]">{result}</pre>}
+        </section>
 
-          <section className="rounded-2xl border border-border bg-zinc-950/70 p-5 sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Execution history</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Recent agent tasks</h2>
-              </div>
-              <button type="button" onClick={() => void refresh()} className="text-xs text-cyan-300">Refresh</button>
-            </div>
-            {tasks.length === 0 ? <p className="text-sm text-zinc-500">No tasks have been executed yet.</p> : (
-              <div className="space-y-2">
-                {tasks.map((item) => (
-                  <article key={item.id} className="rounded-xl border border-border p-3">
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <p className="text-sm text-zinc-200">{item.task}</p>
-                      <span className={item.status === "failed" ? "text-xs text-red-300" : "text-xs text-emerald-300"}>{item.status}</span>
-                    </div>
-                    {item.result && <pre className="mt-2 whitespace-pre-wrap text-xs text-zinc-400">{item.result}</pre>}
-                    {item.status === "failed" && (
-                      <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-3" role="status">
-                        <p className="text-xs font-semibold text-red-300">Failure details</p>
-                        {item.failed_stage && <p className="mt-1 text-xs text-zinc-300">Stage: {item.failed_stage.replace(/_/g, " ")}</p>}
-                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-red-200">{item.error_message ?? "Failure reason is unavailable for this task. Re-run it after the diagnostics update."}</p>
-                      </div>
-                    )}
-                    {item.agent_snapshot?.name && <p className="mt-2 text-[10px] text-cyan-300">Agent: {item.agent_snapshot.name}</p>}
-                    <p className="mt-2 text-[10px] text-zinc-600">{new Date(item.created_at).toLocaleString()}</p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
+        <section className="surface-card p-5 sm:p-6">
+          <div className="panel-heading"><div><p className="eyebrow">Execution ledger</p><h2 className="mt-2">Recent Agent tasks</h2><p>History returned by the owner API, with failure stage and diagnostic details where available.</p></div><button type="button" onClick={() => void refresh()} className="action-secondary">Refresh ↻</button></div>
+          {tasks.length === 0 ? <p className="text-sm text-stone-500">No tasks have been executed yet.</p> : <div className="space-y-2">
+            {tasks.map((item) => <article key={item.id} className="rounded-xl border border-white/[.08] bg-black/[.12] p-4">
+              <div className="flex flex-wrap justify-between gap-2"><p className="min-w-0 flex-1 text-sm text-stone-200">{item.task}</p><span className={item.status === "failed" ? "text-[10px] font-bold uppercase text-[#e3a092]" : "text-[10px] font-bold uppercase text-[#a9c2a7]"}>{item.status.replace(/_/g, " ")}</span></div>
+              {item.result && <pre className="mt-3 whitespace-pre-wrap text-xs leading-6 text-stone-400">{item.result}</pre>}
+              {item.status === "failed" && <div className="mt-3 rounded-lg border border-[#c96b59]/20 bg-[#c96b59]/[.06] p-3" role="status"><p className="text-xs font-semibold text-[#e3a092]">Failure diagnostics</p>{item.failed_stage && <p className="mt-1 text-[10px] text-stone-300">Stage: {item.failed_stage.replace(/_/g, " ")}</p>}<p className="mt-1 whitespace-pre-wrap break-words text-xs text-[#e3a092]">{item.error_message ?? "Failure reason unavailable."}</p></div>}
+              {item.agent_snapshot?.name && <p className="mt-2 text-[10px] text-[#d8bd83]">Agent: {item.agent_snapshot.name}</p>}
+              <p className="mt-2 text-[9px] text-stone-600">{new Date(item.created_at).toLocaleString()}</p>
+            </article>)}
+          </div>}
+        </section>
 
-          <section className="rounded-2xl border border-border bg-zinc-950/70 p-5 sm:p-6">
-            <h2 className="text-lg font-semibold text-white">Registered backend tools</h2>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {tools.map((item) => (
-                <article key={item.id} className="rounded-xl border border-border p-3">
-                  <p className="text-sm font-medium text-cyan-200">{item.id}</p>
-                  <p className="mt-1 text-xs text-zinc-400">{item.description}</p>
-                  <p className="mt-2 text-[10px] text-zinc-600">Permission: {item.permission} · {item.sideEffect ? "Side effects" : "Read-only"}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </>
-      )}
+        <section className="surface-card p-5 sm:p-6">
+          <div className="panel-heading"><div><p className="eyebrow">Capability registry</p><h2 className="mt-2">Registered backend tools</h2><p>Only registered capabilities are exposed to the Agent runtime.</p></div><span className="text-sm font-semibold text-[#d8bd83]">{tools.length} tools</span></div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{tools.map((item) => <article key={item.id} className="rounded-xl border border-white/[.08] bg-black/[.12] p-4"><p className="break-all font-mono text-xs font-semibold text-[#d8bd83]">{item.id}</p><p className="mt-2 text-[11px] leading-5 text-stone-400">{item.description}</p><p className="mt-3 text-[9px] uppercase tracking-wide text-stone-600">Permission: {item.permission} · {item.sideEffect ? "Side effects" : "Read-only"}</p></article>)}</div>
+        </section>
+      </>}
 
-      {error && <p role="alert" className="rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
-      {message && <p role="status" className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}
+      {error && <p role="alert" className="rounded-xl border border-[#c96b59]/30 bg-[#c96b59]/[.08] p-4 text-sm text-[#e3a092]">{error}</p>}
+      {message && <p role="status" className="rounded-xl border border-[#8aa78b]/25 bg-[#8aa78b]/[.07] p-4 text-sm text-[#b7cdb5]">{message}</p>}
     </div>
   );
 }
