@@ -18,30 +18,40 @@ type NodeInfo = {
   description: string;
   href: string;
   layer: string;
-  state: "live" | "building" | "optional";
+  status: string;
+  accent: string;
 };
 
 const nodes: NodeInfo[] = [
-  { id: "dashboard", title: "Control Centre", subtitle: "Web interface", description: "Owner workspace for health, agent tasks, channel tests, provider settings and operational visibility.", href: "/dashboard", layer: "Interface", state: "live" },
-  { id: "agent", title: "Agent Runtime", subtitle: "Task orchestration", description: "The task execution surface and registered tools are available. Shared Agent Core integration is tracked separately and must pass its own tests before being called complete.", href: "/dashboard/agent-lab", layer: "Orchestration", state: "building" },
-  { id: "mcp", title: "MCP Server", subtitle: " /api/mcp", description: "Stateless MCP endpoint with owner-token authentication, tool discovery and tool invocation. ChatGPT OAuth is not configured.", href: "/dashboard/mcp", layer: "Integration", state: "live" },
-  { id: "bot", title: "Bot Gateway", subtitle: "Channel contract", description: "The normalized channel contract test centre is available. Telegram webhook verification and end-to-end delivery are not yet connected; other channels remain planned.", href: "/dashboard/bot-channels", layer: "Channels", state: "building" },
-  { id: "database", title: "Memory & Database", subtitle: "Supabase", description: "Backend persistence and authentication health are read from the public health endpoint. Owner-only memory and device controls remain behind authentication.", href: "/dashboard/database", layer: "Data", state: "live" },
-  { id: "providers", title: "AI Providers", subtitle: "Optional model layer", description: "Provider adapters can be configured from AI Engine. No paid provider is required for safe backend health and contract tests; model inference may have separate costs.", href: "/dashboard/models", layer: "Intelligence", state: "optional" },
+  { id: "dashboard", title: "Control Centre", subtitle: "OWNER INTERFACE", description: "Web workspace for system health, Agent tasks, provider settings, device pairing and operational controls.", href: "/dashboard", layer: "01 / Interface", status: "UI LAYER", accent: "cyan" },
+  { id: "agent", title: "Agent Runtime", subtitle: "ORCHESTRATION CORE", description: "Planner and task execution surface. Shared Agent Core integration is still in progress; specialist execution is not represented as complete.", href: "/dashboard/agent-lab", layer: "02 / Intelligence", status: "BUILDING", accent: "violet" },
+  { id: "mcp", title: "MCP Server", subtitle: "TOOL PROTOCOL", description: "Stateless MCP endpoint with owner-token authentication, tool discovery and invocation. ChatGPT OAuth is not configured.", href: "/dashboard/mcp", layer: "03 / Integration", status: "ENDPOINT", accent: "cyan" },
+  { id: "bot", title: "Bot Gateway", subtitle: "CHANNEL ADAPTERS", description: "Normalized channel contract test centre. Telegram webhook verification and end-to-end delivery are not yet connected.", href: "/dashboard/bot-channels", layer: "04 / Channels", status: "BUILDING", accent: "amber" },
+  { id: "database", title: "Memory & Database", subtitle: "PERSISTENCE LAYER", description: "Supabase persistence and authentication health are read from the public health endpoint. Owner-only memory and device controls remain authenticated.", href: "/dashboard/database", layer: "05 / Data", status: "HEALTH PROBED", accent: "emerald" },
+  { id: "providers", title: "AI Providers", subtitle: "MODEL ROUTER", description: "Provider adapters can be configured from AI Engine. No paid provider is required for health and safe contract tests; model inference may have separate costs.", href: "/dashboard/models", layer: "06 / Model Layer", status: "OPTIONAL", accent: "sky" },
 ];
 
-const statusTone: Record<string, string> = {
-  ok: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
-  live: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
-  building: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  optional: "border-sky-400/25 bg-sky-400/10 text-sky-200",
-  unavailable: "border-rose-400/25 bg-rose-400/10 text-rose-300",
-  checking: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+const accentClass: Record<string, string> = {
+  cyan: "node-cyan",
+  violet: "node-violet",
+  amber: "node-amber",
+  emerald: "node-emerald",
+  sky: "node-sky",
+};
+
+const tone: Record<string, string> = {
+  ok: "text-emerald-300 border-emerald-300/25 bg-emerald-300/[.08]",
+  live: "text-emerald-300 border-emerald-300/25 bg-emerald-300/[.08]",
+  healthy: "text-emerald-300 border-emerald-300/25 bg-emerald-300/[.08]",
+  building: "text-amber-200 border-amber-300/25 bg-amber-300/[.08]",
+  unavailable: "text-rose-300 border-rose-300/25 bg-rose-300/[.08]",
+  checking: "text-slate-300 border-slate-400/20 bg-slate-400/[.06]",
+  unknown: "text-slate-300 border-slate-400/20 bg-slate-400/[.06]",
 };
 
 function StatusPill({ value }: { value: string }) {
   const key = value.toLowerCase();
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusTone[key] ?? statusTone.checking}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{value.replace(/_/g, " ")}</span>;
+  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[.14em] ${tone[key] ?? "border-white/10 bg-white/[.04] text-slate-300"}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{value.replace(/_/g, " ")}</span>;
 }
 
 export default function SystemMapPage() {
@@ -71,37 +81,82 @@ export default function SystemMapPage() {
   const authStatus = health.services?.authentication ?? "unknown";
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <PageHeader title="System Architecture Map" description="Explore the control plane, agent runtime, integration gateways and data services. Select any component to inspect its responsibility and open its control page." />
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-surface-raised/80 p-4"><p className="text-xs text-slate-400">Backend health</p><div className="mt-3"><StatusPill value={healthState} /></div><p className="mt-2 text-[11px] text-slate-500">Live public health probe</p></div>
-        <div className="rounded-2xl border border-border bg-surface-raised/80 p-4"><p className="text-xs text-slate-400">Database</p><div className="mt-3"><StatusPill value={dbStatus} /></div><p className="mt-2 text-[11px] text-slate-500">Supabase service check</p></div>
-        <div className="rounded-2xl border border-border bg-surface-raised/80 p-4"><p className="text-xs text-slate-400">Authentication</p><div className="mt-3"><StatusPill value={authStatus} /></div><p className="mt-2 text-[11px] text-slate-500">Backend auth service check</p></div>
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised/80 p-4"><div><p className="text-xs text-slate-400">Last checked</p><p className="mt-3 text-sm font-semibold text-white">{checkedAt || "Waiting…"}</p><p className="mt-2 text-[11px] text-slate-500">{health.version ?? "Version not reported"}</p></div><button type="button" onClick={() => void refresh()} className="rounded-xl border border-cyan-400/25 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-400/10">Refresh</button></div>
+    <div className="system-map-page mx-auto max-w-[1440px] space-y-6">
+      <PageHeader title="System Map" description="A visual control-plane map of the Futuristic System stack. Select a node to inspect its role and open its control surface." />
+
+      <section className="map-commandbar">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="map-orbit-mark" aria-hidden="true"><span /></span>
+          <div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-200">Architecture intelligence</p><p className="mt-1 text-sm text-slate-300">Distributed device layer · central MCP brain · governed execution</p></div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill value={healthState} />
+          <button type="button" onClick={() => void refresh()} className="rounded-xl border border-cyan-300/20 bg-cyan-300/[.06] px-3.5 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-300/[.12]">Refresh health ↻</button>
+        </div>
       </section>
 
-      <section className="rounded-3xl border border-border bg-slate-950/75 p-4 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.22em] text-cyan-300">Live architecture view</p><h2 className="mt-2 text-lg font-semibold text-white">Request and capability flow</h2><p className="mt-1 text-xs text-slate-400">Conceptual system relationships · status labels reflect current implementation, not planned promises</p></div><StatusPill value={healthState} /></div>
-        <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_44px_1fr_44px_1fr] lg:items-stretch">
-          <button type="button" onClick={() => setSelected("dashboard")} className={`map-node rounded-2xl border p-4 text-left transition hover:border-cyan-300/50 ${selected === "dashboard" ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">01 · Interface</span><h3 className="mt-2 font-semibold text-white">Control Centre</h3><p className="mt-1 text-xs text-slate-400">Dashboard · owner controls</p><div className="mt-3"><StatusPill value="live" /></div></button>
-          <div className="flex items-center justify-center text-cyan-300/60"><span className="hidden lg:block">→</span><span className="lg:hidden">↓</span></div>
-          <button type="button" onClick={() => setSelected("agent")} className={`map-node rounded-2xl border p-4 text-left transition hover:border-violet-300/50 ${selected === "agent" ? "border-violet-300/60 bg-violet-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">02 · Orchestration</span><h3 className="mt-2 font-semibold text-white">Agent Runtime</h3><p className="mt-1 text-xs text-slate-400">Plan · route · execute · verify</p><div className="mt-3"><StatusPill value="building" /></div></button>
-          <div className="flex items-center justify-center text-cyan-300/60"><span className="hidden lg:block">→</span><span className="lg:hidden">↓</span></div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <button type="button" onClick={() => setSelected("mcp")} className={`map-node rounded-2xl border p-4 text-left transition hover:border-cyan-300/50 ${selected === "mcp" ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">03A · Protocol</span><h3 className="mt-2 font-semibold text-white">MCP Server</h3><p className="mt-1 text-xs text-slate-400">Tools · resources · prompts</p><div className="mt-3"><StatusPill value="live" /></div></button>
-            <button type="button" onClick={() => setSelected("bot")} className={`map-node rounded-2xl border p-4 text-left transition hover:border-amber-300/50 ${selected === "bot" ? "border-amber-300/60 bg-amber-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">03B · Channels</span><h3 className="mt-2 font-semibold text-white">Bot Gateway</h3><p className="mt-1 text-xs text-slate-400">Telegram · web · Android</p><div className="mt-3"><StatusPill value="building" /></div></button>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="telemetry-card"><span>API HEALTH</span><strong className="text-cyan-100">{healthState}</strong><small>GET /api/v1/health</small></div>
+        <div className="telemetry-card"><span>DATABASE</span><strong className="text-emerald-100">{dbStatus}</strong><small>Supabase service indicator</small></div>
+        <div className="telemetry-card"><span>AUTHENTICATION</span><strong className="text-violet-100">{authStatus}</strong><small>Backend auth indicator</small></div>
+        <div className="telemetry-card"><span>LAST PROBE</span><strong className="text-white">{checkedAt || "Waiting…"}</strong><small>{health.version ?? "Version not reported"}</small></div>
+      </section>
+
+      <section className="map-stage">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="map-eyebrow">01 / SYSTEM TOPOLOGY</p><h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">Command & execution network</h2><p className="mt-2 max-w-2xl text-xs leading-6 text-slate-400">Conceptual relationships between the interface, orchestration, protocol gateways and data services. Statuses are intentionally conservative.</p></div>
+          <div className="map-legend"><span><i className="legend-dot legend-cyan" />Interface</span><span><i className="legend-dot legend-violet" />Intelligence</span><span><i className="legend-dot legend-emerald" />Data</span></div>
+        </div>
+
+        <div className="topology-grid">
+          <svg className="topology-lines" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="flowLine" x1="0" x2="1"><stop offset="0%" stopColor="#22d3ee" stopOpacity=".15" /><stop offset="50%" stopColor="#a78bfa" stopOpacity=".8" /><stop offset="100%" stopColor="#34d399" stopOpacity=".2" /></linearGradient></defs>
+            <path d="M500 95 V160 M500 160 H250 V225 M500 160 V225 M500 160 H750 V225 M250 330 V395 H500 V455 M500 330 V455 M750 330 V395 H500" stroke="url(#flowLine)" strokeWidth="2" fill="none" strokeDasharray="7 8" />
+            <circle cx="500" cy="160" r="5" fill="#67e8f9" /><circle cx="500" cy="395" r="5" fill="#a78bfa" />
+          </svg>
+          <div className="topology-node topology-root">
+            <button type="button" onClick={() => setSelected("dashboard")} className={`map-node-card node-cyan ${selected === "dashboard" ? "is-selected" : ""}`}>
+              <span className="node-index">01 / OWNER INTERFACE</span><span className="node-glyph">⌘</span><strong>Control Centre</strong><small>Dashboard · secure owner controls</small><em>WEB CONSOLE</em>
+            </button>
+          </div>
+          <div className="topology-node topology-agent">
+            <button type="button" onClick={() => setSelected("agent")} className={`map-node-card node-violet ${selected === "agent" ? "is-selected" : ""}`}>
+              <span className="node-index">02 / ORCHESTRATION</span><span className="node-glyph">◈</span><strong>Agent Runtime</strong><small>Plan · route · execute · verify</small><em>INTEGRATION IN PROGRESS</em>
+            </button>
+          </div>
+          <div className="topology-node topology-mcp">
+            <button type="button" onClick={() => setSelected("mcp")} className={`map-node-card node-cyan ${selected === "mcp" ? "is-selected" : ""}`}>
+              <span className="node-index">03A / PROTOCOL</span><span className="node-glyph">⌘</span><strong>MCP Server</strong><small>Tool discovery · invocation</small><em>ENDPOINT AVAILABLE</em>
+            </button>
+          </div>
+          <div className="topology-node topology-bot">
+            <button type="button" onClick={() => setSelected("bot")} className={`map-node-card node-amber ${selected === "bot" ? "is-selected" : ""}`}>
+              <span className="node-index">03B / CHANNELS</span><span className="node-glyph">⌁</span><strong>Bot Gateway</strong><small>Telegram · web · Android bridge</small><em>BUILDING</em>
+            </button>
+          </div>
+          <div className="topology-node topology-db">
+            <button type="button" onClick={() => setSelected("database")} className={`map-node-card node-emerald ${selected === "database" ? "is-selected" : ""}`}>
+              <span className="node-index">04 / DATA LAYER</span><span className="node-glyph">▤</span><strong>Memory & Database</strong><small>Supabase · owner-scoped data</small><em>{dbStatus.toUpperCase()}</em>
+            </button>
+          </div>
+          <div className="topology-node topology-provider">
+            <button type="button" onClick={() => setSelected("providers")} className={`map-node-card node-sky ${selected === "providers" ? "is-selected" : ""}`}>
+              <span className="node-index">05 / MODEL LAYER</span><span className="node-glyph">✳</span><strong>AI Providers</strong><small>External or local model adapters</small><em>OPTIONAL</em>
+            </button>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <button type="button" onClick={() => setSelected("database")} className={`map-node rounded-2xl border p-4 text-left transition ${selected === "database" ? "border-emerald-300/60 bg-emerald-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">04 · Data layer</span><h3 className="mt-2 font-semibold text-white">Memory & Database</h3><p className="mt-1 text-xs text-slate-400">Supabase persistence · owner data</p><div className="mt-3"><StatusPill value={dbStatus} /></div></button>
-          <button type="button" onClick={() => setSelected("providers")} className={`map-node rounded-2xl border p-4 text-left transition ${selected === "providers" ? "border-sky-300/60 bg-sky-400/10" : "border-slate-700 bg-slate-900/80"}`}><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">05 · Intelligence layer</span><h3 className="mt-2 font-semibold text-white">AI Providers</h3><p className="mt-1 text-xs text-slate-400">Optional external or local model</p><div className="mt-3"><StatusPill value="optional" /></div></button>
+
+        <div className="map-inspector">
+          <div className="min-w-0"><p className="map-eyebrow">02 / COMPONENT INSPECTOR · {active.layer}</p><h3 className="mt-2 text-lg font-semibold text-white">{active.title}</h3><p className="mt-1 text-[10px] font-bold tracking-[.16em] text-cyan-200/70">{active.subtitle}</p><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{active.description}</p></div>
+          <Link href={active.href} className="shrink-0 rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Open controls ↗</Link>
         </div>
-        <div className="mt-5 rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] p-4"><p className="text-[10px] font-bold uppercase tracking-[.18em] text-cyan-200">Selected component · {active.layer}</p><div className="mt-2 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold text-white">{active.title}</h3><p className="mt-1 text-xs text-slate-400">{active.subtitle}</p></div><Link href={active.href} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-cyan-200">Open controls ↗</Link></div><p className="mt-3 max-w-4xl text-sm leading-6 text-slate-300">{active.description}</p></div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {nodes.map((node) => <Link key={node.id} href={node.href} className="group rounded-2xl border border-border bg-surface-raised/70 p-4 transition hover:-translate-y-0.5 hover:border-cyan-300/30"><div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{node.layer}</span><span className="text-xs text-cyan-300 opacity-0 transition group-hover:opacity-100">Open ↗</span></div><h3 className="mt-2 text-sm font-semibold text-white">{node.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{node.description}</p></Link>)}
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {nodes.map((node) => <button key={node.id} type="button" onClick={() => setSelected(node.id)} className={`map-detail-card text-left ${accentClass[node.accent]} ${selected === node.id ? "is-selected" : ""}`}><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-bold uppercase tracking-[.18em] text-slate-500">{node.layer}</span><span className="text-[9px] font-bold tracking-widest text-cyan-100/70">{node.status}</span></div><h3 className="mt-3 text-sm font-semibold text-white">{node.title}</h3><p className="mt-2 text-xs leading-5 text-slate-400">{node.description}</p></button>)}
       </section>
+
+      <section className="map-footnote"><span className="text-cyan-200">SECURITY MODEL</span><p>Read-only by default. Write, destructive, external-side-effect and Android-device actions require explicit grants. A visual connection does not imply execution permission.</p><span className="shrink-0 text-slate-600">AUTH · {authStatus}</span></section>
     </div>
   );
 }
