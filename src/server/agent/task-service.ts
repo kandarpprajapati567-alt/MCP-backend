@@ -10,12 +10,15 @@ import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
+import { executeToolCallsWithBoundedParallelism } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
+import { TOOL_CATALOG } from "@/server/tools/registry";
+import { evaluateAgentToolPolicy, type AgentToolPolicyDescriptor } from "@/server/agent/tool-policy";
+import { createWebInvocationEnvelope, createWebInvocationResult } from "@/server/agent/runtime-contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -189,10 +192,38 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
     await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
-    if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
-        plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
+    if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls)) {
       throw new Error("Agent execution policy rejected the generated plan.");
     }
+
+    const { listRemoteAgentToolsSafe } = await import("@/server/mcp/remote");
+    const remoteTools = await listRemoteAgentToolsSafe();
+    const invocationEnvelopes = new Map<string, ReturnType<typeof createWebInvocationEnvelope>>();
+    const toolPolicy = new Map<string, AgentToolPolicyDescriptor>();
+    for (const tool of TOOL_CATALOG) {
+      if (tool.id === "device.dispatch_tool" || tool.id.startsWith("agent.")) continue;
+      toolPolicy.set(tool.id, {
+        id: tool.id, permission: tool.permission, sideEffect: tool.sideEffect, target: "backend",
+      });
+    }
+    for (const tool of remoteTools) {
+      toolPolicy.set(tool.id, {
+        id: tool.id, permission: tool.permission, sideEffect: tool.sideEffect, target: "remote_mcp",
+      });
+    }
+    for (const tool of deviceTools) {
+      toolPolicy.set(tool.id, {
+        id: tool.id, permission: tool.permission, sideEffect: tool.sideEffect, target: "device",
+      });
+    }
+    const assertToolCallAllowed = (toolId: string) => {
+      const decision = evaluateAgentToolPolicy(toolPolicy.get(toolId), agent?.allowedTools ?? null);
+      if (!decision.allowed) {
+        throw new Error("Agent execution policy rejected tool: " + decision.reason);
+      }
+    };
+    for (const call of plan.toolCalls) assertToolCallAllowed(call.toolId);
+
     await setTask(admin, id, { plan, status: "executing" });
     await event(admin, id, "task.plan_ready", {
       steps: plan.steps.length,
@@ -203,16 +234,29 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     });
     await event(admin, id, "task.executing");
 
-    const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
+    const results: Array<{ callId: string; toolId: string; result: unknown; invocationResult?: ReturnType<typeof createWebInvocationResult> }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
-    await executeToolCallsSequentially(
+    await executeToolCallsWithBoundedParallelism(
       plan.toolCalls,
       async (call) => {
+        // Re-check the Agent allowlist and tool risk immediately before each side effect.
+        assertToolCallAllowed(call.toolId);
         const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
         if (deviceTool) {
+          const currentDeviceTools = await getAvailableDeviceTools(admin);
+          const currentDeviceTool = currentDeviceTools.find((tool) =>
+            tool.id === call.toolId && tool.deviceId === deviceTool.deviceId);
+          if (!currentDeviceTool) throw new Error("Device capability is no longer available.");
+          const deviceDecision = evaluateAgentToolPolicy({
+            id: currentDeviceTool.id,
+            permission: currentDeviceTool.permission,
+            sideEffect: currentDeviceTool.sideEffect,
+            target: "device",
+          }, agent?.allowedTools ?? null);
+          if (!deviceDecision.allowed) throw new Error("Device tool execution was rejected by policy.");
           const { data: job, error } = await admin.from("agent_tool_jobs").insert({
-            owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: deviceTool.deviceId,
+            owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: currentDeviceTool.deviceId,
             tool_call_id: call.id, tool_id: call.toolId, arguments: call.arguments, status: "queued",
           }).select("id,device_id,tool_id").single();
           if (error || !job) throw new Error("Device tool job could not be queued.");
@@ -222,35 +266,77 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
           });
           return { queuedForDevice: true };
         }
+
+        const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
+          remoteTools.find((tool) => tool.id === call.toolId);
+        if (!capability) throw new Error("Tool capability is no longer registered.");
+        const invocation = createWebInvocationEnvelope({
+          taskId: id,
+          toolCallId: call.id,
+          toolId: call.toolId,
+          arguments: call.arguments,
+          capability,
+        });
+        invocationEnvelopes.set(call.id, invocation);
         return executeBackendTool(call.toolId, call.arguments);
       },
-      (call) => !deviceTools.some((tool) => tool.id === call.toolId),
-      async (call, execution) => {
-        if (deviceTools.some((tool) => tool.id === call.toolId)) return;
-        if (execution.ok) {
-          results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
-        } else {
-          results.push({
-            callId: call.id,
-            toolId: call.toolId,
-            result: { ok: false, error: execution.error },
-          });
-        }
-        // Persist every completed/failed backend tool outcome immediately. If a
-        // later call hits an infrastructure failure, task history still retains
-        // the evidence collected before that failure.
-        await setTask(admin, id, { tool_results: results });
-        if (execution.ok) {
-          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-        } else {
-          await event(admin, id, "tool.failed", {
-            callId: call.id,
-            toolId: call.toolId,
-            message: execution.error,
-          });
-        }
+      {
+        maxConcurrency: 3,
+        // Only explicitly read-only, idempotent capabilities may share a batch.
+        // Device jobs, side effects and unknown capabilities remain sequential.
+        canRunInParallel: (call) => {
+          if (deviceTools.some((tool) => tool.id === call.toolId)) return false;
+          const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
+            remoteTools.find((tool) => tool.id === call.toolId);
+          return capability?.sideEffect === false && capability.annotations?.idempotentHint === true;
+        },
+        shouldCaptureFailure: (call) => !deviceTools.some((tool) => tool.id === call.toolId),
+        onOutcome: async (call, execution) => {
+          if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+          const invocation = invocationEnvelopes.get(call.id);
+          const invocationResult = invocation
+            ? createWebInvocationResult(
+                invocation,
+                execution.ok ? "completed" : "failed",
+                execution.ok ? undefined : "TOOL_EXECUTION_FAILED",
+              )
+            : undefined;
+          if (execution.ok) {
+            results.push({
+              callId: call.id,
+              toolId: call.toolId,
+              result: execution.result,
+              ...(invocationResult ? { invocationResult } : {}),
+            });
+          } else {
+            results.push({
+              callId: call.id,
+              toolId: call.toolId,
+              result: { ok: false, error: execution.error },
+              ...(invocationResult ? { invocationResult } : {}),
+            });
+          }
+          // Persist every completed/failed backend tool outcome immediately. If a
+          // later call hits an infrastructure failure, task history still retains
+          // the evidence collected before that failure.
+          await setTask(admin, id, { tool_results: results });
+          if (execution.ok) {
+            await event(admin, id, "tool.completed", {
+              callId: call.id,
+              toolId: call.toolId,
+              ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
+            });
+          } else {
+            await event(admin, id, "tool.failed", {
+              callId: call.id,
+              toolId: call.toolId,
+              message: execution.error,
+              ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
+            });
+          }
+        },
+        beforeEach: async () => assertTaskNotCancelled(admin, id),
       },
-      async () => assertTaskNotCancelled(admin, id),
     );
 
     await assertTaskNotCancelled(admin, id);

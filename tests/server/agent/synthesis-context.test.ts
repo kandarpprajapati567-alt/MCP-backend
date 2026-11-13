@@ -128,3 +128,70 @@ test("labels tool output as unverified evidence and exposes only source URLs act
   assert.equal(parsed.toolResults[1].executionOutcome, "reported_failure");
   assert.deepEqual(parsed.toolResults[1].sourceReferenceCandidates, []);
 });
+
+test("preserves source provenance and classifies publication freshness without overstating verification", () => {
+  const content = buildSynthesisUserContent(
+    "Research current AI systems",
+    { goal: "compare source evidence" },
+    [{
+      callId: "call-1",
+      toolId: "web.search",
+      result: {
+        provider: "tavily",
+        retrievedAt: "2026-11-13T10:00:00.000Z",
+        results: [
+          { title: "Recent source", url: "https://example.org/recent", publishedDate: "2026-11-01", score: 0.91, content: "Recent excerpt" },
+          { title: "Old source", url: "https://example.net/old", publishedDate: "2025-01-01", score: 0.72, content: "Old excerpt" },
+          { title: "Undated source", url: "https://example.com/undated", publishedDate: null, score: 0.5, content: "No date" },
+          { title: "Unsafe URL", url: "javascript:alert(1)", publishedDate: "2026-11-12", score: 0.99 },
+        ],
+      },
+    }],
+  );
+  const parsed = JSON.parse(content);
+  assert.match(parsed.provenancePolicy, /ranking signal, not truth or confidence/);
+  const sources = parsed.toolResults[0].sources;
+  assert.equal(sources.length, 3);
+  assert.equal(sources[0].sourceId, "ev-call-1-src-1");
+  assert.equal(sources[0].domain, "example.org");
+  assert.equal(sources[0].freshness, "fresh");
+  assert.equal(sources[0].relevanceScore, 0.91);
+  assert.equal(sources[1].freshness, "stale");
+  assert.equal(sources[2].freshness, "undated");
+  assert.equal(parsed.toolResults[0].retrievedAt, "2026-11-13T10:00:00.000Z");
+});
+
+test("marks provider dates in the future and keeps generic URLs explicitly undated", () => {
+  const content = buildSynthesisUserContent(
+    "Check references",
+    {},
+    [
+      { callId: "call-1", toolId: "web.search", result: {
+        retrievedAt: "2026-11-13T10:00:00.000Z",
+        results: [{ title: "Future", url: "https://future.example/page", publishedDate: "2027-01-01", score: 0.8 }],
+      } },
+      { callId: "call-2", toolId: "github.read_file", result: { url: "https://github.com/example/repo" } },
+    ],
+  );
+  const parsed = JSON.parse(content);
+  assert.equal(parsed.toolResults[0].sources[0].freshness, "future_dated");
+  assert.equal(parsed.toolResults[1].sources[0].freshness, "undated");
+  assert.equal(parsed.toolResults[1].sources[0].sourceKind, "url_reference");
+  assert.equal(parsed.toolResults[1].sources[0].sourceId, "ev-call-2-src-1");
+});
+
+test("drops oversized source URLs instead of overflowing the bounded evidence context", () => {
+  const oversizedUrl = "https://example.org/" + "x".repeat(600);
+  const content = buildSynthesisUserContent(
+    "Check an unusually long reference",
+    {},
+    [{ callId: "call-1", toolId: "web.search", result: {
+      retrievedAt: "2026-11-13T10:00:00.000Z",
+      results: [{ title: "Oversized", url: oversizedUrl, publishedDate: "2026-11-12", score: 0.8 }],
+    } }],
+  );
+  const parsed = JSON.parse(content);
+  assert.ok(content.length <= 9_500);
+  assert.deepEqual(parsed.toolResults[0].sources, []);
+  assert.deepEqual(parsed.toolResults[0].sourceReferenceCandidates, []);
+});

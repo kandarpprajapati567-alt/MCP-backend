@@ -52,8 +52,10 @@ export async function searchWebWithKey(args: RecordValue, apiKey: string) {
     score: typeof item.score === "number" && Number.isFinite(item.score) ? item.score : null,
     publishedDate: typeof item.published_date === "string" ? item.published_date : null,
   })).filter((item) => item.title && item.url);
+  const retrievedAt = new Date().toISOString();
   return {
     provider: "tavily",
+    retrievedAt,
     query: query.trim(),
     answer: typeof payload.answer === "string" ? payload.answer.slice(0, 4000) : null,
     results,
