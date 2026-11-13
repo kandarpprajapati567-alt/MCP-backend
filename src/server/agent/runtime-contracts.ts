@@ -55,6 +55,9 @@ export function createWebInvocationEnvelope(input: {
   if (manifest.id !== input.toolId) {
     throw new Error("Invocation capability does not match the planned tool.");
   }
+  if (manifest.requiresUserApproval) {
+    throw new Error("Capability requires explicit user approval before execution.");
+  }
   const now = input.now ?? Date.now();
   const envelope: AgentInvocationEnvelope = {
     contractVersion: 1,
