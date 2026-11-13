@@ -66,7 +66,7 @@ const ROLE_ALIASES: Record<SpecialistAgentRole, readonly string[]> = {
   planner: ["planner", "planning", "task planner"],
   research: ["research", "researcher", "research specialist"],
   coding: ["coding", "coder", "software engineer", "coding specialist"],
-  execution: ["execution", "executor", "tool executor"],
+  execution: ["execution", "executor", "tool executor", "execution agent"],
   analysis: ["analysis", "analyst", "analysis specialist"],
   memory: ["memory", "memory manager", "context manager"],
   synthesizer: ["synthesizer", "synthesis", "response writer"],
