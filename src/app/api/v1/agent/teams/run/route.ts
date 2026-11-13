@@ -72,6 +72,6 @@ export async function POST(request: Request) {
     summary: { total: members.length, completed, failed, waiting, queued },
     members,
     executionMode: "bounded_parallel_independent_agents",
-    note: "Each specialist objective is persisted as an independent task and claimed by the in-process background worker. This is not yet a shared-memory supervisor or dependency-aware delegation graph.",
+    note: "Each specialist objective is persisted as an independent task and claimed by the in-process background worker. Shared-memory supervision and dependency-aware delegation are not implemented yet.",
   }, failed === members.length ? 207 : 200);
 }
