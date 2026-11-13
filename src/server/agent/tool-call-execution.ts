@@ -107,12 +107,16 @@ export async function executeToolCallsWithBoundedParallelism<TCall>(
       }
     }));
 
+    let fatalError: { error: unknown } | null = null;
     for (const item of settled) {
-      if (item.kind === "fatal") throw item.error;
-      const execution = item.execution;
-      outcomes.push({ call: item.call, execution });
-      await options.onOutcome?.(item.call, execution);
+      if (item.kind === "fatal") {
+        fatalError ??= { error: item.error };
+        continue;
+      }
+      outcomes.push({ call: item.call, execution: item.execution });
+      await options.onOutcome?.(item.call, item.execution);
     }
+    if (fatalError) throw fatalError.error;
   }
 
   return outcomes;
