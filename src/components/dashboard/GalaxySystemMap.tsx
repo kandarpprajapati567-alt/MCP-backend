@@ -7,7 +7,7 @@ type Agent={id:string;name:string;role?:string;enabled:boolean};
 type Task={id:string;status:string;task:string;updated_at?:string;created_at:string;error_message?:string;failed_stage?:string;agent_definition_id?:string|null;agent_snapshot?:{name?:string;role?:string}|null};
 type TaskEvent={event_type:string;created_at:string;payload?:Record<string,unknown>};
 type Provider={provider:string};
-type MapNode={id:string;title:string;description:string;status:string;symbol:string};
+type MapNode={id:string;title:string;description:string;status:string};
 const positions=[{id:"providers",className:"node-providers"},{id:"android",className:"node-android"},{id:"agents",className:"node-agents"},{id:"bots",className:"node-bots"},{id:"mcp",className:"node-mcp"},{id:"memory",className:"node-memory"},{id:"external",className:"node-external"}];
 export function GalaxySystemMap(){
  const [health,setHealth]=useState<Health>({});
@@ -61,14 +61,14 @@ export function GalaxySystemMap(){
  const activeTasks=tasks.filter(task=>["queued","planning","executing","running","synthesizing","waiting_for_device"].includes(task.status));
  const recentFailures=tasks.filter(task=>task.status==="failed").slice(0,3);
  const detailMap:Record<string,MapNode>={
-  core:{id:"core",title:"Central Server",description:"Shared backend for owner sessions, task lifecycle, device jobs and verified events.",status:health.status??"checking",symbol:"✧"},
-  android:{id:"android",title:"Android Device",description:"Trusted Android client receives approved jobs and reports execution through its device-scoped credential.",status:ownerReady?(onlineDevices.length?"connected":"not paired / offline"):"owner session required",symbol:"▯"},
-  agents:{id:"agents",title:"Agent Network",description:"Planner, router and specialist Agent definitions with policy-checked execution.",status:ownerReady?enabledAgents.length+" enabled · "+activeTasks.length+" active":"owner session required",symbol:"◈"},
-  bots:{id:"bots",title:"Bot Gateway",description:"Shared channel contract exists; production channel delivery is not assumed.",status:"contract foundation",symbol:"◉"},
-  providers:{id:"providers",title:"AI Providers",description:"Configured provider adapters are distinct from successful inference.",status:ownerReady?providers.length+" configured":"owner session required",symbol:"✦"},
-  mcp:{id:"mcp",title:"MCP Hub",description:"Tool catalogue and validated invocation protocol.",status:"endpoint available",symbol:"⌘"},
-  memory:{id:"memory",title:"Database & Memory",description:"Persistent owner memory and task records.",status:health.services?.database??"checking",symbol:"▤"},
-  external:{id:"external",title:"External Services",description:"External integrations are separate capability zones; individual health is not inferred.",status:"not individually verified",symbol:"◌"}
+  core:{id:"core",title:"Central Server",description:"Shared backend for owner sessions, task lifecycle, device jobs and verified events.",status:health.status??"checking"},
+  android:{id:"android",title:"Android Device",description:"Trusted Android client receives approved jobs and reports execution through its device-scoped credential.",status:ownerReady?(onlineDevices.length?"connected":"not paired / offline"):"owner session required"},
+  agents:{id:"agents",title:"Agent Network",description:"Planner, router and specialist Agent definitions with policy-checked execution.",status:ownerReady?enabledAgents.length+" enabled · "+activeTasks.length+" active":"owner session required"},
+  bots:{id:"bots",title:"Bot Gateway",description:"Shared channel contract exists; production channel delivery is not assumed.",status:"contract foundation"},
+  providers:{id:"providers",title:"AI Providers",description:"Configured provider adapters are distinct from successful inference.",status:ownerReady?providers.length+" configured":"owner session required"},
+  mcp:{id:"mcp",title:"MCP Hub",description:"Tool catalogue and validated invocation protocol.",status:"endpoint available"},
+  memory:{id:"memory",title:"Database & Memory",description:"Persistent owner memory and task records.",status:health.services?.database??"checking"},
+  external:{id:"external",title:"External Services",description:"External integrations are separate capability zones; individual health is not inferred.",status:"not individually verified"}
  };
  const selected=selectedId?detailMap[selectedId]??null:null;
  const connect=async(event:FormEvent<HTMLFormElement>)=>{
@@ -112,14 +112,14 @@ export function GalaxySystemMap(){
    <div className="galaxy-inspector-head"><div><span className="galaxy-inspector-kicker">PERSONAL SYSTEM MAP</span><strong>{selected.title}</strong><small>{selected.status}</small></div><button type="button" onClick={()=>setSelectedId(null)} aria-label="Close component details">×</button></div>
    <p className="galaxy-inspector-description">{selected.description}</p>
    <div className="personal-map">
-    <div className="personal-map-core"><span>{selected.symbol}</span><b>{selected.title}</b><small>SELECTED NODE</small></div>
+    <div className="personal-map-core"><b>{selected.title}</b><small>SELECTED NODE</small></div>
     <div className="personal-map-links">
-     {selectedId==="agents"&&<>{enabledAgents.map(agent=><div className="personal-map-node" key={agent.id}><i className="personal-node-agent">◈</i><span><b>{agent.name}</b><small>{agent.role??"Specialist agent"} · {agent.enabled?"enabled":"disabled"}</small></span></div>)}{enabledAgents.length===0&&<div className="personal-map-empty">No enabled agents are registered yet.</div>}</>}
-     {selectedId==="android"&&<>{devices.map(device=><div className="personal-map-node" key={device.device_id}><i className="personal-node-device">▯</i><span><b>{device.display_name}</b><small>{device.platform} · {device.status}</small></span></div>)}{devices.length===0&&<div className="personal-map-empty">No paired Android devices are registered.</div>}</>}
-     {selectedId==="providers"&&<>{providers.map(provider=><div className="personal-map-node" key={provider.provider}><i className="personal-node-provider">✦</i><span><b>{provider.provider}</b><small>Credential configured · inference not yet verified</small></span></div>)}{providers.length===0&&<div className="personal-map-empty">No AI provider credentials are configured.</div>}</>}
-     {selectedId==="core"&&<>{[{id:"agents",label:"Agent execution",count:enabledAgents.length},{id:"android",label:"Trusted devices",count:devices.length},{id:"providers",label:"Configured providers",count:providers.length}].map(item=><div className="personal-map-node" key={item.id}><i>{item.id==="agents"?"◈":item.id==="android"?"▯":"✦"}</i><span><b>{item.label}</b><small>{item.count} registered</small></span></div>)}</>}
-     {selectedId==="memory"&&<div className="personal-map-node"><i>▤</i><span><b>Persistent task records</b><small>Database: {health.services?.database??"checking"}</small></span></div>}
-     {selectedId==="mcp"&&<div className="personal-map-node"><i>⌘</i><span><b>Validated tool invocation</b><small>Tool catalogue and policy checks</small></span></div>}
+     {selectedId==="agents"&&<>{enabledAgents.map(agent=><div className="personal-map-node" key={agent.id}><span><b>{agent.name}</b><small>{agent.role??"Specialist agent"} · {agent.enabled?"enabled":"disabled"}</small></span></div>)}{enabledAgents.length===0&&<div className="personal-map-empty">No enabled agents are registered yet.</div>}</>}
+     {selectedId==="android"&&<>{devices.map(device=><div className="personal-map-node" key={device.device_id}><span><b>{device.display_name}</b><small>{device.platform} · {device.status}</small></span></div>)}{devices.length===0&&<div className="personal-map-empty">No paired Android devices are registered.</div>}</>}
+     {selectedId==="providers"&&<>{providers.map(provider=><div className="personal-map-node" key={provider.provider}><span><b>{provider.provider}</b><small>Credential configured · inference not yet verified</small></span></div>)}{providers.length===0&&<div className="personal-map-empty">No AI provider credentials are configured.</div>}</>}
+     {selectedId==="core"&&<>{[{id:"agents",label:"Agent execution",count:enabledAgents.length},{id:"android",label:"Trusted devices",count:devices.length},{id:"providers",label:"Configured providers",count:providers.length}].map(item=><div className="personal-map-node" key={item.id}><span><b>{item.label}</b><small>{item.count} registered</small></span></div>)}</>}
+     {selectedId==="memory"&&<div className="personal-map-node"><span><b>Persistent task records</b><small>Database: {health.services?.database??"checking"}</small></span></div>}
+     {selectedId==="mcp"&&<div className="personal-map-node"><span><b>Validated tool invocation</b><small>Tool catalogue and policy checks</small></span></div>}
      {selectedId==="bots"&&<div className="personal-map-empty">Bot channel delivery is not connected or verified. This node remains in foundation state.</div>}
      {selectedId==="external"&&<div className="personal-map-empty">External integrations appear here only after their connection and health checks are implemented.</div>}
     </div>
