@@ -104,14 +104,73 @@ test("rejects untrusted results with oversized evidence", () => {
   }), false);
 });
 
-test("rejects nested or unsupported JSON Schema constructs", () => {
+test("accepts bounded nested object and array capability schemas", () => {
   assert.equal(isValidCapabilityManifestEntry({
     ...capability,
     inputSchema: {
       type: "object",
-      properties: { value: { type: "object", properties: { nested: { type: "string" } } } },
+      properties: {
+        filter: {
+          type: "object",
+          properties: {
+            min: { type: "integer", minimum: 0, maximum: 100 },
+            tags: { type: "array", items: { type: "string", maxLength: 20 }, maxItems: 5 },
+          },
+          required: ["min"],
+          additionalProperties: false,
+        },
+        mode: { type: "string", enum: ["all", "any"] },
+      },
+      required: ["filter"],
       additionalProperties: false,
     },
+  }), true);
+});
+
+test("rejects nested schemas that permit undeclared object properties", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "object",
+          properties: { nested: { type: "string" } },
+          additionalProperties: true,
+        },
+      },
+      additionalProperties: false,
+    },
+  }), false);
+});
+
+test("rejects malformed nested bounds and unbounded arrays", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: {
+      type: "object",
+      properties: { count: { type: "integer", minimum: 10, maximum: 1 } },
+      additionalProperties: false,
+    },
+  }), false);
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: {
+      type: "object",
+      properties: { tags: { type: "array", items: { type: "string" }, maxItems: 1000 } },
+      additionalProperties: false,
+    },
+  }), false);
+});
+
+test("rejects capability schemas deeper than the portable depth limit", () => {
+  let nested: Record<string, unknown> = { type: "string" };
+  for (let depth = 0; depth < 9; depth += 1) {
+    nested = { type: "object", properties: { child: nested }, additionalProperties: false };
+  }
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    inputSchema: { type: "object", properties: { value: nested }, additionalProperties: false },
   }), false);
 });
 
