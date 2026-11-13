@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import type {FormEvent,PointerEvent as ReactPointerEvent,WheelEvent as ReactWheelEvent} from "react";
+import { PlanetarySystemScene } from "@/components/dashboard/PlanetarySystemScene";
 type Health={status?:string;version?:string;services?:{database?:string;authentication?:string}};
 type Device={device_id:string;display_name:string;platform:string;status:string;last_seen_at:string|null};
 type Agent={id:string;name:string;role?:string;enabled:boolean};
@@ -8,7 +9,7 @@ type Task={id:string;status:string;task:string;updated_at?:string;created_at:str
 type TaskEvent={event_type:string;created_at:string;payload?:Record<string,unknown>};
 type Provider={provider:string};
 type MapNode={id:string;title:string;description:string;status:string};
-const positions=[{id:"providers",className:"node-providers"},{id:"android",className:"node-android"},{id:"agents",className:"node-agents"},{id:"bots",className:"node-bots"},{id:"mcp",className:"node-mcp"},{id:"memory",className:"node-memory"},{id:"external",className:"node-external"}];
+const positions=[{id:"providers",className:"node-providers"},{id:"android",className:"node-android"},{id:"agents",className:"node-agents"},{id:"bots",className:"node-bots"},{id:"mcp",className:"node-mcp"},{id:"memory",className:"node-memory"},{id:"external",className:"node-external"},{id:"moon",className:"node-moon"}];
 export function GalaxySystemMap(){
  const [health,setHealth]=useState<Health>({});
  const [ownerReady,setOwnerReady]=useState(false);
@@ -61,7 +62,8 @@ export function GalaxySystemMap(){
  const activeTasks=tasks.filter(task=>["queued","planning","executing","running","synthesizing","waiting_for_device"].includes(task.status));
  const recentFailures=tasks.filter(task=>task.status==="failed").slice(0,3);
  const detailMap:Record<string,MapNode>={
-  core:{id:"core",title:"Central Server",description:"Shared backend for owner sessions, task lifecycle, device jobs and verified events.",status:health.status??"checking"},
+  core:{id:"core",title:"AI Core Planet",description:"Central command world for the Futuristic System. Its surface represents the active backend and the light level reflects verified server health.",status:health.status??"checking"},
+  moon:{id:"moon",title:"System Moon",description:"A close orbital companion to the AI Core. Select it to inspect the core-to-moon control link and system status.",status:health.status==="ok"?"orbital companion · core online":"orbital companion · core status pending"},
   android:{id:"android",title:"Android Device",description:"Trusted Android client receives approved jobs and reports execution through its device-scoped credential.",status:ownerReady?(onlineDevices.length?"connected":"not paired / offline"):"owner session required"},
   agents:{id:"agents",title:"Agent Network",description:"Planner, router and specialist Agent definitions with policy-checked execution.",status:ownerReady?enabledAgents.length+" enabled · "+activeTasks.length+" active":"owner session required"},
   bots:{id:"bots",title:"Bot Gateway",description:"Shared channel contract exists; production channel delivery is not assumed.",status:"contract foundation"},
@@ -85,7 +87,7 @@ export function GalaxySystemMap(){
  const coreClass=coreStatus==="ok"?"is-live":coreStatus==="degraded"?"is-warning":"is-unknown";
  const transform="translate("+offset.x+"px, "+offset.y+"px) scale("+zoom+") rotate("+rotation+"deg)";
  return <section className="galaxy-map" aria-label="Futuristic System live map">
-  <div className="space-image-credit">HUBBLE EXTREME DEEP FIELD · NASA / ESA</div>
+  <div className="space-image-credit">REAL-TIME PLANETARY SYSTEM · WEBGL</div>
   <div className="galaxy-map-top"><div className="galaxy-wordmark"><span className="galaxy-brand-mark">F</span><span><strong>FUTURISTIC SYSTEM</strong><small>LIVE SYSTEM MAP</small></span></div>
    <div className="galaxy-top-actions"><span className={"galaxy-live-indicator "+coreClass}><i/>{health.status==="ok"?"SERVER LIVE":coreStatus.toUpperCase()}</span>
     {ownerReady?<button type="button" className="galaxy-session-button is-connected" onClick={()=>void disconnect()}>OWNER CONNECTED · DISCONNECT</button>:<button type="button" className="galaxy-session-button" onClick={()=>setConnectOpen(value=>!value)}>CONNECT OWNER</button>}
@@ -94,14 +96,15 @@ export function GalaxySystemMap(){
   {connectOpen&&!ownerReady&&<form className="galaxy-connect-panel" onSubmit={connect}><div><strong>Owner session</strong><p>Enter the owner key once. A short-lived HttpOnly session unlocks live map data.</p></div><input type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)} placeholder="Owner access key" aria-label="Owner access key"/><button type="submit" disabled={busy||token.length<32}>{busy?"CONNECTING…":"CONNECT"}</button>{error&&<p role="alert">{error}</p>}</form>}
   <div className={"galaxy-viewport"+(dragging?" is-dragging":"")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up} onWheel={wheel}>
    <div className={"galaxy-universe"+(activeTasks.length>0?" has-active-work":"")} style={{transform}}>
+    <PlanetarySystemScene selectedId={selectedId} />
     <svg className="galaxy-links" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><linearGradient id="galaxyFlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4b75ff" stopOpacity=".05"/><stop offset="48%" stopColor="#b7a7ff" stopOpacity=".95"/><stop offset="100%" stopColor="#63e8d0" stopOpacity=".1"/></linearGradient><filter id="galaxyGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
      {ownerReady&&enabledAgents.length>0&&<path className="galaxy-link-path" d="M600 380 C590 270 590 185 600 110"/>}
      {ownerReady&&onlineDevices.length>0&&<path className="galaxy-link-path" d="M600 380 C450 410 300 420 160 450"/>}
-     {health.services?.database==="ok"&&<path className="galaxy-link-path" d="M600 380 C620 510 630 590 600 670"/>}
+     {health.services?.database==="ok"&&<path className="galaxy-link-path" d="M600 380 C650 470 700 560 708 635"/>}
      {ownerReady&&providers.length>0&&<path className="galaxy-link-path galaxy-link-configured" d="M600 380 C490 310 390 230 250 215"/>}
      {ownerReady&&activeTasks.some(task=>!!task.agent_definition_id)&&<circle className="galaxy-flow-particle" r="4"><animateMotion dur="5s" repeatCount="indefinite" path="M600 380 C590 270 590 185 600 110"/></circle>}
     </svg>
-    <div className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")} role="img" aria-label="Central server"><div className="core-event-horizon"/><div className="core-accretion-ring"/><div className="core-label"><strong>FUTURISTIC SYSTEM</strong><small>COMMAND CORE</small></div></div>
+    <button type="button" className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")+(selectedId==="core"?" is-selected":"")} aria-label="AI Core planet details" onClick={()=>setSelectedId(selectedId==="core"?null:"core")}><span className="core-event-horizon"/><span className="core-accretion-ring"/><span className="core-label"><strong>AI CORE</strong><small>COMMAND PLANET</small></span></button>
     {positions.map(position=>{const detail=detailMap[position.id];const active=selectedId===position.id;return <button key={position.id} type="button" title={detail.title+" · "+detail.status} aria-label={detail.title+": "+detail.status} onClick={()=>setSelectedId(active?null:position.id)} className={"galaxy-node "+position.className+(active?" is-selected":"")+(focusedId===position.id?" is-focused":"")}><span className="galaxy-node-ring"/><span className="galaxy-node-label">{detail.title}</span>
      </button>;})}
    </div>
@@ -118,6 +121,7 @@ export function GalaxySystemMap(){
      {selectedId==="android"&&<>{devices.map(device=><div className="personal-map-node" key={device.device_id}><span><b>{device.display_name}</b><small>{device.platform} · {device.status}</small></span></div>)}{devices.length===0&&<div className="personal-map-empty">No paired Android devices are registered.</div>}</>}
      {selectedId==="providers"&&<>{providers.map(provider=><div className="personal-map-node" key={provider.provider}><span><b>{provider.provider}</b><small>Credential configured · inference not yet verified</small></span></div>)}{providers.length===0&&<div className="personal-map-empty">No AI provider credentials are configured.</div>}</>}
      {selectedId==="core"&&<>{[{id:"agents",label:"Agent execution",count:enabledAgents.length},{id:"android",label:"Trusted devices",count:devices.length},{id:"providers",label:"Configured providers",count:providers.length}].map(item=><div className="personal-map-node" key={item.id}><span><b>{item.label}</b><small>{item.count} registered</small></span></div>)}</>}
+     {selectedId==="moon"&&<div className="personal-map-node"><span><b>AI Core orbital companion</b><small>Orbit visualization only · not a separate compute service</small></span></div>}
      {selectedId==="memory"&&<div className="personal-map-node"><span><b>Persistent task records</b><small>Database: {health.services?.database??"checking"}</small></span></div>}
      {selectedId==="mcp"&&<div className="personal-map-node"><span><b>Validated tool invocation</b><small>Tool catalogue and policy checks</small></span></div>}
      {selectedId==="bots"&&<div className="personal-map-empty">Bot channel delivery is not connected or verified. This node remains in foundation state.</div>}
