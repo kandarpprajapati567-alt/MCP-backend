@@ -307,3 +307,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .galaxy-inspector-foot{margin-top:12px;padding-top:10px;border-top:1px solid rgba(159,177,255,.12);color:#7182ac;font-size:7px;font-weight:800;letter-spacing:.16em}
 @media(max-width:767px){.galaxy-inspector-cinematic{right:10px;bottom:92px;width:min(360px,calc(100vw - 20px));max-height:66vh;padding:14px}.galaxy-inspector-head>div>strong{font-size:15px}.personal-map{padding:11px}}
 @media(prefers-reduced-motion:reduce){.galaxy-inspector-cinematic,.task-pulse{animation:none!important}}
+.galaxy-recent-failures{margin-top:13px;padding-top:10px;border-top:1px solid rgba(255,145,145,.16)}
+.galaxy-task-item.is-failed{border-color:rgba(255,133,133,.28);background:rgba(62,20,37,.3)}
+.galaxy-task-item.is-failed .galaxy-task-status>b{color:#ffaaa9}
+.galaxy-task-item.is-failed>small{color:#d79b9c;overflow-wrap:anywhere}
+
