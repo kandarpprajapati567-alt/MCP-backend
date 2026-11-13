@@ -4,12 +4,11 @@ import { submitAgentTask } from "@/server/agent/task-service";
 import { isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { verifyOwnerRequest } from "@/server/security/owner-auth";
+import { parseAgentTeamRequest } from "@/server/agent/team-schema";
 import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
-const MAX_TEAM_SIZE = 3;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers });
@@ -22,35 +21,21 @@ export async function POST(request: Request) {
     ? json({ error: "Request body too large." }, 413)
     : json({ error: "Invalid JSON body." }, 400);
 
-  const body = parsedBody.value;
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return json({ error: "A JSON object is required." }, 400);
-  }
-  const input = body as Record<string, unknown>;
-  if (Object.keys(input).some((key) => key !== "task" && key !== "agentIds")) {
-    return json({ error: "Team request contains unsupported fields." }, 400);
-  }
-  if (typeof input.task !== "string" || !input.task.trim() || input.task.length > 4000) {
-    return json({ error: "Task must be 1–4000 characters." }, 400);
-  }
-  if (!Array.isArray(input.agentIds) || input.agentIds.length < 2 || input.agentIds.length > MAX_TEAM_SIZE ||
-      input.agentIds.some((id) => typeof id !== "string" || !UUID.test(id)) ||
-      new Set(input.agentIds).size !== input.agentIds.length) {
-    return json({ error: "Choose 2 or 3 different valid Agent IDs." }, 400);
-  }
+  const parsed = parseAgentTeamRequest(parsedBody.value);
+  if (!parsed.ok) return json({ error: parsed.error }, 400);
+  const { task, agentIds } = parsed.value;
 
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
   if (idempotencyKey !== undefined && !isValidAgentTaskIdempotencyKey(idempotencyKey)) {
     return json({ error: "Idempotency-Key must be 1–128 characters using letters, numbers, dot, underscore, colon or hyphen." }, 400);
   }
 
-  const agentIds = input.agentIds as string[];
   const members = await Promise.all(agentIds.map(async (agentId) => {
     const childKey = idempotencyKey
       ? createHash("sha256").update(idempotencyKey + ":" + agentId).digest("hex")
       : undefined;
     try {
-      const result = await submitAgentTask(input.task as string, agentId, childKey);
+      const result = await submitAgentTask(task, agentId, childKey);
       return {
         agentId,
         taskId: result.taskId,
@@ -78,7 +63,7 @@ export async function POST(request: Request) {
 
   return json({
     status,
-    task: input.task,
+    task,
     concurrency: members.length,
     summary: { total: members.length, completed, failed, waiting },
     members,
