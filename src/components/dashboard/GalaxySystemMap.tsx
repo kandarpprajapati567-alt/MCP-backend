@@ -4,7 +4,7 @@ import type {FormEvent,PointerEvent as ReactPointerEvent,WheelEvent as ReactWhee
 type Health={status?:string;version?:string;services?:{database?:string;authentication?:string}};
 type Device={device_id:string;display_name:string;platform:string;status:string;last_seen_at:string|null};
 type Agent={id:string;name:string;role?:string;enabled:boolean};
-type Task={id:string;status:string;task:string;updated_at?:string;created_at:string};
+type Task={id:string;status:string;task:string;updated_at?:string;created_at:string;error_message?:string;failed_stage?:string;agent_definition_id?:string|null};
 type Provider={provider:string};
 type MapNode={id:string;title:string;description:string;status:string;symbol:string};
 const positions=[{id:"providers",className:"node-providers",symbol:"✦"},{id:"android",className:"node-android",symbol:"▯"},{id:"agents",className:"node-agents",symbol:"◈"},{id:"bots",className:"node-bots",symbol:"◉"},{id:"mcp",className:"node-mcp",symbol:"⌘"},{id:"memory",className:"node-memory",symbol:"▤"},{id:"external",className:"node-external",symbol:"◌"}];
@@ -96,6 +96,26 @@ export function GalaxySystemMap(){
   </div>
   <div className="galaxy-map-controls"><button type="button" onClick={()=>setZoom(value=>Math.min(1.48,value+.1))} aria-label="Zoom in">＋</button><button type="button" onClick={()=>setZoom(value=>Math.max(.72,value-.1))} aria-label="Zoom out">−</button><button type="button" onClick={()=>{setZoom(1);setOffset({x:0,y:0});setRotation(0);}} aria-label="Reset camera">⌖</button><button type="button" onClick={()=>setRotation(value=>value+5)} aria-label="Rotate map">⟳</button></div>
   <div className="galaxy-map-footer"><span><i className="galaxy-footer-dot"/>{ownerReady?"OWNER DATA SYNCED":"PUBLIC MAP VIEW"}</span><span>{ownerReady?onlineDevices.length:"—"} DEVICES · {ownerReady?enabledAgents.length:"—"} AGENTS · {ownerReady?activeTasks.length:"—"} ACTIVE TASKS</span><span>REFRESH 10S</span></div>
-  {selected&&<aside className="galaxy-inspector"><button type="button" onClick={()=>setSelectedId(null)} aria-label="Close component details">×</button><span className="galaxy-inspector-symbol">{selected.symbol}</span><strong>{selected.title}</strong><small>{selected.status}</small><p>{selected.description}</p></aside>}
+  {selected&&<aside className="galaxy-inspector galaxy-inspector-cinematic" aria-label={selected.title+" personal map"}>
+   <div className="galaxy-inspector-head"><div><span className="galaxy-inspector-kicker">PERSONAL SYSTEM MAP</span><strong>{selected.title}</strong><small>{selected.status}</small></div><button type="button" onClick={()=>setSelectedId(null)} aria-label="Close component details">×</button></div>
+   <p className="galaxy-inspector-description">{selected.description}</p>
+   <div className="personal-map">
+    <div className="personal-map-core"><span>{selected.symbol}</span><b>{selected.title}</b><small>SELECTED NODE</small></div>
+    <div className="personal-map-links">
+     {selectedId==="agents"&&<>{enabledAgents.map(agent=><div className="personal-map-node" key={agent.id}><i className="personal-node-agent">◈</i><span><b>{agent.name}</b><small>{agent.role??"Specialist agent"} · {agent.enabled?"enabled":"disabled"}</small></span></div>)}{enabledAgents.length===0&&<div className="personal-map-empty">No enabled agents are registered yet.</div>}</>}
+     {selectedId==="android"&&<>{devices.map(device=><div className="personal-map-node" key={device.device_id}><i className="personal-node-device">▯</i><span><b>{device.display_name}</b><small>{device.platform} · {device.status}</small></span></div>)}{devices.length===0&&<div className="personal-map-empty">No paired Android devices are registered.</div>}</>}
+     {selectedId==="providers"&&<>{providers.map(provider=><div className="personal-map-node" key={provider.provider}><i className="personal-node-provider">✦</i><span><b>{provider.provider}</b><small>Credential configured · inference not yet verified</small></span></div>)}{providers.length===0&&<div className="personal-map-empty">No AI provider credentials are configured.</div>}</>}
+     {selectedId==="core"&&<>{[{id:"agents",label:"Agent execution",count:enabledAgents.length},{id:"android",label:"Trusted devices",count:devices.length},{id:"providers",label:"Configured providers",count:providers.length}].map(item=><div className="personal-map-node" key={item.id}><i>{item.id==="agents"?"◈":item.id==="android"?"▯":"✦"}</i><span><b>{item.label}</b><small>{item.count} registered</small></span></div>)}</>}
+     {selectedId==="memory"&&<div className="personal-map-node"><i>▤</i><span><b>Persistent task records</b><small>Database: {health.services?.database??"checking"}</small></span></div>}
+     {selectedId==="mcp"&&<div className="personal-map-node"><i>⌘</i><span><b>Validated tool invocation</b><small>Tool catalogue and policy checks</small></span></div>}
+     {selectedId==="bots"&&<div className="personal-map-empty">Bot channel delivery is not connected or verified. This node remains in foundation state.</div>}
+     {selectedId==="external"&&<div className="personal-map-empty">External integrations appear here only after their connection and health checks are implemented.</div>}
+    </div>
+   </div>
+   <div className="galaxy-work-now"><div className="galaxy-work-heading"><b>WORKING NOW</b><span>{activeTasks.length} ACTIVE</span></div>
+    {activeTasks.length?activeTasks.slice(0,5).map(task=><article className="galaxy-task-item" key={task.id}><div className="galaxy-task-status"><i className="task-pulse"/><b>{task.status.replaceAll("_"," ")}</b></div><p>{task.task}</p><small>{task.updated_at?"Updated "+new Date(task.updated_at).toLocaleString():"Created "+new Date(task.created_at).toLocaleString()}</small></article>):<div className="galaxy-work-empty">No active task right now. New server-side work will appear here when it is queued or running.</div>}
+   </div>
+   {ownerReady&&<div className="galaxy-inspector-foot">LIVE OWNER SNAPSHOT · POLLED EVERY 10S</div>}
+  </aside>}
  </section>;
 }
