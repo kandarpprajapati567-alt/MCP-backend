@@ -564,3 +564,25 @@ body {
   .agent-map-page > section:first-of-type,
   .bot-map-page > section:first-of-type { border-radius:20px !important; }
 }
+
+
+/* Enforce the non-blue palette on inherited utility classes in the redesigned views. */
+.dashboard-page [class*="text-cyan-"],
+.monitor-page [class*="text-cyan-"] { color:#dca06c !important; }
+.dashboard-page [class*="border-cyan-"],
+.monitor-page [class*="border-cyan-"] { border-color:rgba(200,91,72,.42) !important; }
+.dashboard-page [class*="bg-cyan-"],
+.monitor-page [class*="bg-cyan-"] { background-color:#b99a55 !important; color:#17191c !important; }
+.dashboard-page [class*="text-sky-"],
+.monitor-page [class*="text-sky-"] { color:#d8cbb1 !important; }
+.agent-map-page [class*="text-cyan-"],
+.agent-map-page [class*="text-sky-"] { color:#b99a55 !important; }
+.agent-map-page [class*="border-cyan-"],
+.agent-map-page [class*="border-sky-"] { border-color:rgba(185,154,85,.42) !important; }
+.bot-map-page [class*="text-sky-"] { color:#c4ce8c !important; }
+.bot-map-page [class*="border-sky-"] { border-color:rgba(165,177,107,.4) !important; }
+.app-main .text-teal-200 { color:#d5bd83 !important; }
+.app-main .text-teal-300 { color:#c9b27b !important; }
+.app-main .border-teal-300\/20,
+.app-main .border-teal-300\/10 { border-color:rgba(185,154,85,.25) !important; }
+.app-main .bg-teal-300\/\[0\.10\] { background:rgba(185,154,85,.12) !important; }
