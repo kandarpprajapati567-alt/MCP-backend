@@ -412,3 +412,75 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .core-event-horizon{width:5px;height:5px;background:#f7f2e6;box-shadow:0 0 10px 3px rgba(255,246,220,.62)}
 .core-accretion-ring{width:28px;height:28px;border:1px solid rgba(245,237,218,.42);border-radius:50%;transform:none;box-shadow:0 0 12px rgba(255,240,210,.12)}
 .core-label{top:calc(100% + 5px)}
+
+
+/* Procedural planetary scene: no photographic wallpaper, emoji or flat avatar tokens. */
+.galaxy-map{
+  isolation:isolate;
+  overflow:hidden;
+  background:#03050a!important;
+}
+.galaxy-map:before{
+  z-index:0;
+  background:radial-gradient(ellipse at 50% 48%,rgba(16,26,48,.26),transparent 56%),linear-gradient(180deg,rgba(0,0,0,.34),transparent 24%,transparent 76%,rgba(0,0,0,.44));
+}
+.space-image-credit{z-index:6;left:22px;bottom:18px;color:rgba(181,195,220,.42);font-size:7px}
+.galaxy-viewport{position:absolute;inset:0;perspective:1100px;overflow:hidden}
+.galaxy-universe{position:absolute;inset:0;transform-style:preserve-3d}
+.planetary-scene-canvas{position:absolute;inset:0;z-index:0;width:100%;height:100%;display:block;pointer-events:none}
+.galaxy-links{position:absolute;inset:0;z-index:1;width:100%;height:100%;pointer-events:none;opacity:.34}
+.galaxy-link-path{fill:none;stroke:#9cb7e5;stroke-width:1;stroke-dasharray:2 9;opacity:.32;filter:drop-shadow(0 0 3px rgba(111,153,224,.25))}
+.galaxy-universe.has-active-work .galaxy-link-path{stroke:#d6bd8a;opacity:.72;stroke-dasharray:3 7}
+.galaxy-link-configured{stroke:#b2a9a0;opacity:.2;stroke-dasharray:1 8}
+.galaxy-flow-particle{display:none}
+.galaxy-core{z-index:3;width:180px;height:180px;filter:none;pointer-events:none}
+.core-event-horizon,.core-accretion-ring{display:none!important}
+.core-label{top:calc(100% + 3px);left:50%;transform:translateX(-50%);gap:4px}
+.core-label strong{font-size:9px;letter-spacing:.24em;color:#d9e5ff}
+.core-label small{font-size:7px;letter-spacing:.2em;color:rgba(161,186,226,.72)}
+.galaxy-node{
+  z-index:4;width:132px;height:76px;gap:7px;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  border:0!important;border-radius:0!important;background:transparent!important;
+  box-shadow:none!important;filter:none!important;transform:translate(-50%,-50%);
+}
+.galaxy-node-ring{display:none!important}
+.galaxy-node-label{
+  color:rgba(214,226,246,.86);font-size:8px;font-weight:650;
+  letter-spacing:.14em;text-shadow:0 2px 12px #000,0 0 20px #000;
+}
+.galaxy-node:hover .galaxy-node-label,.galaxy-node.is-selected .galaxy-node-label,.galaxy-node.is-focused .galaxy-node-label{color:#fff}
+.node-providers{top:29.5%;left:20.5%}
+.node-android{top:57.5%;left:13%}
+.node-agents{top:15.5%;left:50%}
+.node-bots{top:30%;left:79.5%}
+.node-mcp{top:61%;left:84%}
+.node-memory{top:83.5%;left:59%}
+.node-external{top:78.5%;left:20.5%}
+.node-moon{top:45.5%;left:59%;width:84px;height:58px}
+.node-moon .galaxy-node-label{font-size:7px;color:rgba(197,205,217,.76)}
+.galaxy-map-top,.galaxy-map-controls,.galaxy-map-footer,.galaxy-inspector,.galaxy-connect-panel,.space-image-credit{z-index:8}
+.galaxy-map-controls{background:rgba(4,8,16,.76);border-color:rgba(148,174,216,.18);backdrop-filter:blur(12px)}
+.galaxy-map-controls button{color:#b9c9e5}
+.galaxy-map-footer{color:rgba(163,181,212,.6)}
+.galaxy-inspector-cinematic{z-index:12}
+@media(max-width:767px){
+  .space-image-credit{left:12px;bottom:12px}
+  .galaxy-node{width:92px;height:60px}
+  .galaxy-node-label{font-size:7px;letter-spacing:.08em}
+  .node-moon{width:66px;height:48px}
+  .galaxy-core{width:120px;height:120px}
+  .core-label{top:calc(100% + 2px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .planetary-scene-canvas{animation:none!important}
+}
+
+
+.galaxy-core{
+  display:block;padding:0;border:0;background:transparent;cursor:pointer;
+  pointer-events:auto;appearance:none;-webkit-appearance:none;
+}
+.galaxy-core:focus-visible{outline:1px solid rgba(181,211,255,.8);outline-offset:7px;border-radius:50%}
+.galaxy-core .core-label{display:grid;pointer-events:none}
+.galaxy-core.is-selected .core-label strong{color:#fff;text-shadow:0 0 18px rgba(131,183,255,.9)}
