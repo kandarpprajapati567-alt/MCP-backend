@@ -243,6 +243,9 @@ export default function DashboardPage() {
               <a href="/dashboard/system-map" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Open system map <span aria-hidden="true">↗</span></a>
               <a href="/dashboard/agent-lab" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Launch Agent Lab</a>
               <a href="/dashboard/bot-channels" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
+              <a href="/dashboard/agent-map" className="rounded-xl border border-violet-300/20 bg-violet-300/[.06] px-4 py-3 text-xs font-semibold text-violet-100 transition hover:bg-violet-300/[.12]">Agentic Map</a>
+              <a href="/dashboard/bot-map" className="rounded-xl border border-amber-200/20 bg-amber-200/[.05] px-4 py-3 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[.1]">Bot Network</a>
+              <a href="/dashboard/monitors" className="rounded-xl border border-cyan-200/20 bg-cyan-200/[.05] px-4 py-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-200/[.1]">AI Monitors</a>
             </div>
           </div>
           <div className="monitor-wall">
