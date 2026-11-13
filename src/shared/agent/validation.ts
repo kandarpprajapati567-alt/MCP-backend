@@ -25,16 +25,12 @@ function hasOnlyKeys(value: Record<string, unknown>, required: readonly string[]
 
 function isStrictIsoTimestamp(value: unknown): value is string {
   if (typeof value !== "string" ||
-      !/^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,3})?(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$/.test(value)) {
+      !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00))$/.test(value)) {
     return false;
   }
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const calendar = new Date(Date.UTC(year, month - 1, day));
-  return calendar.getUTCFullYear() === year &&
-    calendar.getUTCMonth() === month - 1 &&
-    calendar.getUTCDate() === day &&
+  const dateOnly = new Date(value.slice(0, 10) + "T00:00:00.000Z");
+  return Number.isFinite(dateOnly.getTime()) &&
+    dateOnly.toISOString().slice(0, 10) === value.slice(0, 10) &&
     Number.isFinite(Date.parse(value));
 }
 
@@ -88,7 +84,8 @@ export function isValidCapabilityManifestEntry(
        new Set(schema.required).size !== schema.required.length ||
        schema.required.some((item) => typeof item !== "string" || !Object.hasOwn(properties, item)))) return false;
   if (!Array.isArray(value.requiredPermissions) || value.requiredPermissions.length > 32 ||
-      value.requiredPermissions.some((permission) => !isBoundedText(permission, 100))) return false;
+      value.requiredPermissions.some((permission) => !isBoundedText(permission, 100)) ||
+      new Set(value.requiredPermissions).size !== value.requiredPermissions.length) return false;
   return typeof value.sideEffect === "boolean" &&
     typeof value.idempotent === "boolean" &&
     typeof value.requiresUserApproval === "boolean";
@@ -100,14 +97,15 @@ export function isValidInvocationEnvelope(value: unknown, now = Date.now()): val
     "targetDeviceId", "capabilityId", "arguments", "createdAt", "expiresAt", "idempotencyKey",
   ])) return false;
   if (!isBoundedText(value.invocationId, 128) || !isBoundedText(value.toolCallId, 128) ||
-      !isBoundedText(value.capabilityId, 120) || !isBoundedText(value.idempotencyKey, 128)) return false;
+      !isBoundedText(value.capabilityId, 120) || !isBoundedText(value.idempotencyKey, 128) ||
+      !/^[A-Za-z0-9._:-]{1,128}$/.test(String(value.idempotencyKey))) return false;
   if (value.taskId !== null && !isBoundedText(value.taskId, 128)) return false;
   if (value.targetRuntime !== "web" && value.targetRuntime !== "android") return false;
   if (value.targetDeviceId !== null && !isBoundedText(value.targetDeviceId, 128)) return false;
   if (value.targetRuntime === "web" && value.targetDeviceId !== null) return false;
   if (value.targetRuntime === "android" && value.targetDeviceId === null) return false;
   if (!isRecord(value.arguments) || jsonByteLength(value.arguments) > MAX_ARGUMENT_BYTES) return false;
-  if (typeof value.createdAt !== "string" || typeof value.expiresAt !== "string") return false;
+  if (!isStrictIsoTimestamp(value.createdAt) || !isStrictIsoTimestamp(value.expiresAt)) return false;
   const createdAt = Date.parse(value.createdAt);
   const expiresAt = Date.parse(value.expiresAt);
   if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt <= createdAt) return false;
@@ -131,6 +129,7 @@ export function isValidInvocationResult(value: unknown): value is AgentInvocatio
       value.evidence.some((item) => !isRecord(item) ||
         !isBoundedText(item.kind, 80) || !isBoundedText(item.source, 200) ||
         !isBoundedText(item.summary, 500))) return false;
-  if (value.status !== "completed" && value.result !== undefined) return false;
+  if (value.status === "completed" && value.errorCode !== undefined) return false;
+  if (value.status !== "completed" && (value.result !== undefined || value.errorCode === undefined)) return false;
   return true;
 }
