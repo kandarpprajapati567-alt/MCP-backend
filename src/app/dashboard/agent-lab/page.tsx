@@ -41,7 +41,7 @@ export default function AgentLabPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agentId, setAgentId] = useState("");
-  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);
+  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);\n  const [teamAssignments, setTeamAssignments] = useState<Record<string, string>>({});
   const [teamResults, setTeamResults] = useState<TeamMemberResult[]>([]);
   const [taskInput, setTaskInput] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
@@ -194,13 +194,13 @@ export default function AgentLabPage() {
   }
 
   async function runTeamTask() {
-    if (teamAgentIds.length < 2 || teamAgentIds.length > 3 || !taskInput.trim()) return;
+    if (teamAgentIds.length < 2 || teamAgentIds.length > 3 || teamAgentIds.some((id) => !(teamAssignments[id] ?? taskInput).trim())) return;
     setBusy(true); setError(""); setMessage(""); setDetail(null); setTeamResults([]);
     try {
       const response = await api("/api/v1/agent/teams/run", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ task: taskInput, agentIds: teamAgentIds }),
+        body: JSON.stringify({ members: teamAgentIds.map((agentId) => ({ agentId, task: teamAssignments[agentId] ?? taskInput })) }),
       });
       const data = await response.json();
       if (!response.ok && response.status !== 207) throw new Error(data.error ?? "Agent team run failed.");
@@ -479,12 +479,19 @@ export default function AgentLabPage() {
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {agents.filter((agent) => agent.enabled).map((agent) => (
                   <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 p-3 text-xs text-zinc-200">
-                    <input type="checkbox" checked={teamAgentIds.includes(agent.id)} disabled={busy || (!teamAgentIds.includes(agent.id) && teamAgentIds.length >= 3)} onChange={(event) => setTeamAgentIds((current) => event.target.checked ? [...current, agent.id].slice(-3) : current.filter((id) => id !== agent.id))} />
+                    <input type="checkbox" checked={teamAgentIds.includes(agent.id)} disabled={busy || (!teamAgentIds.includes(agent.id) && teamAgentIds.length >= 3)} onChange={(event) => {
+                      setTeamAgentIds((current) => event.target.checked ? [...current, agent.id].slice(-3) : current.filter((id) => id !== agent.id));
+                      if (event.target.checked) setTeamAssignments((current) => ({ ...current, [agent.id]: current[agent.id] ?? taskInput }));
+                    }} />
                     <span className="min-w-0 flex-1"><b className="block truncate">{agent.name}</b><small className="mt-1 block text-zinc-500">{agent.provider_preference} · {agent.allowed_tools?.length ?? 0} tools</small></span>
                   </label>
                 ))}
               </div>
-              <button type="button" disabled={busy || !taskInput.trim() || teamAgentIds.length < 2} onClick={() => void runTeamTask()} className="mt-3 rounded-xl border border-amber-700/60 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-100 disabled:opacity-40">{busy ? "Running team…" : "Run task with selected Agents in parallel"}</button>
+              {teamAgentIds.length > 0 && <div className="mt-3 space-y-3">{teamAgentIds.map((id) => {
+                const agent = agents.find((item) => item.id === id);
+                return <label key={id} className="block space-y-1 text-xs text-zinc-400"><span>{agent?.name ?? "Agent"} · delegated objective</span><textarea rows={2} maxLength={4000} value={teamAssignments[id] ?? taskInput} onChange={(event) => setTeamAssignments((current) => ({ ...current, [id]: event.target.value }))} placeholder="What exactly should this specialist do?" className="w-full rounded-lg border border-border bg-black/30 px-3 py-2.5 text-sm text-white"/></label>;
+              })}</div>}
+              <button type="button" disabled={busy || teamAgentIds.length < 2 || teamAgentIds.some((id) => !(teamAssignments[id] ?? taskInput).trim())} onClick={() => void runTeamTask()} className="mt-3 rounded-xl border border-amber-700/60 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-100 disabled:opacity-40">{busy ? "Running team…" : "Dispatch delegated tasks in parallel"}</button>
               {teamResults.length > 0 && <div className="mt-3 space-y-2">{teamResults.map((member) => <article key={member.agentId} className="rounded-lg border border-border/70 p-3"><div className="flex items-center justify-between gap-2"><b className="text-xs text-zinc-100">{agents.find((agent) => agent.id === member.agentId)?.name ?? "Specialist Agent"}</b><span className="text-[10px] uppercase tracking-wider text-zinc-400">{member.status.replaceAll("_", " ")}</span></div>{member.result && <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">{member.result}</p>}{member.error && <p className="mt-2 text-xs text-red-300">{member.error}</p>}{member.taskId && <p className="mt-2 text-[10px] text-zinc-500">Task record: {member.taskId}</p>}</article>)}</div>}
             </div>
             <div className="border-t border-border pt-3">
