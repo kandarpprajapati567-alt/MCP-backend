@@ -21,14 +21,14 @@ jobs:
         run: |
           set -euo pipefail
           ready=0
-          for attempt in $(seq 1 36); do
-            code=$(curl --silent --show-error --max-time 15 -o /tmp/health.json -w '%{http_code}' "$BASE_URL/api/v1/health" || true)
+          for attempt in $(seq 1 24); do
+            code=$(curl --silent --show-error --max-time 8 -o /tmp/health.json -w '%{http_code}' "$BASE_URL/api/v1/health" || true)
             if [ "$code" = "200" ] && node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(x.status === "ok" && x.services?.database === "ok" ? 0 : 1)' /tmp/health.json; then
               echo "Render health and database probe passed."
               ready=1
               break
             fi
-            echo "Waiting for production deployment (attempt $attempt/36; HTTP $code)."
+            echo "Waiting for production deployment (attempt $attempt/24; HTTP $code)."
             sleep 10
           done
           if [ "$ready" -ne 1 ]; then
