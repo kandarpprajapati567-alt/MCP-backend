@@ -242,8 +242,8 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       },
       {
         maxConcurrency: 3,
-      // Only capabilities explicitly marked read-only may share a batch.
-      // Device jobs, side effects, and unknown remote capabilities stay serial.
+        // Only explicitly read-only, idempotent capabilities may share a batch.
+        // Device jobs, side effects, and unknown remote capabilities stay serial.
         canRunInParallel: (call) => {
           if (deviceTools.some((tool) => tool.id === call.toolId)) return false;
           const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
@@ -252,49 +252,49 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
         },
         shouldCaptureFailure: (call) => !deviceTools.some((tool) => tool.id === call.toolId),
         onOutcome: async (call, execution) => {
-        if (deviceTools.some((tool) => tool.id === call.toolId)) return;
-        const invocation = invocationEnvelopes.get(call.id);
-        const invocationResult = invocation
-          ? createWebInvocationResult(
-              invocation,
-              execution.ok ? "completed" : "failed",
-              execution.ok ? undefined : "TOOL_EXECUTION_FAILED",
-            )
-          : undefined;
-        if (execution.ok) {
-          results.push({
-            callId: call.id,
-            toolId: call.toolId,
-            result: execution.result,
-            ...(invocationResult ? { invocationResult } : {}),
-          });
-        } else {
-          results.push({
-            callId: call.id,
-            toolId: call.toolId,
-            result: { ok: false, error: execution.error },
-            ...(invocationResult ? { invocationResult } : {}),
-          });
-        }
-        // Persist every completed/failed backend tool outcome immediately. If a
-        // later call hits an infrastructure failure, task history still retains
-        // the evidence collected before that failure.
-        await setTask(admin, id, { tool_results: results });
-        if (execution.ok) {
-          await event(admin, id, "tool.completed", {
-            callId: call.id,
-            toolId: call.toolId,
-            ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
-          });
-        } else {
-          await event(admin, id, "tool.failed", {
-            callId: call.id,
-            toolId: call.toolId,
-            message: execution.error,
-            ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
-          });
-        }
-      },
+          if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+          const invocation = invocationEnvelopes.get(call.id);
+          const invocationResult = invocation
+            ? createWebInvocationResult(
+                invocation,
+                execution.ok ? "completed" : "failed",
+                execution.ok ? undefined : "TOOL_EXECUTION_FAILED",
+              )
+            : undefined;
+          if (execution.ok) {
+            results.push({
+              callId: call.id,
+              toolId: call.toolId,
+              result: execution.result,
+              ...(invocationResult ? { invocationResult } : {}),
+            });
+          } else {
+            results.push({
+              callId: call.id,
+              toolId: call.toolId,
+              result: { ok: false, error: execution.error },
+              ...(invocationResult ? { invocationResult } : {}),
+            });
+          }
+          // Persist every completed/failed backend tool outcome immediately. If a
+          // later call hits an infrastructure failure, task history still retains
+          // the evidence collected before that failure.
+          await setTask(admin, id, { tool_results: results });
+          if (execution.ok) {
+            await event(admin, id, "tool.completed", {
+              callId: call.id,
+              toolId: call.toolId,
+              ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
+            });
+          } else {
+            await event(admin, id, "tool.failed", {
+              callId: call.id,
+              toolId: call.toolId,
+              message: execution.error,
+              ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
+            });
+          }
+        },
         beforeEach: async () => assertTaskNotCancelled(admin, id),
       },
     );
