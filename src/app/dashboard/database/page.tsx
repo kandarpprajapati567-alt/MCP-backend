@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Device = {
@@ -63,6 +63,13 @@ export default function DatabasePage() {
   async function connect() {
     await load("");
   }
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) void load(""); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   async function saveMemory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

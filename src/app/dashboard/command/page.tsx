@@ -78,6 +78,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (connected) void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."));
   }, [connected, refresh]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) setConnected(true); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   async function connect() {
     setConnecting(true); setError(""); setMessage("");

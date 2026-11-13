@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Workflow = "planner" | "coding" | "research" | "summarization" | "chat" | "notes";
@@ -83,6 +83,14 @@ export default function ModelsPage() {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) void connect(); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   function selectWorkflow(next: Workflow) {
     setWorkflow(next);

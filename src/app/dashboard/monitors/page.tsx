@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -33,7 +33,9 @@ export default function MonitorsPage() {
       const healthData = await healthResponse.json();
       if (!healthResponse.ok) throw new Error("Health endpoint did not return a successful response.");
       setHealth(healthData);
-      if (token.length >= 32) {
+      const sessionResponse = await fetch("/api/v1/session", { cache: "no-store" });
+      const sessionData = sessionResponse.ok ? await sessionResponse.json() as { authenticated?: boolean } : {};
+      if (token.length >= 32 || sessionData.authenticated) {
         const headers = { "x-fs-owner-token": token };
         const responses = await Promise.all([
           fetch("/api/v1/agents", { headers, cache: "no-store" }),
@@ -50,6 +52,8 @@ export default function MonitorsPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Monitor refresh failed."); }
     finally { setBusy(false); }
   }
+
+  useEffect(() => { void refresh(); }, []);
 
   const running = tasks.filter((task) => ["running", "in_progress", "processing"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "completed").length;
