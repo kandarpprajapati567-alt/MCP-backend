@@ -42,8 +42,8 @@ export async function executeToolCallsSequentially<TCall>(
 }
 
 type ParallelBatchOutcome<TCall> =
-  | { call: TCall; execution: ToolCallExecution; fatal?: never }
-  | { call: TCall; execution?: never; fatal: unknown };
+  | { call: TCall; kind: "execution"; execution: ToolCallExecution }
+  | { call: TCall; kind: "fatal"; error: unknown };
 
 /**
  * Runs only explicitly classified independent/read-only calls concurrently.
@@ -98,18 +98,18 @@ export async function executeToolCallsWithBoundedParallelism<TCall>(
 
     const settled: ParallelBatchOutcome<TCall>[] = await Promise.all(batch.map(async (batchCall) => {
       try {
-        return { call: batchCall, execution: { ok: true, result: await execute(batchCall) } as ToolCallExecution };
+        return { call: batchCall, kind: "execution", execution: { ok: true, result: await execute(batchCall) } };
       } catch (error) {
         if (!(options.shouldCaptureFailure ?? (() => true))(batchCall, error)) {
-          return { call: batchCall, fatal: error };
+          return { call: batchCall, kind: "fatal", error };
         }
-        return { call: batchCall, execution: { ok: false, error: safeAgentFailureMessage(error) } };
+        return { call: batchCall, kind: "execution", execution: { ok: false, error: safeAgentFailureMessage(error) } };
       }
     }));
 
     for (const item of settled) {
-      if (item.fatal !== undefined) throw item.fatal;
-      const execution = item.execution!;
+      if (item.kind === "fatal") throw item.error;
+      const execution = item.execution;
       outcomes.push({ call: item.call, execution });
       await options.onOutcome?.(item.call, execution);
     }
