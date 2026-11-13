@@ -152,7 +152,7 @@ test("preserves source provenance and classifies publication freshness without o
   assert.match(parsed.provenancePolicy, /ranking signal, not truth or confidence/);
   const sources = parsed.toolResults[0].sources;
   assert.equal(sources.length, 3);
-  assert.equal(sources[0].sourceId, "src-1");
+  assert.equal(sources[0].sourceId, "ev-call-1-src-1");
   assert.equal(sources[0].domain, "example.org");
   assert.equal(sources[0].freshness, "fresh");
   assert.equal(sources[0].relevanceScore, 0.91);
