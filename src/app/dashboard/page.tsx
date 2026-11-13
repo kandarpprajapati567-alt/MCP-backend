@@ -44,10 +44,9 @@ export default function DashboardPage() {
           ...(init.body ? { "Content-Type": "application/json" } : {}),
         },
       });
-      if (response.status === 401) disconnect();
       return response;
     },
-    [disconnect],
+    [],
   );
 
   const disconnect = useCallback(() => {
