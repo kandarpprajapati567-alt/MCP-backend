@@ -586,3 +586,21 @@ body {
 .app-main .border-teal-300\/20,
 .app-main .border-teal-300\/10 { border-color:rgba(185,154,85,.25) !important; }
 .app-main .bg-teal-300\/\[0\.10\] { background:rgba(185,154,85,.12) !important; }
+
+
+/* Orbital cartography layer: visible on both topology surfaces without changing node data. */
+.agent-map-page > section:nth-of-type(2) {
+  background:
+    radial-gradient(circle at 50% 42%,transparent 0 15%,rgba(152,121,184,.16) 15.2% 15.45%,transparent 15.7% 28%,rgba(152,121,184,.12) 28.2% 28.45%,transparent 28.7% 42%,rgba(185,154,85,.09) 42.2% 42.4%,transparent 42.7%),
+    radial-gradient(ellipse at 50% 0%,rgba(152,121,184,.14),transparent 58%),
+    linear-gradient(145deg,#17151c,#101114) !important;
+}
+.bot-map-page > section:first-of-type {
+  background:
+    radial-gradient(circle at 50% 48%,transparent 0 14%,rgba(185,154,85,.18) 14.2% 14.45%,transparent 14.7% 27%,rgba(165,177,107,.15) 27.2% 27.45%,transparent 27.7% 40%,rgba(185,154,85,.09) 40.2% 40.4%,transparent 40.7%),
+    radial-gradient(ellipse at 50% 0%,rgba(165,177,107,.16),transparent 62%),
+    linear-gradient(rgba(165,177,107,.09) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(165,177,107,.09) 1px,transparent 1px),
+    linear-gradient(145deg,#20231b,#11140f) !important;
+  background-size:auto,auto,28px 28px,28px 28px,auto !important;
+}
