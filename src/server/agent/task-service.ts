@@ -118,7 +118,9 @@ async function executeAgentTaskRecord(
   const heartbeat = setInterval(() => {
     void admin.from("agent_tasks").update({ updated_at: new Date().toISOString() })
       .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-      .in("status", ["planning", "executing", "synthesizing"]);
+      .in("status", ["planning", "executing", "synthesizing"])
+      .then(({ error }) => { if (error) console.warn("[agent-worker] Heartbeat update failed for task", id); })
+      .catch(() => console.warn("[agent-worker] Heartbeat request failed for task", id));
   }, 30_000);
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
