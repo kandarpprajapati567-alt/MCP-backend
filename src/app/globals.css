@@ -230,6 +230,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .galaxy-connect-panel button{min-height:40px;border-radius:9px;color:#080d20;background:#b8c4ff;font-size:10px;font-weight:900}
 .galaxy-connect-panel [role=alert]{color:#ffaaa6}
 .galaxy-viewport{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;cursor:grab;touch-action:pan-y;perspective:1320px;perspective-origin:50% 44%}.galaxy-viewport.is-dragging{cursor:grabbing}
+.galaxy-webgl-scene{position:absolute;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;opacity:.82;mix-blend-mode:screen}
+.galaxy-universe{z-index:1}
 .galaxy-universe{position:relative;width:min(1160px,94vw);height:min(740px,88vh);min-height:520px;transform-origin:center;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.2,.7,.2,1)}
 .galaxy-viewport.is-dragging .galaxy-universe{transition:none}
 .galaxy-links{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;transform:translateZ(-34px);transform-style:preserve-3d}
