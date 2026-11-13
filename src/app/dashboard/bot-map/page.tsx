@@ -10,7 +10,7 @@ const channels = [
 ];
 
 export default function BotMapPage() {
-  return <div className="mx-auto max-w-[1440px] space-y-6">
+  return <div className="bot-map-page mx-auto max-w-[1440px] space-y-6">
     <PageHeader title="Bot Network Map" description="A separate channel topology for future bots and clients. All channels are designed to use the same secured Agent Engine."/>
     <section className="overflow-hidden rounded-2xl border border-amber-200/15 bg-[radial-gradient(ellipse_at_50%_0%,rgba(245,158,11,.12),transparent_60%),linear-gradient(145deg,#17130e,#0b111b)] p-5 sm:p-7">
       <p className="text-[9px] font-bold tracking-[.22em] text-amber-200">CHANNEL FABRIC / 02</p><h2 className="mt-2 text-2xl font-semibold text-white">One brain. Multiple controlled endpoints.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Bot adapters carry identity and messages. They do not create their own permission system or bypass backend Agent policies.</p>
