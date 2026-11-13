@@ -298,18 +298,19 @@ export function SpatialWebGLScene(props: Props) {
       if (!reducedMotion) frame = window.requestAnimationFrame(render);
     };
 
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => {
+    const handleResize = () => {
       resize();
       if (reducedMotion) frame = window.requestAnimationFrame(render);
-    }) : null;
+    };
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(handleResize) : null;
     observer?.observe(canvas);
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", handleResize);
     frame = window.requestAnimationFrame(render);
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", handleResize);
       for (const geometry of geometries) {
         gl.deleteBuffer(geometry.position);
         gl.deleteBuffer(geometry.color);
