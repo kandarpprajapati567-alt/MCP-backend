@@ -23,21 +23,22 @@ export async function POST(request: Request) {
 
   const parsed = parseAgentTeamRequest(parsedBody.value);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
-  const { task, agentIds } = parsed.value;
+  const { members: assignments } = parsed.value;
 
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
   if (idempotencyKey !== undefined && !isValidAgentTaskIdempotencyKey(idempotencyKey)) {
     return json({ error: "Idempotency-Key must be 1–128 characters using letters, numbers, dot, underscore, colon or hyphen." }, 400);
   }
 
-  const members = await Promise.all(agentIds.map(async (agentId) => {
+  const members = await Promise.all(assignments.map(async (assignment) => {
     const childKey = idempotencyKey
-      ? createHash("sha256").update(idempotencyKey + ":" + agentId).digest("hex")
+      ? createHash("sha256").update(idempotencyKey + ":" + assignment.agentId).digest("hex")
       : undefined;
     try {
-      const result = await submitAgentTask(task, agentId, childKey);
+      const result = await submitAgentTask(assignment.task, assignment.agentId, childKey);
       return {
-        agentId,
+        agentId: assignment.agentId,
+        task: assignment.task,
         taskId: result.taskId,
         status: result.status,
         ...("result" in result && typeof result.result === "string" ? { result: result.result } : {}),
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
       };
     } catch (cause) {
       return {
-        agentId,
+        agentId: assignment.agentId,
+        task: assignment.task,
         status: "failed",
         error: safeAgentFailureMessage(cause),
       };
@@ -63,11 +65,11 @@ export async function POST(request: Request) {
 
   return json({
     status,
-    task,
+    assignments,
     concurrency: members.length,
     summary: { total: members.length, completed, failed, waiting },
     members,
     executionMode: "bounded_parallel_independent_agents",
-    note: "Each Agent ran its own policy-checked task. This is parallel specialist execution, not yet a durable background team coordinator.",
+    note: "Each specialist ran its own assigned objective under its saved policy. This is parallel specialist execution, not yet a durable background team coordinator.",
   }, failed === members.length ? 207 : 200);
 }
