@@ -96,15 +96,15 @@ export function GalaxySystemMap(){
   {connectOpen&&!ownerReady&&<form className="galaxy-connect-panel" onSubmit={connect}><div><strong>Owner session</strong><p>Enter the owner key once. A short-lived HttpOnly session unlocks live map data.</p></div><input type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)} placeholder="Owner access key" aria-label="Owner access key"/><button type="submit" disabled={busy||token.length<32}>{busy?"CONNECTING…":"CONNECT"}</button>{error&&<p role="alert">{error}</p>}</form>}
   <div className={"galaxy-viewport"+(dragging?" is-dragging":"")} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up} onWheel={wheel}>
    <div className={"galaxy-universe"+(activeTasks.length>0?" has-active-work":"")} style={{transform}}>
-    <PlanetarySystemScene />
+    <PlanetarySystemScene selectedId={selectedId} />
     <svg className="galaxy-links" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><linearGradient id="galaxyFlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4b75ff" stopOpacity=".05"/><stop offset="48%" stopColor="#b7a7ff" stopOpacity=".95"/><stop offset="100%" stopColor="#63e8d0" stopOpacity=".1"/></linearGradient><filter id="galaxyGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
      {ownerReady&&enabledAgents.length>0&&<path className="galaxy-link-path" d="M600 380 C590 270 590 185 600 110"/>}
      {ownerReady&&onlineDevices.length>0&&<path className="galaxy-link-path" d="M600 380 C450 410 300 420 160 450"/>}
-     {health.services?.database==="ok"&&<path className="galaxy-link-path" d="M600 380 C620 510 630 590 600 670"/>}
+     {health.services?.database==="ok"&&<path className="galaxy-link-path" d="M600 380 C650 470 700 560 708 635"/>}
      {ownerReady&&providers.length>0&&<path className="galaxy-link-path galaxy-link-configured" d="M600 380 C490 310 390 230 250 215"/>}
      {ownerReady&&activeTasks.some(task=>!!task.agent_definition_id)&&<circle className="galaxy-flow-particle" r="4"><animateMotion dur="5s" repeatCount="indefinite" path="M600 380 C590 270 590 185 600 110"/></circle>}
     </svg>
-    <div className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")} role="img" aria-label="AI Core planet"><div className="core-event-horizon"/><div className="core-accretion-ring"/><div className="core-label"><strong>AI CORE</strong><small>COMMAND PLANET</small></div></div>
+    <button type="button" className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")+(selectedId==="core"?" is-selected":"")} aria-label="AI Core planet details" onClick={()=>setSelectedId(selectedId==="core"?null:"core")}><span className="core-event-horizon"/><span className="core-accretion-ring"/><span className="core-label"><strong>AI CORE</strong><small>COMMAND PLANET</small></span></button>
     {positions.map(position=>{const detail=detailMap[position.id];const active=selectedId===position.id;return <button key={position.id} type="button" title={detail.title+" · "+detail.status} aria-label={detail.title+": "+detail.status} onClick={()=>setSelectedId(active?null:position.id)} className={"galaxy-node "+position.className+(active?" is-selected":"")+(focusedId===position.id?" is-focused":"")}><span className="galaxy-node-ring"/><span className="galaxy-node-label">{detail.title}</span>
      </button>;})}
    </div>
