@@ -125,6 +125,8 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 - Per-Agent provider/model preferences, registered-tool allowlists, and bounded step/tool-call limits.
 - Agent configuration snapshots retained with task history, even if a definition is later edited or deleted.
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
+- Parallel specialist delegation endpoint at `POST /api/v1/agent/teams/run`: assign separate objectives to 2–3 enabled Agents; each child task uses its own saved instructions, provider/model preference, tool allowlist, idempotency key and persisted task history. The Agent Lab exposes this at `/dashboard/agent-lab`.
+- Team execution is currently bounded parallel HTTP work, not a durable supervisor/worker queue. Shared scratch memory, dependency-aware delegation, parent run persistence, worker leases, automatic retry and crash recovery remain planned hardening work.
 - Allow-listed backend tools, task status, event history, and result synthesis.
 - Failure diagnostics in task history: failed execution stage (`planning`, `policy_validation`, `tool_execution`, `synthesis`, or `finalization`) plus a sanitized, user-safe error message. Unexpected internal errors remain generic; credentials and arbitrary exception details are not exposed.
 - Agent task submission accepts an optional `Idempotency-Key` header; repeated keys return the original task only when the normalized task and selected Agent match. Reusing a key for different work is rejected.

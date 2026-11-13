@@ -21,6 +21,7 @@ type Task = {
   created_at: string;
 };
 type SuiteResult = { name: string; status: "passed" | "failed" | "skipped"; detail: string };
+type TeamMemberResult = { agentId: string; taskId?: string; status: string; result?: string; message?: string; error?: string };
 type TaskDetail = {
   task: Record<string, unknown>;
   events: Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>;
@@ -40,6 +41,9 @@ export default function AgentLabPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agentId, setAgentId] = useState("");
+  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);
+  const [teamAssignments, setTeamAssignments] = useState<Record<string, string>>({});
+  const [teamResults, setTeamResults] = useState<TeamMemberResult[]>([]);
   const [taskInput, setTaskInput] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [detail, setDetail] = useState<TaskDetail | null>(null);
@@ -186,6 +190,30 @@ export default function AgentLabPage() {
       if (data.taskId) await openTask(data.taskId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Task execution failed.");
+      await refresh().catch(() => undefined);
+    } finally { setBusy(false); }
+  }
+
+  async function runTeamTask() {
+    if (teamAgentIds.length < 2 || teamAgentIds.length > 3 || teamAgentIds.some((id) => !(teamAssignments[id] ?? taskInput).trim())) return;
+    setBusy(true); setError(""); setMessage(""); setDetail(null); setTeamResults([]);
+    try {
+      const response = await api("/api/v1/agent/teams/run", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ members: teamAgentIds.map((agentId) => ({ agentId, task: teamAssignments[agentId] ?? taskInput })) }),
+      });
+      const data = await response.json();
+      if (!response.ok && response.status !== 207) throw new Error(data.error ?? "Agent team run failed.");
+      const members = Array.isArray(data.members) ? data.members as TeamMemberResult[] : [];
+      setTeamResults(members);
+      setMessage("Team run " + String(data.status).toUpperCase() + " · " + String(data.summary?.completed ?? 0) + " completed · " + String(data.summary?.failed ?? 0) + " failed. Each specialist has its own task record.");
+      setTaskInput("");
+      await refresh();
+      const firstTaskId = members.find((member) => member.taskId)?.taskId;
+      if (firstTaskId) await openTask(firstTaskId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Agent team run failed.");
       await refresh().catch(() => undefined);
     } finally { setBusy(false); }
   }
@@ -444,6 +472,30 @@ export default function AgentLabPage() {
                 <button type="button" disabled={busy} onClick={() => void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."))} className="rounded-xl border border-border px-4 py-2.5 text-sm text-zinc-300">Refresh data</button>
               </div>
             </form>
+            <div className="mt-4 rounded-xl border border-border/80 bg-black/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><h3 className="text-sm font-semibold text-white">Parallel specialist team</h3><p className="mt-1 text-[11px] text-zinc-500">Assign a different subtask to 2–3 specialists. Each uses its own instructions, model preference and tool allowlist; all run concurrently.</p></div>
+                <span className="text-[10px] text-zinc-500">{teamAgentIds.length}/3 selected</span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {agents.filter((agent) => agent.enabled).map((agent) => (
+                  <label key={agent.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 p-3 text-xs text-zinc-200">
+                    <input type="checkbox" checked={teamAgentIds.includes(agent.id)} disabled={busy || (!teamAgentIds.includes(agent.id) && teamAgentIds.length >= 3)} onChange={(event) => {
+                      setTeamAgentIds((current) => event.target.checked ? [...current, agent.id].slice(-3) : current.filter((id) => id !== agent.id));
+                      if (event.target.checked) setTeamAssignments((current) => ({ ...current, [agent.id]: current[agent.id] ?? taskInput }));
+                    }} />
+                    <span className="min-w-0 flex-1"><b className="block truncate">{agent.name}</b><small className="mt-1 block text-zinc-500">{agent.provider_preference} · {agent.allowed_tools?.length ?? 0} tools</small></span>
+                  </label>
+                ))}
+              </div>
+              {teamAgentIds.length > 0 && <div className="mt-3 space-y-3">{teamAgentIds.map((id) => {
+                const agent = agents.find((item) => item.id === id);
+                return <label key={id} className="block space-y-1 text-xs text-zinc-400"><span>{agent?.name ?? "Agent"} · delegated objective</span><textarea rows={2} maxLength={4000} value={teamAssignments[id] ?? taskInput} onChange={(event) => setTeamAssignments((current) => ({ ...current, [id]: event.target.value }))} placeholder="What exactly should this specialist do?" className="w-full rounded-lg border border-border bg-black/30 px-3 py-2.5 text-sm text-white"/></label>;
+              })}</div>}
+              <button type="button" disabled={busy || teamAgentIds.length < 2 || teamAgentIds.some((id) => !(teamAssignments[id] ?? taskInput).trim())} onClick={() => void runTeamTask()} className="mt-3 rounded-xl border border-amber-700/60 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-100 disabled:opacity-40">{busy ? "Running team…" : "Dispatch delegated tasks in parallel"}</button>
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Current mode: bounded parallel request. Child task records persist, but automatic background recovery and a shared supervisor are not implemented yet.</p>
+              {teamResults.length > 0 && <div className="mt-3 space-y-2">{teamResults.map((member) => <article key={member.agentId} className="rounded-lg border border-border/70 p-3"><div className="flex items-center justify-between gap-2"><b className="text-xs text-zinc-100">{agents.find((agent) => agent.id === member.agentId)?.name ?? "Specialist Agent"}</b><span className="text-[10px] uppercase tracking-wider text-zinc-400">{member.status.replaceAll("_", " ")}</span></div>{member.result && <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">{member.result}</p>}{member.error && <p className="mt-2 text-xs text-red-300">{member.error}</p>}{member.taskId && <p className="mt-2 text-[10px] text-zinc-500">Task record: {member.taskId}</p>}</article>)}</div>}
+            </div>
             <div className="border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
