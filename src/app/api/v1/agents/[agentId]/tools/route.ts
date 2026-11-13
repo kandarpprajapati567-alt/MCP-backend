@@ -51,7 +51,7 @@ export async function GET(request: Request, context: Context) {
         description: tool.description,
         permission: tool.permission,
         sideEffect: tool.sideEffect,
-        target: "backend",
+        target: "backend" as const,
       }));
 
     for (const tool of remoteTools) {
