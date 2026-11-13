@@ -350,7 +350,6 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     throw new Error("Unable to create task.");
   }
   const id = created.id as string;
-  const id = created.id as string;
   if (options.deferExecution) {
     return {
       taskId: id,
