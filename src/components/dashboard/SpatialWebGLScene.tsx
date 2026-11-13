@@ -9,6 +9,13 @@ type Props = {
   providersConfigured: boolean;
 };
 
+type Geometry = {
+  position: WebGLBuffer;
+  color: WebGLBuffer;
+  size: WebGLBuffer;
+  count: number;
+};
+
 const VERTEX_SHADER = `
 attribute vec3 aPosition;
 attribute vec4 aColor;
@@ -90,8 +97,8 @@ function cameraMatrix(aspect: number, time: number): Float32Array {
     0, 0, 1, 0,
     0, 0, -5.4, 1,
   ]);
-  const tilted = multiply(rotationX(-0.28), rotationY(time * 0.035));
-  return multiply(perspective(aspect), multiply(translation, tilted));
+  const model = multiply(rotationX(-0.28), rotationY(time * 0.035));
+  return multiply(perspective(aspect), multiply(translation, model));
 }
 
 function seeded(index: number): number {
@@ -99,7 +106,50 @@ function seeded(index: number): number {
   return value - Math.floor(value);
 }
 
-function makeStars(): { positions: number[]; colors: number[]; sizes: number[] } {
+function createGeometry(
+  gl: WebGLRenderingContext,
+  positions: number[],
+  colors: number[],
+  sizes: number[],
+): Geometry | null {
+  const position = gl.createBuffer();
+  const color = gl.createBuffer();
+  const size = gl.createBuffer();
+  if (!position || !color || !size) return null;
+  gl.bindBuffer(gl.ARRAY_BUFFER, position);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, color);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, size);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sizes), gl.STATIC_DRAW);
+  return { position, color, size, count: positions.length / 3 };
+}
+
+function drawGeometry(
+  gl: WebGLRenderingContext,
+  program: WebGLProgram,
+  geometry: Geometry,
+  matrix: Float32Array,
+  pointMode: boolean,
+) {
+  const position = gl.getAttribLocation(program, "aPosition");
+  const color = gl.getAttribLocation(program, "aColor");
+  const size = gl.getAttribLocation(program, "aSize");
+  gl.bindBuffer(gl.ARRAY_BUFFER, geometry.position);
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, geometry.color);
+  gl.enableVertexAttribArray(color);
+  gl.vertexAttribPointer(color, 4, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, geometry.size);
+  gl.enableVertexAttribArray(size);
+  gl.vertexAttribPointer(size, 1, gl.FLOAT, false, 0, 0);
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "uMatrix"), false, matrix);
+  gl.uniform1f(gl.getUniformLocation(program, "uPointMode"), pointMode ? 1 : 0);
+  gl.drawArrays(pointMode ? gl.POINTS : gl.LINES, 0, geometry.count);
+}
+
+function starGeometry(gl: WebGLRenderingContext): Geometry | null {
   const positions: number[] = [];
   const colors: number[] = [];
   const sizes: number[] = [];
@@ -108,68 +158,48 @@ function makeStars(): { positions: number[]; colors: number[]; sizes: number[] }
     positions.push((seeded(index * 3 + 1) - 0.5) * 5.2);
     positions.push((seeded(index * 3 + 2) - 0.5) * 3.2);
     const brightness = 0.28 + seeded(index + 800) * 0.42;
-    colors.push(0.56 * brightness, 0.68 * brightness, 1 * brightness, 0.72);
+    colors.push(0.56 * brightness, 0.68 * brightness, brightness, 0.72);
     sizes.push(1 + seeded(index + 1400) * 2.1);
   }
-  return { positions, colors, sizes };
+  return createGeometry(gl, positions, colors, sizes);
 }
 
-function makeNetwork(props: Props): { positions: number[]; colors: number[] } {
-  const center = [0, 0, 0];
-  const nodes = [
-    { position: [-1.35, 0.55, 0.22], color: [0.75, 0.58, 1, 0.72] },
-    { position: [-1.38, -0.35, -0.24], color: [0.36, 0.88, 0.78, 0.8] },
-    { position: [0, 1.3, 0.36], color: [0.76, 0.66, 1, 0.9] },
-    { position: [1.38, 0.55, -0.3], color: [0.38, 0.78, 0.88, 0.42] },
-    { position: [1.38, -0.35, 0.2], color: [0.65, 0.74, 1, 0.5] },
-    { position: [0, -1.28, 0.34], color: [0.4, 0.88, 0.72, 0.82] },
-    { position: [-1.3, -1.0, -0.18], color: [0.76, 0.62, 0.9, 0.35] },
-  ];
+function topologyGeometry(gl: WebGLRenderingContext, props: Props): Geometry | null {
   const positions: number[] = [];
   const colors: number[] = [];
-  const addLine = (target: number[], color: number[]) => {
+  const center = [0, 0, 0];
+  const add = (target: number[], color: number[]) => {
     positions.push(...center, ...target);
     colors.push(...color, ...color);
   };
-  if (props.providersConfigured) addLine(nodes[0].position, [0.58, 0.48, 0.88, 0.3]);
-  if (props.deviceConnected) addLine(nodes[1].position, [0.3, 0.86, 0.75, 0.78]);
-  if (props.agentsConnected) addLine(nodes[2].position, [0.72, 0.58, 0.96, 0.82]);
-  if (props.databaseConnected) addLine(nodes[5].position, [0.34, 0.82, 0.68, 0.72]);
-  return { positions, colors };
+  if (props.providersConfigured) add([-1.35, 0.55, 0.22], [0.58, 0.48, 0.88, 0.3]);
+  if (props.deviceConnected) add([-1.38, -0.35, -0.24], [0.3, 0.86, 0.75, 0.78]);
+  if (props.agentsConnected) add([0, 1.3, 0.36], [0.72, 0.58, 0.96, 0.82]);
+  if (props.databaseConnected) add([0, -1.28, 0.34], [0.34, 0.82, 0.68, 0.72]);
+  return createGeometry(gl, positions, colors, positions.map(() => 1));
 }
 
-function drawBuffer(
-  gl: WebGLRenderingContext,
-  program: WebGLProgram,
-  positionBuffer: WebGLBuffer,
-  colorBuffer: WebGLBuffer,
-  sizeBuffer: WebGLBuffer,
-  positions: number[],
-  colors: number[],
-  sizes: number[],
-  pointMode: boolean,
-  matrix: Float32Array,
-  pointSize: number,
-) {
-  const positionLocation = gl.getAttribLocation(program, "aPosition");
-  const colorLocation = gl.getAttribLocation(program, "aColor");
-  const sizeLocation = gl.getAttribLocation(program, "aSize");
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(positionLocation);
-  gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(colorLocation);
-  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sizes.length ? sizes : positions.length / 3), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(sizeLocation);
-  gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0);
-  gl.uniformMatrix4fv(gl.getUniformLocation(program, "uMatrix"), false, matrix);
-  gl.uniform1f(gl.getUniformLocation(program, "uPointMode"), pointMode ? 1 : 0);
-  gl.drawArrays(pointMode ? gl.POINTS : gl.LINES, 0, positions.length / 3);
-  void pointSize;
+function nodeGeometry(gl: WebGLRenderingContext, props: Props): Geometry | null {
+  const nodes = [
+    [-1.35, 0.55, 0.22], [-1.38, -0.35, -0.24], [0, 1.3, 0.36],
+    [1.38, 0.55, -0.3], [1.38, -0.35, 0.2], [0, -1.28, 0.34], [-1.3, -1.0, -0.18],
+  ];
+  const alpha = [
+    props.providersConfigured ? 0.82 : 0.2,
+    props.deviceConnected ? 0.88 : 0.2,
+    props.agentsConnected ? 1 : 0.22,
+    0.2, 0.24,
+    props.databaseConnected ? 0.9 : 0.2,
+    0.18,
+  ];
+  const palette = [
+    [0.75, 0.58, 1], [0.36, 0.88, 0.78], [0.76, 0.66, 1],
+    [0.38, 0.78, 0.88], [0.65, 0.74, 1], [0.4, 0.88, 0.72], [0.76, 0.62, 0.9],
+  ];
+  const positions = [0, 0, 0, ...nodes.flat()];
+  const colors = [0.82, 0.88, 1, 1, ...palette.flatMap((color, index) => [...color, alpha[index]])];
+  const sizes = [24, ...nodes.map(() => 8)];
+  return createGeometry(gl, positions, colors, sizes);
 }
 
 export function SpatialWebGLScene(props: Props) {
@@ -183,38 +213,38 @@ export function SpatialWebGLScene(props: Props) {
 
     const vertex = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-    if (!vertex || !fragment) return;
+    if (!vertex || !fragment) {
+      if (vertex) gl.deleteShader(vertex);
+      if (fragment) gl.deleteShader(fragment);
+      return;
+    }
     const program = gl.createProgram();
-    if (!program) return;
+    if (!program) {
+      gl.deleteShader(vertex);
+      gl.deleteShader(fragment);
+      return;
+    }
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
     gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      gl.deleteProgram(program);
+      gl.deleteShader(vertex);
+      gl.deleteShader(fragment);
+      return;
+    }
     gl.useProgram(program);
 
-    const positionBuffer = gl.createBuffer();
-    const colorBuffer = gl.createBuffer();
-    const sizeBuffer = gl.createBuffer();
-    if (!positionBuffer || !colorBuffer || !sizeBuffer) return;
+    const stars = starGeometry(gl);
+    const topology = topologyGeometry(gl, props);
+    const nodes = nodeGeometry(gl, props);
+    if (!stars || !topology || !nodes) return;
 
-    const stars = makeStars();
-    const network = makeNetwork(props);
-    const nodePositions = [
-      [-1.35, 0.55, 0.22], [-1.38, -0.35, -0.24], [0, 1.3, 0.36],
-      [1.38, 0.55, -0.3], [1.38, -0.35, 0.2], [0, -1.28, 0.34], [-1.3, -1.0, -0.18],
-    ];
-    const nodeColors = [
-      [0.75, 0.58, 1, 0.78], [0.36, 0.88, 0.78, 0.86], [0.76, 0.66, 1, props.agentsConnected ? 1 : 0.3],
-      [0.38, 0.78, 0.88, 0.28], [0.65, 0.74, 1, 0.35], [0.4, 0.88, 0.72, props.databaseConnected ? 0.9 : 0.28],
-      [0.76, 0.62, 0.9, 0.24],
-    ];
-    const pointPositions = [0, 0, 0, ...nodePositions.flat()];
-    const pointColors = [0.82, 0.88, 1, 1, ...nodeColors.flat()];
-    const pointSizes = [26, ...nodePositions.map(() => 8)];
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
     let start = 0;
     let disposed = false;
+    const geometries = [stars, topology, nodes];
 
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
@@ -237,11 +267,12 @@ export function SpatialWebGLScene(props: Props) {
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-      gl.disable(gl.DEPTH_TEST);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
       const matrix = cameraMatrix(canvas.width / Math.max(canvas.height, 1), time);
-      drawBuffer(gl, program, positionBuffer, colorBuffer, sizeBuffer, network.positions, network.colors, [], false, matrix, 1);
-      drawBuffer(gl, program, positionBuffer, colorBuffer, sizeBuffer, stars.positions, stars.colors, stars.sizes, true, matrix, 1);
-      drawBuffer(gl, program, positionBuffer, colorBuffer, sizeBuffer, pointPositions, pointColors, pointSizes, true, matrix, 1);
+      drawGeometry(gl, program, topology, matrix, false);
+      drawGeometry(gl, program, stars, matrix, true);
+      drawGeometry(gl, program, nodes, matrix, true);
       frame = window.requestAnimationFrame(render);
     };
 
@@ -254,9 +285,11 @@ export function SpatialWebGLScene(props: Props) {
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
       window.removeEventListener("resize", resize);
-      gl.deleteBuffer(positionBuffer);
-      gl.deleteBuffer(colorBuffer);
-      gl.deleteBuffer(sizeBuffer);
+      for (const geometry of geometries) {
+        gl.deleteBuffer(geometry.position);
+        gl.deleteBuffer(geometry.color);
+        gl.deleteBuffer(geometry.size);
+      }
       gl.deleteProgram(program);
       gl.deleteShader(vertex);
       gl.deleteShader(fragment);
