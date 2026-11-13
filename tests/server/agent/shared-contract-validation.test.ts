@@ -143,3 +143,43 @@ test("rejects unsupported property schema keywords", () => {
     },
   }), false);
 });
+
+
+test("rejects duplicate capability permissions", () => {
+  assert.equal(isValidCapabilityManifestEntry({
+    ...capability,
+    requiredPermissions: ["READ_FILES", "READ_FILES"],
+  }), false);
+});
+
+test("rejects non-ISO and impossible calendar timestamps", () => {
+  assert.equal(isValidInvocationEnvelope({
+    ...invocation,
+    createdAt: "November 12, 2026 10:00 UTC",
+  }, Date.parse("2026-11-12T10:02:00.000Z")), false);
+  assert.equal(isValidInvocationEnvelope({
+    ...invocation,
+    createdAt: "2026-02-30T10:00:00.000Z",
+  }, Date.parse("2026-02-28T10:02:00.000Z")), false);
+});
+
+test("requires an error code for non-completed invocation results", () => {
+  assert.equal(isValidInvocationResult({
+    ...result,
+    status: "failed",
+    result: undefined,
+    errorCode: "EXECUTION_FAILED",
+  }), true);
+  assert.equal(isValidInvocationResult({
+    ...result,
+    status: "failed",
+    result: undefined,
+  }), false);
+});
+
+test("rejects completed invocation results carrying an error code", () => {
+  assert.equal(isValidInvocationResult({
+    ...result,
+    errorCode: "STALE_RESULT",
+  }), false);
+});
