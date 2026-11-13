@@ -208,7 +208,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     });
     await event(admin, id, "task.executing");
 
-    const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
+    const results: Array<{ callId: string; toolId: string; result: unknown; invocationResult?: ReturnType<typeof createWebInvocationResult> }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
     await executeToolCallsSequentially(
