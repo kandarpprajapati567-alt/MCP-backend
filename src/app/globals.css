@@ -235,6 +235,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .galaxy-links{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;transform:translateZ(-34px);transform-style:preserve-3d}
 .galaxy-link-path{fill:none;stroke:url(#galaxyFlow);stroke-width:2;stroke-dasharray:2 16;opacity:.18;filter:url(#galaxyGlow)}
 .galaxy-universe.has-active-work .galaxy-link-path{stroke-dasharray:6 13;opacity:.82;animation:energy-travel 18s linear infinite}
+.galaxy-link-configured,.galaxy-universe.has-active-work .galaxy-link-configured{stroke-dasharray:1 12;opacity:.3;animation:none}
 .galaxy-flow-particle{fill:#b9c7ff;opacity:0;filter:drop-shadow(0 0 7px #9db4ff)}
 .galaxy-universe.has-active-work .galaxy-flow-particle{opacity:1}.galaxy-flow-particle.delay-one{fill:#79e8d1}.galaxy-flow-particle.delay-two{fill:#c8a8ff}
 .galaxy-core{position:absolute;top:50%;left:50%;display:grid;width:180px;height:180px;place-items:center;transform:translate(-50%,-50%) translateZ(112px) rotateX(-52deg);transform-style:preserve-3d}
