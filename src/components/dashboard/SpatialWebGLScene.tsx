@@ -176,7 +176,7 @@ function topologyGeometry(gl: WebGLRenderingContext, props: Props): Geometry | n
   if (props.deviceConnected) add([-1.38, -0.35, -0.24], [0.3, 0.86, 0.75, 0.78]);
   if (props.agentsConnected) add([0, 1.3, 0.36], [0.72, 0.58, 0.96, 0.82]);
   if (props.databaseConnected) add([0, -1.28, 0.34], [0.34, 0.82, 0.68, 0.72]);
-  return createGeometry(gl, positions, colors, positions.map(() => 1));
+  return createGeometry(gl, positions, colors, Array.from({ length: positions.length / 3 }, () => 1));
 }
 
 function nodeGeometry(gl: WebGLRenderingContext, props: Props): Geometry | null {
@@ -238,7 +238,18 @@ export function SpatialWebGLScene(props: Props) {
     const stars = starGeometry(gl);
     const topology = topologyGeometry(gl, props);
     const nodes = nodeGeometry(gl, props);
-    if (!stars || !topology || !nodes) return;
+    if (!stars || !topology || !nodes) {
+      for (const geometry of [stars, topology, nodes]) {
+        if (!geometry) continue;
+        gl.deleteBuffer(geometry.position);
+        gl.deleteBuffer(geometry.color);
+        gl.deleteBuffer(geometry.size);
+      }
+      gl.deleteProgram(program);
+      gl.deleteShader(vertex);
+      gl.deleteShader(fragment);
+      return;
+    }
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
