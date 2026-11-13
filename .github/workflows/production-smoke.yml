@@ -15,24 +15,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Wait for Render health after the main deployment
+      - name: Wait for the exact Render commit and database health
         env:
           BASE_URL: https://mcp-backend-2oyj.onrender.com
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           ready=0
           for attempt in $(seq 1 24); do
             code=$(curl --silent --show-error --max-time 8 -o /tmp/health.json -w '%{http_code}' "$BASE_URL/api/v1/health" || true)
-            if [ "$code" = "200" ] && node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(x.status === "ok" && x.services?.database === "ok" ? 0 : 1)' /tmp/health.json; then
-              echo "Render health and database probe passed."
+            if [ "$code" = "200" ] && node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(x.status === "ok" && x.services?.database === "ok" && x.commit === process.env.EXPECTED_SHA ? 0 : 1)' /tmp/health.json; then
+              echo "Exact production commit, health endpoint and database probe passed: $EXPECTED_SHA"
               ready=1
               break
             fi
-            echo "Waiting for production deployment (attempt $attempt/24; HTTP $code)."
+            echo "Waiting for expected production commit (attempt $attempt/24; HTTP $code)."
             sleep 10
           done
           if [ "$ready" -ne 1 ]; then
-            echo "Production health did not become ready in time."
+            echo "Expected production commit and healthy database did not become ready in time."
             cat /tmp/health.json || true
             exit 1
           fi
