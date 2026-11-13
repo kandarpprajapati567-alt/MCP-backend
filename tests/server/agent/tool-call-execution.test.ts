@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  executeToolCallsSequentially,
-} from "../../../src/server/agent/tool-call-execution";
+import { executeToolCallsSequentially, executeToolCallsWithConcurrency } from "../../../src/server/agent/tool-call-execution";
 import { safeAgentFailureMessage } from "../../../src/server/agent/failure-diagnostics";
 
 test("continues through planned calls after a tool failure and persists each outcome in order", async () => {
@@ -112,4 +110,33 @@ test("cooperative lifecycle checkpoint stops before the next tool call", async (
   );
   assert.deepEqual(executed, ["first"]);
   assert.equal(checks, 2);
+});
+
+
+test("runs independent calls with bounded concurrency and persists results in plan order", async () => {
+  const calls = ["one", "two", "three", "four", "five"];
+  const persisted: string[] = [];
+  let active = 0;
+  let maximumActive = 0;
+  const outcomes = await executeToolCallsWithConcurrency(
+    calls,
+    async (call) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, call === "one" ? 5 : 0));
+      active -= 1;
+      return call.toUpperCase();
+    },
+    2,
+    () => true,
+    async (call) => { persisted.push(call); },
+  );
+  assert.equal(maximumActive, 2);
+  assert.deepEqual(outcomes.map((item) => item.call), calls);
+  assert.deepEqual(persisted, calls);
+  assert.deepEqual(outcomes.map((item) => item.execution), calls.map((call) => ({ ok: true, result: call.toUpperCase() })));
+});
+
+test("rejects concurrency values outside the safe bound", async () => {
+  await assert.rejects(executeToolCallsWithConcurrency(["one"], async () => "ok", 5), /between one and four/);
 });
