@@ -65,6 +65,16 @@ The Agent Lab provides an individual **Test** button for each of these checks, p
 
 Task-level checks use a Mock-provider Agent and at least one assigned deterministic text tool to avoid paid inference. Each website check displays PASS, FAIL, or SKIPPED with its observed result. The latest report is session-local; it is not yet a versioned certification record. CI unit tests separately cover deterministic tool behavior, idempotency helpers, lifecycle dispositions and cooperative cancellation checkpoints.
 
+### Deterministic synthesis integrity audit
+
+The current Agent result path now runs a deterministic integrity audit after synthesis:
+- Counts tool operations and explicit failures.
+- Checks answer URLs against URLs present in successful tool output; failed tool output cannot authorize a citation.
+- Emits a structural-consistency or warning status and lists concrete warning reasons.
+- Always reports **independent truth verification: not performed**. A structurally consistent answer is not a fact-check and does not qualify for the 200–299 evidence-grounded band.
+
+This is an integrity guard, not an independent semantic claim verifier, source-freshness check, contradiction detector, or truth certification. Those remain required work.
+
 ## Evidence record
 
 Every certification run should store suite ID/version, agent version, policy version, tool registry version, source commit, deployment identifier, timestamps, environment, each check status (passed/failed/skipped/not applicable), redacted failure details, evidence references, evaluator version, deterministic test seed where applicable, resulting level, previous level, and explicit blockers.
