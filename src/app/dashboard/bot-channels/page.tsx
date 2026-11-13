@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type CheckId = "valid_envelope" | "reject_unknown_fields" | "event_deduplication" | "session_isolation" | "timestamp_validation";
@@ -32,8 +32,16 @@ export default function BotChannelsPage() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) setConnected(true); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
   async function runTest(testId: CheckId | "all") {
-    if (!token.trim()) {
+    if (!token.trim() && !connected) {
       setError("Enter the owner master token first. It is kept only in this page's memory.");
       return;
     }
