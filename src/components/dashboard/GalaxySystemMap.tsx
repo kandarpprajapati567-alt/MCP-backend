@@ -45,7 +45,7 @@ export function GalaxySystemMap(){
  },[]);
  useEffect(()=>{void refresh();const poll=window.setInterval(()=>void refresh(),10000);return()=>window.clearInterval(poll);},[refresh]);
  const latestTask=tasks[0]?.updated_at??tasks[0]?.created_at??"";
- useEffect(()=>{if(!latestTask||latestTask===previousTaskUpdate.current)return;previousTaskUpdate.current=latestTask;setFocusedId("agents");const timer=window.setTimeout(()=>setFocusedId("core"),3200);return()=>window.clearTimeout(timer);},[latestTask]);
+ useEffect(()=>{if(!latestTask||latestTask===previousTaskUpdate.current)return;previousTaskUpdate.current=latestTask;setFocusedId("agents");setZoom(1.08);setOffset({x:0,y:-16});const timer=window.setTimeout(()=>{setFocusedId("core");setZoom(1);setOffset({x:0,y:0});},3200);return()=>window.clearTimeout(timer);},[latestTask]);
  const onlineDevices=devices.filter(device=>device.status==="online"&&device.last_seen_at&&Date.now()-Date.parse(device.last_seen_at)<300000);
  const enabledAgents=agents.filter(agent=>agent.enabled);
  const activeTasks=tasks.filter(task=>["queued","planning","executing","running","synthesizing","waiting_for_device"].includes(task.status));
@@ -95,7 +95,7 @@ export function GalaxySystemMap(){
    </div>
   </div>
   <div className="galaxy-map-controls"><button type="button" onClick={()=>setZoom(value=>Math.min(1.48,value+.1))} aria-label="Zoom in">＋</button><button type="button" onClick={()=>setZoom(value=>Math.max(.72,value-.1))} aria-label="Zoom out">−</button><button type="button" onClick={()=>{setZoom(1);setOffset({x:0,y:0});setRotation(0);}} aria-label="Reset camera">⌖</button><button type="button" onClick={()=>setRotation(value=>value+5)} aria-label="Rotate map">⟳</button></div>
-  <div className="galaxy-map-footer"><span><i className="galaxy-footer-dot"/>{ownerReady?"OWNER DATA SYNCED":"PUBLIC MAP VIEW"}</span><span>{onlineDevices.length} DEVICES · {enabledAgents.length} AGENTS · {activeTasks.length} ACTIVE TASKS</span><span>REFRESH 10S</span></div>
+  <div className="galaxy-map-footer"><span><i className="galaxy-footer-dot"/>{ownerReady?"OWNER DATA SYNCED":"PUBLIC MAP VIEW"}</span><span>{ownerReady?onlineDevices.length:"—"} DEVICES · {ownerReady?enabledAgents.length:"—"} AGENTS · {ownerReady?activeTasks.length:"—"} ACTIVE TASKS</span><span>REFRESH 10S</span></div>
   {selected&&<aside className="galaxy-inspector"><button type="button" onClick={()=>setSelectedId(null)} aria-label="Close component details">×</button><span className="galaxy-inspector-symbol">{selected.symbol}</span><strong>{selected.title}</strong><small>{selected.status}</small><p>{selected.description}</p></aside>}
  </section>;
 }

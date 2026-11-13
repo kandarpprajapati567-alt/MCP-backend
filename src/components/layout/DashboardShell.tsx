@@ -19,7 +19,8 @@ export function DashboardShell({children}:{children:React.ReactNode}){
  return <div className={"app-shell flex min-h-screen"+(home?" is-home-map":"")+(sidebarVisible?"":" sidebar-hidden")}>
   {sidebarVisible&&<aside className={"app-sidebar shrink-0 border-r"+(collapsed?" is-collapsed":"")+(home?" app-sidebar-map":" hidden md:sticky md:top-0 md:block md:h-screen")}><Sidebar {...props}/></aside>}
   {mobileOpen&&<div className="fixed inset-0 z-[90] md:hidden"><button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={()=>setMobileOpen(false)}/><aside className={"app-sidebar mobile-sidebar absolute inset-y-0 left-0 z-10 border-r shadow-2xl"+(collapsed?" is-collapsed":"")}><Sidebar {...props} onNavigate={()=>setMobileOpen(false)}/></aside></div>}
-  {home&&(!sidebarVisible||true)&&<button type="button" className="map-menu-trigger md:hidden" onClick={()=>setMobileOpen(true)} aria-label="Open navigation">☰</button>}
+  {home&&!sidebarVisible&&<button type="button" className="map-menu-trigger" onClick={()=>{setSidebarVisible(true);setMobileOpen(true);}} aria-label="Show navigation">☰</button>}
+  {home&&sidebarVisible&&<button type="button" className="map-menu-trigger md:hidden" onClick={()=>setMobileOpen(true)} aria-label="Open navigation">☰</button>}
   {!sidebarVisible&&!home&&<button type="button" className="map-menu-trigger" onClick={()=>setSidebarVisible(true)} aria-label="Show navigation">☰</button>}
   <div className="app-main flex min-w-0 flex-1 flex-col">
    {!home&&<header className="app-topbar sticky top-0 z-30 flex items-center gap-4 border-b">
