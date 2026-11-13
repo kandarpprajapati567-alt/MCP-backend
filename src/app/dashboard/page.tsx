@@ -229,23 +229,32 @@ export default function DashboardPage() {
         description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
 
-      <section className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-[radial-gradient(ellipse_at_top_right,rgba(34,211,238,.13),transparent_45%),linear-gradient(120deg,rgba(10,22,38,.96),rgba(13,17,32,.96))] p-5 sm:p-6">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-          <div className="max-w-2xl">
-            <p className="text-[10px] font-bold uppercase tracking-[.22em] text-cyan-300">Command overview</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">Your AI infrastructure, in one place.</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-400">Inspect how the dashboard, agent runtime, MCP tools, bot channels, providers and data services fit together. Open the system map for component-level status and controls.</p>
+      <section className="command-deck relative overflow-hidden rounded-[28px] border border-cyan-300/15 p-5 sm:p-7">
+        <div className="command-deck-grid pointer-events-none absolute inset-0" />
+        <div className="relative grid gap-7 xl:grid-cols-[1.2fr_.8fr] xl:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="monitor-kicker"><span className="monitor-live-dot" /> SYSTEM CONTROL / OWNER CONSOLE</span>
+              <span className="rounded-full border border-white/10 bg-white/[.035] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.16em] text-slate-400">Private workspace</span>
+            </div>
+            <h2 className="mt-4 max-w-2xl text-3xl font-semibold leading-[1.08] tracking-[-.045em] text-white sm:text-4xl">Command your<br /><span className="text-cyan-200">AI infrastructure.</span></h2>
+            <p className="mt-4 max-w-xl text-sm leading-7 text-slate-400">A single operational view across orchestration, tools, model providers, devices and data services. Select a monitor to inspect its control surface.</p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <a href="/dashboard/system-map" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Open system map <span aria-hidden="true">↗</span></a>
+              <a href="/dashboard/agent-lab" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Launch Agent Lab</a>
+              <a href="/dashboard/bot-channels" className="rounded-xl border border-white/10 bg-white/[.045] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <a href="/dashboard/system-map" className="inline-flex items-center justify-center rounded-xl bg-cyan-300 px-4 py-3 text-xs font-bold text-slate-950 transition hover:bg-cyan-200">Explore system map ↗</a>
-            <a href="/dashboard/agent-lab" className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Agent Lab</a>
-            <a href="/dashboard/bot-channels" className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-xs font-semibold text-slate-200 transition hover:bg-white/[.08]">Bot Gateway</a>
+          <div className="monitor-wall">
+            <div className="monitor-wall-head"><span>INFRASTRUCTURE MONITORS</span><span>LIVE PROBE DATA</span></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="monitor-tile monitor-tile-primary"><span className="monitor-label">CORE API</span><strong>{backendStatus}</strong><span className="monitor-foot"><i className={backendStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> Health endpoint</span></div>
+              <div className="monitor-tile"><span className="monitor-label">DATABASE</span><strong>{databaseStatus}</strong><span className="monitor-foot"><i className={databaseStatus === "ok" ? "monitor-indicator is-live" : "monitor-indicator"} /> PostgreSQL</span></div>
+              <div className="monitor-tile"><span className="monitor-label">REGISTERED TOOLS</span><strong>{connected ? tools.length : "—"}</strong><span className="monitor-foot">Owner connection {connected ? "verified" : "required"}</span></div>
+              <div className="monitor-tile"><span className="monitor-label">AI PROVIDERS</span><strong>{connected ? providers.length : "—"}</strong><span className="monitor-foot">Credentials configured</span></div>
+            </div>
+            <div className="monitor-wall-foot"><span>AGENT RUNTIME <b>INTEGRATION IN PROGRESS</b></span><span>NO MOCK TELEMETRY</span></div>
           </div>
-        </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Orchestration</p><p className="mt-1 text-sm font-semibold text-white">Agent Runtime</p><p className="mt-1 text-[11px] text-amber-200">Integration in progress</p></div>
-          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Protocol</p><p className="mt-1 text-sm font-semibold text-white">MCP Server</p><p className="mt-1 text-[11px] text-emerald-200">Endpoint available</p></div>
-          <div className="rounded-xl border border-white/[.07] bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Channels</p><p className="mt-1 text-sm font-semibold text-white">Bot Gateway</p><p className="mt-1 text-[11px] text-amber-200">Contract tests available</p></div>
         </div>
       </section>
       <SystemHealthCheck connected={connected} token={token} />
