@@ -361,6 +361,105 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
   return executeAgentTaskRecord(admin, id, task, agent);
 }
 
+export async function processQueuedAgentTasks(limit = 3): Promise<number> {
+  const admin = createAdminClient();
+  const batchSize = Math.max(1, Math.min(3, Math.floor(limit)));
+  const { data: queued, error: queueError } = await admin.from("agent_tasks")
+    .select("id")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(batchSize);
+  if (queueError) throw new Error("Agent task queue is unavailable.");
+
+  let processed = 0;
+  await Promise.all((queued ?? []).map(async (candidate) => {
+    const claimedAt = new Date().toISOString();
+    const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
+      status: "planning",
+      updated_at: claimedAt,
+    }).eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("id", candidate.id)
+      .eq("status", "queued")
+      .select("id,task,agent_definition_id,agent_snapshot")
+      .maybeSingle();
+    if (claimError) throw new Error("Agent task could not be claimed.");
+    if (!claimed) return;
+
+    let agent: ({ id: string } & AgentDefinitionInput) | null = null;
+    if (typeof claimed.agent_definition_id === "string") {
+      const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
+      const parsed = parseAgentDefinition({
+        name: snapshot.name,
+        description: typeof snapshot.description === "string" ? snapshot.description : "",
+        role: snapshot.role,
+        instructions: snapshot.instructions,
+        providerPreference: snapshot.providerPreference,
+        modelPreference: snapshot.modelPreference,
+        allowedTools: snapshot.allowedTools,
+        maxSteps: snapshot.maxSteps,
+        maxToolCalls: snapshot.maxToolCalls,
+        enabled: true,
+      });
+      if (!parsed.ok) {
+        await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
+        await event(admin, claimed.id, "task.failed", {
+          code: "AGENT_SNAPSHOT_INVALID",
+          stage: "planning",
+          message: "The saved Agent execution snapshot is invalid; no tools were run.",
+        });
+        processed += 1;
+        return;
+      }
+      agent = { id: claimed.agent_definition_id, ...parsed.value };
+    }
+
+    await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
+    processed += 1;
+  }));
+  return processed;
+}
+
+export async function recoverStaleAgentTasks(staleAfterMs = 10 * 60 * 1000): Promise<number> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - Math.max(60_000, staleAfterMs)).toISOString();
+  const { data: stale, error } = await admin.from("agent_tasks")
+    .select("id,status")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .in("status", ["planning", "executing", "synthesizing"])
+    .lt("updated_at", cutoff)
+    .is("cancellation_requested_at", null)
+    .order("updated_at", { ascending: true })
+    .limit(25);
+  if (error) throw new Error("Stale Agent task recovery is unavailable.");
+
+  let recovered = 0;
+  for (const task of stale ?? []) {
+    const now = new Date().toISOString();
+    const { data: failed, error: updateError } = await admin.from("agent_tasks").update({
+      status: "failed",
+      error_code: "AGENT_WORKER_INTERRUPTED",
+      completed_at: now,
+      updated_at: now,
+    }).eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("id", task.id)
+      .eq("status", task.status)
+      .lt("updated_at", cutoff)
+      .is("cancellation_requested_at", null)
+      .select("id")
+      .maybeSingle();
+    if (updateError) throw new Error("Interrupted Agent task state could not be recovered.");
+    if (!failed) continue;
+    await event(admin, task.id, "task.failed", {
+      code: "AGENT_WORKER_INTERRUPTED",
+      stage: task.status,
+      message: "The Agent worker heartbeat expired. The task was not replayed automatically because tool side effects cannot be assumed safe to repeat. Retry it as a new task.",
+    });
+    recovered += 1;
+  }
+  return recovered;
+}
+
 export async function getAgentTaskStatus(taskId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error("A valid task UUID is required.");
   try { await finalizeAgentTaskIfReady(taskId); } catch { /* Keep status reads available; finalization state is persisted when possible. */ }
