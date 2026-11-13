@@ -72,7 +72,7 @@ export function GalaxySystemMap(){
  function wheel(event:ReactWheelEvent<HTMLDivElement>){event.preventDefault();setZoom(value=>Math.max(.72,Math.min(1.48,value+(event.deltaY<0?.06:-.06))));}
  const coreStatus=health.status??"checking";
  const coreClass=coreStatus==="ok"?"is-live":coreStatus==="degraded"?"is-warning":"is-unknown";
- const transform="translate("+offset.x+"px, "+offset.y+"px) scale("+zoom+") rotate("+rotation+"deg)";
+ const transform="translate("+offset.x+"px, "+offset.y+"px) scale("+zoom+") rotate("+rotation+"deg) rotateX(52deg)";
  return <section className="galaxy-map" aria-label="Futuristic System live map">
   <div className="galaxy-nebula" aria-hidden="true"/><div className="galaxy-stars galaxy-stars-a" aria-hidden="true"/><div className="galaxy-stars galaxy-stars-b" aria-hidden="true"/>
   <div className="galaxy-map-top"><div className="galaxy-wordmark"><span className="galaxy-brand-mark">F</span><span><strong>FUTURISTIC SYSTEM</strong><small>LIVE SYSTEM MAP</small></span></div>
