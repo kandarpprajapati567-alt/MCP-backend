@@ -98,7 +98,7 @@ function classifyFreshness(
 }
 
 /** Build source metadata without treating provider dates or relevance scores as verified truth. */
-export function extractEvidenceSources(toolId: string, value: unknown): EvidenceSource[] {
+export function extractEvidenceSources(toolId: string, value: unknown, evidenceId = "source"): EvidenceSource[] {
   const root = isRecord(value) ? value : {};
   const retrievedAt = normalizeRetrievedAt(root.retrievedAt);
   const sources: EvidenceSource[] = [];
@@ -116,7 +116,7 @@ export function extractEvidenceSources(toolId: string, value: unknown): Evidence
         : null;
       const freshness = classifyFreshness(parsedPublishedAt, retrievedAt);
       sources.push({
-        sourceId: "src-" + (sources.length + 1),
+        sourceId: evidenceId + "-src-" + (sources.length + 1),
         sourceKind: "web_search_result",
         title: typeof raw.title === "string" ? raw.title.slice(0, 300) : null,
         url: located.url,
@@ -152,7 +152,7 @@ export function extractEvidenceSources(toolId: string, value: unknown): Evidence
       if (sources.length >= 5) break;
     }
   }
-  return sources.map((source, index) => ({ ...source, sourceId: "src-" + (index + 1) }));
+  return sources.map((source, index) => ({ ...source, sourceId: evidenceId + "-src-" + (index + 1) }));
 }
 
 function safeSerialize(value: unknown): string {
@@ -201,7 +201,7 @@ export function buildSynthesisUserContent(
     plan: planText.slice(0, MAX_PLAN_CHARS),
     planTruncated: planText.length > MAX_PLAN_CHARS,
     evidencePolicy: "Tool outputs are observations, not independently verified facts. Report execution outcomes accurately. Cite only exact sourceReferenceCandidates supplied by tool output; do not invent URLs, titles, dates, quotes, or citations. If no candidate exists, say no source reference was returned. Distinguish facts directly present in output from inference, and state uncertainty or missing evidence.",
-    provenancePolicy: "retrievedAt is the backend observation time. publishedAt is provider-supplied metadata, not independently verified. Freshness is a heuristic: fresh <=30 days, aging 31-180 days, stale >180 days, undated when no valid publication date is available, future_dated when publication appears more than 24 hours after retrieval. relevanceScore is a search ranking signal, not truth or confidence. Verify important claims against original sources and disclose stale, undated, future-dated or conflicting evidence.",
+    provenancePolicy: "retrievedAt is the backend observation time; if a tool supplies no retrieval timestamp, it is the synthesis-context capture time. publishedAt is provider-supplied metadata, not independently verified. Freshness is a heuristic: fresh <=30 days, aging 31-180 days, stale >180 days, undated when no valid publication date is available, future_dated when publication appears more than 24 hours after retrieval. relevanceScore is a search ranking signal, not truth or confidence. Verify important claims against original sources and disclose stale, undated, future-dated or conflicting evidence.",
     toolResults: [],
     omittedToolResults: 0,
   };
@@ -212,7 +212,7 @@ export function buildSynthesisUserContent(
     const remainingResults = toolResults.length - index;
     const available = MAX_SYNTHESIS_CONTEXT_CHARS - JSON.stringify(context).length;
     const sourceReferenceCandidates = extractSourceReferenceCandidates(item.result);
-    const sources = extractEvidenceSources(item.toolId, item.result);
+    const sources = extractEvidenceSources(item.toolId, item.result, "ev-" + item.callId);
     const retrievedAt = sources[0]?.retrievedAt ?? normalizeRetrievedAt(isRecord(item.result) ? item.result.retrievedAt : null);
     const wrapperBudget = item.callId.length + item.toolId.length + 320 +
       sourceReferenceCandidates.reduce((total, url) => total + url.length + 4, 0) + JSON.stringify(sources).length;
