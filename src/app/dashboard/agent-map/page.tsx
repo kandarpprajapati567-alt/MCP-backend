@@ -39,7 +39,7 @@ export default function AgentMapPage() {
   const running = tasks.filter((task) => ["running", "in_progress", "processing"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "completed").length;
 
-  return <div className="mx-auto max-w-[1440px] space-y-6">
+  return <div className="agent-map-page mx-auto max-w-[1440px] space-y-6">
     <PageHeader title="Agentic Operations Map" description="A dedicated view of specialist Agents, their configured responsibilities and observed task activity. This map is read-only." />
     <section className="rounded-2xl border border-violet-300/20 bg-[radial-gradient(ellipse_at_80%_0%,rgba(139,92,246,.16),transparent_55%),linear-gradient(135deg,#101323,#080d18)] p-5 sm:p-7">
       <div className="flex flex-wrap items-center justify-between gap-4">

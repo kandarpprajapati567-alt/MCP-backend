@@ -54,7 +54,7 @@ export default function MonitorsPage() {
   const completed = tasks.filter((task) => task.status === "completed").length;
   const failed = tasks.filter((task) => ["failed", "error"].includes(task.status)).length;
 
-  return <div className="mx-auto max-w-[1440px] space-y-6">
+  return <div className="monitor-page mx-auto max-w-[1440px] space-y-6">
     <PageHeader title="AI Operations Monitors" description="A workstation-style monitoring wall for task flow, backend health, AI capacity and verified capabilities."/>
     <section className="rounded-2xl border border-cyan-200/15 bg-[radial-gradient(ellipse_at_90%_0%,rgba(34,211,238,.13),transparent_50%),linear-gradient(140deg,#101b2a,#080d16)] p-5 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-[9px] font-bold tracking-[.22em] text-cyan-200">OPERATIONS WALL / 03</p><h2 className="mt-2 text-2xl font-semibold text-white">AI system status & work monitor</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Health and task counters come from backend responses. Device battery, server CPU, model memory and energy draw are not currently exposed by this API.</p></div><button type="button" disabled={busy} onClick={() => void refresh()} className="rounded-xl bg-cyan-200 px-4 py-3 text-xs font-bold text-slate-950 disabled:opacity-50">{busy ? "Refreshing…" : "Refresh telemetry ↻"}</button></div>
