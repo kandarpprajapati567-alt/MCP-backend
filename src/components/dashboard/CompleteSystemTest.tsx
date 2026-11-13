@@ -7,7 +7,7 @@ type Result = { id: string; label: string; status: Status; detail: string; durat
 type Agent = { id: string; name: string; enabled: boolean; allowed_tools?: string[] };
 type Tool = { id: string; sideEffect?: boolean; description?: string };
 
-type Props = { token: string };
+type Props = { onUnauthorized: () => void };
 
 const READ_ONLY_TESTS: Record<string, { prompt: string; expected: string }> = {
   "text.word_count": { prompt: "Use text.word_count on exactly this text: alpha beta gamma delta. Return the numeric word count.", expected: "text.word_count" },
@@ -22,23 +22,23 @@ const READ_ONLY_TESTS: Record<string, { prompt: string; expected: string }> = {
   "models.list_providers": { prompt: "Use models.list_providers to list available model adapters and their reported capabilities.", expected: "models.list_providers" },
 };
 
-export function CompleteSystemTest({ token }: Props) {
+export function CompleteSystemTest({ onUnauthorized }: Props) {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [summary, setSummary] = useState("");
   const [checkedAt, setCheckedAt] = useState("");
 
   async function request(path: string, method: "GET" | "POST" = "GET", body?: unknown) {
-    return fetch(path, {
+    const response = await fetch(path, {
       method,
       cache: "no-store",
-      headers: {
-        "x-fs-owner-token": token,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
+      credentials: "same-origin",
+      headers: body ? { "Content-Type": "application/json" } : {},
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(12000),
     });
+    if (response.status === 401) onUnauthorized();
+    return response;
   }
 
   async function runSafeTest() {

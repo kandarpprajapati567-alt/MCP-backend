@@ -12,7 +12,6 @@ type Health = { status?: string; services?: { database?: string; authentication?
 type Tool = { id: string; description: string; permission: string; sideEffect: boolean };
 
 export default function DashboardPage() {
-  const [token, setToken] = useState("");
   const [masterKey, setMasterKey] = useState("");
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -35,21 +34,23 @@ export default function DashboardPage() {
   const [pairingBusy, setPairingBusy] = useState(false);
 
   const api = useCallback(
-    async (path: string, init: RequestInit = {}) =>
-      fetch(path, {
+    async (path: string, init: RequestInit = {}) => {
+      const response = await fetch(path, {
         ...init,
         cache: "no-store",
+        credentials: "same-origin",
         headers: {
           ...(init.headers ?? {}),
-          "x-fs-owner-token": token,
           ...(init.body ? { "Content-Type": "application/json" } : {}),
         },
-      }),
-    [token],
+      });
+      if (response.status === 401) disconnect();
+      return response;
+    },
+    [disconnect],
   );
 
   const disconnect = useCallback(() => {
-    setToken("");
     setConnected(false);
     setTasks([]);
     setAgents([]);
@@ -70,7 +71,7 @@ export default function DashboardPage() {
     ]);
     if ([taskResponse, providerResponse, toolResponse, agentResponse].some((response) => response.status === 401)) {
       disconnect();
-      throw new Error("Owner master token was rejected. Connect again.");
+      throw new Error("Owner browser session expired. Open a new secure session.");
     }
     if (!taskResponse.ok || !providerResponse.ok || !toolResponse.ok) {
       throw new Error("Backend data is temporarily unavailable.");
@@ -104,39 +105,59 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    void fetch("/api/v1/auth/session", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => response.ok
+        ? await response.json() as { authenticated?: boolean }
+        : { authenticated: false })
+      .then((data) => {
+        if (active) setConnected(data.authenticated === true);
+      })
+      .catch(() => { if (active) setConnected(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     if (connected) void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."));
   }, [connected, refresh]);
 
   async function connect() {
+    if (masterKey.length < 32) {
+      setError("Enter the owner master token once to open a secure browser session.");
+      return;
+    }
     setConnecting(true);
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/v1/tools", {
-        headers: { "x-fs-owner-token": masterKey },
+      const response = await fetch("/api/v1/auth/session", {
+        method: "POST",
         cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: masterKey }),
       });
-      const raw = await response.text();
-      let data: { error?: string; tools?: Tool[] } = {};
-      if (raw.trim()) {
-        try {
-          data = JSON.parse(raw) as { error?: string; tools?: Tool[] };
-        } catch {
-          throw new Error(`Backend returned an invalid response (HTTP ${response.status}). Refresh the page and try again; if it continues, check the Vercel deployment.`);
-        }
-      } else {
-        throw new Error(`Backend returned an empty response (HTTP ${response.status}). Refresh the page and try again.`);
+      const data = await response.json() as { authenticated?: boolean; error?: string };
+      if (!response.ok || data.authenticated !== true) {
+        throw new Error(data.error ?? `Session setup failed (HTTP ${response.status}). Check the owner token.`);
       }
-      if (!response.ok) throw new Error(data.error ?? `Connection failed (HTTP ${response.status}). Check the owner token.`);
-      if (!Array.isArray(data.tools)) throw new Error("Backend response is missing the tool registry. Please retry.");
-      setToken(masterKey);
-      setTools(data.tools);
-      setConnected(true);
       setMasterKey("");
-      setMessage("Connected to MCP backend. No four-day session is created.");
+      setConnected(true);
+      setMessage("Secure owner session opened for 8 hours. The master token was cleared and is not sent with dashboard requests.");
     } catch (cause) {
       setConnected(false);
-      setError(cause instanceof Error ? cause.message : "Could not connect.");
+      setError(cause instanceof Error ? cause.message : "Could not open secure session.");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function closeSession() {
+    setConnecting(true);
+    try {
+      await fetch("/api/v1/auth/session", { method: "DELETE", cache: "no-store", credentials: "same-origin" });
+      disconnect();
+      setMessage("Secure owner session closed.");
     } finally {
       setConnecting(false);
     }
@@ -229,8 +250,8 @@ export default function DashboardPage() {
         description="Your private AI infrastructure at a glance — backend health, connected capabilities, providers and agent activity."
       />
 
-      <SystemHealthCheck connected={connected} token={token} />
-      {connected && <CompleteSystemTest token={token} />}
+      <SystemHealthCheck connected={connected} onUnauthorized={disconnect} />
+      {connected && <CompleteSystemTest onUnauthorized={disconnect} />}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-border bg-zinc-950/70 p-4">
@@ -274,7 +295,7 @@ export default function DashboardPage() {
               value={masterKey}
               onChange={(event) => setMasterKey(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") void connect(); }}
-              placeholder="Enter FS_OWNER_TOKEN"
+              placeholder="Enter FS_OWNER_TOKEN once"
               aria-label="Owner master token"
               className="min-w-0 flex-1 rounded-xl border border-border bg-black/40 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
             />
@@ -284,16 +305,16 @@ export default function DashboardPage() {
               onClick={() => void connect()}
               className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40"
             >
-              {connecting ? "Connecting…" : "Connect backend"}
+              {connecting ? "Opening session…" : "Open secure session"}
             </button>
           </div>
         ) : (
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-emerald-300">Master token verified · connection active in this page</p>
-            <button type="button" onClick={disconnect} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Disconnect</button>
+            <p className="text-sm text-emerald-300">HttpOnly owner session active · master token is not sent with dashboard requests</p>
+            <button type="button" onClick={() => void closeSession()} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Close secure session</button>
           </div>
         )}
-        <p className="mt-3 text-xs text-zinc-500">The master token remains in page memory only; it is not written to browser storage. Set or rotate it later in Render environment variables.</p>
+        <p className="mt-3 text-xs text-zinc-500">The master token is exchanged once over the same-origin connection, then cleared. The browser stores only the HttpOnly session cookie; the master token is never saved in browser storage.</p>
       </section>
 
       {connected && (
