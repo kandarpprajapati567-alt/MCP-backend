@@ -399,3 +399,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 @media(prefers-reduced-motion:reduce){
   .galaxy-map:before,.galaxy-universe{animation:none!important;transition:none!important}
 }
+
+.core-label{left:50%;transform:translateX(-50%)}
+.personal-map-core>span,.personal-map-node>i{display:none!important}
+.personal-map-core{gap:0}
+.personal-map-node{padding-left:4px}
