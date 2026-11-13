@@ -331,3 +331,236 @@ button:disabled { cursor: not-allowed; }
   .map-node-card, .map-detail-card { transition: none; }
   .map-node-card:hover, .map-detail-card:hover { transform: none; }
 }
+
+
+/* Multi-material command centre: graphite, ivory, brass, crimson, olive and orbital violet.
+   Blue/cyan is intentionally excluded from the visual identity. */
+:root {
+  --fs-graphite: #17191c;
+  --fs-carbon: #0d0f12;
+  --fs-ivory: #f0eee8;
+  --fs-paper: #e4e0d6;
+  --fs-brass: #b99a55;
+  --fs-olive: #a5b16b;
+  --fs-crimson: #c85b48;
+  --fs-magenta: #bd668d;
+  --fs-violet: #9879b8;
+  --fs-orange: #d58a43;
+  --fs-steel: #858b8d;
+}
+:focus-visible { outline-color: var(--fs-brass); }
+body {
+  background:
+    radial-gradient(ellipse 48% 38% at 6% 0%, rgba(189,102,141,.08), transparent 72%),
+    radial-gradient(ellipse 42% 42% at 100% 5%, rgba(152,121,184,.10), transparent 72%),
+    #101114;
+}
+.app-sidebar {
+  background: linear-gradient(180deg, #202124, #111214) !important;
+  border-color: rgba(185,154,85,.24) !important;
+}
+.sidebar-brand {
+  background: linear-gradient(135deg, rgba(200,91,72,.2), rgba(185,154,85,.2)) !important;
+  color: #e9c98a !important;
+  box-shadow: inset 0 0 0 1px rgba(185,154,85,.28), 0 8px 28px rgba(0,0,0,.22) !important;
+}
+.sidebar-brand svg { color: #e9c98a !important; }
+.sidebar-link .text-teal-200, .sidebar-link.text-teal-200 { color: #e9c98a !important; }
+.sidebar-link.bg-teal-300\/\[0\.10\] {
+  background: rgba(185,154,85,.12) !important;
+  box-shadow: inset 3px 0 0 #b99a55 !important;
+  color: #f0dfb7 !important;
+}
+.sidebar-footer {
+  background: linear-gradient(135deg, rgba(185,154,85,.12), rgba(133,139,141,.07)) !important;
+  border-color: rgba(185,154,85,.2) !important;
+}
+.sidebar-footer .text-teal-200 { color: #e9c98a !important; }
+.app-topbar { background: rgba(17,18,20,.88) !important; border-color: rgba(185,154,85,.2) !important; }
+
+/* Monitor wall: cyberpunk crimson meets deep-space violet/orange. */
+.dashboard-page .command-deck {
+  border-color: rgba(200,91,72,.34) !important;
+  background:
+    radial-gradient(ellipse 48% 70% at 88% 8%, rgba(152,121,184,.22), transparent 68%),
+    radial-gradient(ellipse 38% 65% at 4% 100%, rgba(200,91,72,.17), transparent 70%),
+    linear-gradient(125deg,#171316 0%,#17191d 48%,#171321 100%) !important;
+}
+.dashboard-page .command-deck-grid {
+  opacity: .24;
+  background-image: linear-gradient(rgba(220,205,185,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(220,205,185,.10) 1px,transparent 1px) !important;
+}
+.dashboard-page .monitor-kicker {
+  border-color: rgba(200,91,72,.42) !important;
+  background: rgba(200,91,72,.12) !important;
+  color: #f0b4a8 !important;
+}
+.dashboard-page .monitor-live-dot { background:#d58a43 !important; box-shadow:0 0 12px rgba(213,138,67,.8) !important; }
+.dashboard-page .command-deck h2 .text-cyan-200 { color:#e3a06b !important; }
+.dashboard-page .monitor-wall {
+  border-color: rgba(185,154,85,.32) !important;
+  background: linear-gradient(145deg,rgba(9,10,12,.96),rgba(35,27,31,.92)) !important;
+}
+.dashboard-page .monitor-tile {
+  border-color: rgba(220,205,185,.15) !important;
+  background: linear-gradient(145deg,#292a2c,#17191c) !important;
+}
+.dashboard-page .monitor-tile-primary {
+  border-color: rgba(200,91,72,.5) !important;
+  background: linear-gradient(145deg,rgba(91,39,37,.78),#21191b) !important;
+}
+.dashboard-page .monitor-tile:nth-child(2) {
+  border-color: rgba(185,154,85,.48) !important;
+  background: linear-gradient(145deg,#eee9dd,#d8d1c3) !important;
+}
+.dashboard-page .monitor-tile:nth-child(2) .monitor-label,
+.dashboard-page .monitor-tile:nth-child(2) strong,
+.dashboard-page .monitor-tile:nth-child(2) .monitor-foot { color:#292a29 !important; }
+.dashboard-page .monitor-tile:nth-child(3) {
+  background: linear-gradient(145deg,#28232c,#19171e) !important;
+  border-color: rgba(152,121,184,.38) !important;
+}
+.dashboard-page .monitor-tile:nth-child(4) {
+  background: linear-gradient(145deg,#30271b,#1d1914) !important;
+  border-color: rgba(213,138,67,.38) !important;
+}
+.dashboard-page .monitor-wall-foot b { color:#e5b96f !important; }
+.dashboard-page .dashboard-page button, .dashboard-page a { --tw-ring-color: rgba(185,154,85,.35); }
+
+/* Mixed-material dashboard panels: alternate matte carbon and warm paper surfaces. */
+.dashboard-page > section:not(.command-deck) {
+  border-color: rgba(185,154,85,.22) !important;
+  background: linear-gradient(145deg,rgba(35,35,34,.96),rgba(20,21,22,.96)) !important;
+  backdrop-filter: none !important;
+}
+.dashboard-page > section:not(.command-deck) > h2,
+.dashboard-page > section:not(.command-deck) > h3 { color:#f0eee8; }
+.dashboard-page .surface-card { border-color:rgba(185,154,85,.24) !important; }
+.dashboard-page > section:nth-of-type(3n) {
+  background: linear-gradient(145deg,#eeeae0,#d9d4c9) !important;
+  border-color:rgba(185,154,85,.5) !important;
+  box-shadow:0 18px 42px rgba(0,0,0,.18) !important;
+}
+.dashboard-page > section:nth-of-type(3n) h2,
+.dashboard-page > section:nth-of-type(3n) h3,
+.dashboard-page > section:nth-of-type(3n) strong { color:#252525 !important; }
+.dashboard-page > section:nth-of-type(3n) p,
+.dashboard-page > section:nth-of-type(3n) label { color:#5d5a54 !important; }
+.dashboard-page > section:nth-of-type(3n) article,
+.dashboard-page > section:nth-of-type(3n) [data-card] {
+  background:rgba(255,255,255,.55) !important;
+  border-color:rgba(90,82,68,.18) !important;
+}
+
+/* Cockpit + brutalist monitor page: segmented instrument rails and ivory readout. */
+.monitor-page > section:first-of-type {
+  border-color:rgba(185,154,85,.42) !important;
+  background:
+    linear-gradient(90deg,transparent 49.8%,rgba(185,154,85,.10) 50%,transparent 50.2%),
+    radial-gradient(ellipse at 90% 0%,rgba(200,91,72,.16),transparent 48%),
+    linear-gradient(135deg,#242322,#111315) !important;
+}
+.monitor-page > section:first-of-type p:first-child { color:#e0bc7a !important; }
+.monitor-page > section:nth-of-type(2) {
+  background:linear-gradient(145deg,#e9e5db,#d4d0c6) !important;
+  border-color:rgba(185,154,85,.55) !important;
+  box-shadow:0 18px 45px rgba(0,0,0,.18) !important;
+}
+.monitor-page > section:nth-of-type(2) h2,
+.monitor-page > section:nth-of-type(2) h3,
+.monitor-page > section:nth-of-type(2) strong { color:#242424 !important; }
+.monitor-page > section:nth-of-type(2) p { color:#666159 !important; }
+.monitor-page > section:nth-of-type(2) input {
+  background:#fffdf7 !important; color:#262626 !important; border-color:#b8ae9a !important;
+}
+.monitor-page .rounded-xl.border { border-color:rgba(115,105,86,.24) !important; }
+.monitor-page .bg-gradient-to-br.from-\[\#172234\].to-\[\#0b111c\] {
+  background:linear-gradient(145deg,#f3efe5,#dcd6c9) !important;
+  border-color:rgba(185,154,85,.5) !important;
+}
+.monitor-page .bg-gradient-to-br.from-\[\#172234\].to-\[\#0b111c\] p { color:#676158 !important; }
+.monitor-page .bg-gradient-to-br.from-\[\#172234\].to-\[\#0b111c\] strong { color:#292824 !important; }
+.monitor-page .bg-gradient-to-r.from-cyan-400.to-violet-400 {
+  background:linear-gradient(90deg,#b99a55,#c85b48) !important;
+}
+.monitor-page .bg-cyan-300 { background:#b99a55 !important; color:#17191c !important; }
+.monitor-page .text-cyan-200 { color:#dca06c !important; }
+
+/* Agent map: architecture graph on a paper/graphite drafting board, with orbital rings. */
+.agent-map-page > section:first-of-type {
+  position:relative; overflow:hidden;
+  border-color:rgba(185,154,85,.58) !important;
+  background:
+    radial-gradient(circle at 50% 48%,transparent 0 19%,rgba(152,121,184,.14) 19.2% 19.5%,transparent 19.8% 31%,rgba(152,121,184,.12) 31.2% 31.5%,transparent 31.8%),
+    linear-gradient(135deg,#eeeae0,#d9d4c9) !important;
+  box-shadow:0 24px 60px rgba(0,0,0,.18) !important;
+}
+.agent-map-page > section:first-of-type h2,
+.agent-map-page > section:first-of-type strong { color:#252522 !important; }
+.agent-map-page > section:first-of-type p { color:#625e56 !important; }
+.agent-map-page > section:first-of-type a {
+  background:#262522 !important; color:#f0eee8 !important; border-color:#a99b7e !important;
+}
+.agent-map-page > section:first-of-type > div > div > div {
+  border-color:rgba(87,78,62,.2) !important;
+  background:rgba(255,255,255,.58) !important;
+}
+.agent-map-page > section:first-of-type > div > div > div p { color:#777064 !important; }
+.agent-map-page > section:nth-of-type(2) {
+  border-color:rgba(152,121,184,.35) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(152,121,184,.14),transparent 58%),
+    linear-gradient(145deg,#17151c,#101114) !important;
+}
+.agent-map-page > section:nth-of-type(2) h3 { color:#e9dfef !important; }
+.agent-map-page > section:nth-of-type(2) .rounded-xl {
+  border-color:rgba(152,121,184,.3) !important;
+  background:linear-gradient(145deg,#27232c,#17171c) !important;
+}
+.agent-map-page > section:nth-of-type(2) .text-violet-200 { color:#c6a7d9 !important; }
+
+/* Bot map: olive tactical grid with brass plotting marks and orbital coordinates. */
+.bot-map-page > section:first-of-type {
+  position:relative; isolation:isolate;
+  border-color:rgba(165,177,107,.48) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(165,177,107,.16),transparent 62%),
+    linear-gradient(rgba(165,177,107,.09) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(165,177,107,.09) 1px,transparent 1px),
+    linear-gradient(145deg,#20231b,#11140f) !important;
+  background-size:auto,28px 28px,28px 28px,auto !important;
+}
+.bot-map-page > section:first-of-type p:first-child { color:#c4ce8c !important; }
+.bot-map-page > section:first-of-type h2 { color:#f0eee8 !important; }
+.bot-map-page > section:first-of-type > div,
+.bot-map-page > section:first-of-type .bg-\[\#111a27\] {
+  border-color:rgba(165,177,107,.34) !important;
+  background:linear-gradient(145deg,#303326,#1b1e17) !important;
+}
+.bot-map-page > section:first-of-type .text-amber-100,
+.bot-map-page > section:first-of-type .text-amber-200 { color:#d6c18b !important; }
+.bot-map-page > section:nth-of-type(2) {
+  border-color:rgba(185,154,85,.42) !important;
+  background:linear-gradient(110deg,#e9e4d8,#d7d0c2) !important;
+}
+.bot-map-page > section:nth-of-type(2) h3 { color:#292824 !important; }
+.bot-map-page > section:nth-of-type(2) p { color:#676158 !important; }
+.bot-map-page > section:nth-of-type(2) a { background:#292824 !important; color:#f0eee8 !important; }
+
+/* Status colours are semantic, not decoration. Keep green=healthy, amber=warning, red=error. */
+@media (prefers-reduced-motion:no-preference) {
+  .monitor-page .rounded-xl.border,
+  .agent-map-page .rounded-xl.border,
+  .bot-map-page .rounded-xl.border { transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease; }
+  .agent-map-page .rounded-xl.border:hover,
+  .bot-map-page .rounded-xl.border:hover { transform:translateY(-2px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .monitor-page *, .agent-map-page *, .bot-map-page * { scroll-behavior:auto !important; transition:none !important; animation:none !important; }
+}
+@media (max-width:640px) {
+  .dashboard-page .command-deck { border-radius:22px !important; }
+  .monitor-page > section:first-of-type,
+  .agent-map-page > section:first-of-type,
+  .bot-map-page > section:first-of-type { border-radius:20px !important; }
+}
