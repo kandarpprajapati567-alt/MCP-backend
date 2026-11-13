@@ -241,17 +241,17 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
         return executeBackendTool(call.toolId, call.arguments);
       },
       {
-      maxConcurrency: 3,
+        maxConcurrency: 3,
       // Only capabilities explicitly marked read-only may share a batch.
       // Device jobs, side effects, and unknown remote capabilities stay serial.
-      canRunInParallel: (call) => {
-        if (deviceTools.some((tool) => tool.id === call.toolId)) return false;
-        const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
-          remoteTools.find((tool) => tool.id === call.toolId);
-        return capability?.sideEffect === false;
-      },
-      shouldCaptureFailure: (call) => !deviceTools.some((tool) => tool.id === call.toolId),
-      onOutcome: async (call, execution) => {
+        canRunInParallel: (call) => {
+          if (deviceTools.some((tool) => tool.id === call.toolId)) return false;
+          const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
+            remoteTools.find((tool) => tool.id === call.toolId);
+          return capability?.sideEffect === false && capability.annotations?.idempotentHint === true;
+        },
+        shouldCaptureFailure: (call) => !deviceTools.some((tool) => tool.id === call.toolId),
+        onOutcome: async (call, execution) => {
         if (deviceTools.some((tool) => tool.id === call.toolId)) return;
         const invocation = invocationEnvelopes.get(call.id);
         const invocationResult = invocation
@@ -295,7 +295,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
           });
         }
       },
-      beforeEach: async () => assertTaskNotCancelled(admin, id),
+        beforeEach: async () => assertTaskNotCancelled(admin, id),
       },
     );
 
