@@ -484,3 +484,17 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .galaxy-core:focus-visible{outline:1px solid rgba(181,211,255,.8);outline-offset:7px;border-radius:50%}
 .galaxy-core .core-label{display:grid;pointer-events:none}
 .galaxy-core.is-selected .core-label strong{color:#fff;text-shadow:0 0 18px rgba(131,183,255,.9)}
+
+
+.planetary-scene-fallback{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.fallback-planet{position:absolute;display:block;transform:translate(-50%,-50%);border-radius:50%;background-color:#182b48;background-image:radial-gradient(circle at 31% 25%,rgba(220,235,255,.8),rgba(106,147,196,.32) 16%,transparent 38%),radial-gradient(ellipse at 65% 68%,rgba(5,12,28,.9),transparent 65%),repeating-radial-gradient(ellipse at 45% 55%,rgba(150,180,215,.08) 0 2px,transparent 3px 8px);box-shadow:inset -15px -13px 23px rgba(0,0,0,.85),inset 5px 4px 12px rgba(220,235,255,.16),0 0 25px rgba(79,131,205,.18)}
+.fallback-core{left:50%;top:50%;width:148px;height:148px;background-color:#172d62;background-image:radial-gradient(circle at 31% 24%,rgba(214,233,255,.9),rgba(82,127,208,.48) 17%,transparent 39%),radial-gradient(ellipse at 70% 67%,rgba(2,7,22,.94),transparent 60%),repeating-radial-gradient(ellipse at 44% 54%,rgba(127,168,235,.12) 0 3px,transparent 4px 11px)}
+.fallback-moon{left:59%;top:45.5%;width:30px;height:30px;background-color:#777a80;background-image:radial-gradient(circle at 31% 25%,#e2e0d9,transparent 38%),radial-gradient(circle at 68% 65%,#26292e,transparent 28%),radial-gradient(circle at 48% 52%,transparent 0 18%,rgba(20,22,26,.7) 19% 22%,transparent 23%)}
+.fallback-agents{left:50%;top:15.5%;width:54px;height:54px;background-color:#8b5637}
+.fallback-providers{left:20.5%;top:29.5%;width:46px;height:46px;background-color:#356a83}
+.fallback-android{left:13%;top:57.5%;width:38px;height:38px;background-color:#82705b}
+.fallback-bots{left:79.5%;top:30%;width:50px;height:50px;background-color:#9b5536}
+.fallback-mcp{left:84%;top:61%;width:42px;height:42px;background-color:#526f8e}
+.fallback-memory{left:59%;top:83.5%;width:48px;height:48px;background-color:#74634c}
+.fallback-external{left:20.5%;top:78.5%;width:40px;height:40px;background-color:#47705b}
+@media(max-width:767px){.fallback-core{width:76px;height:76px}.fallback-agents{width:34px;height:34px}.fallback-providers,.fallback-bots,.fallback-memory{width:30px;height:30px}.fallback-android,.fallback-mcp,.fallback-external{width:26px;height:26px}.fallback-moon{width:18px;height:18px}}
