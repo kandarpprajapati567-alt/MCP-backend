@@ -474,7 +474,7 @@ export default function AgentLabPage() {
             </form>
             <div className="mt-4 rounded-xl border border-border/80 bg-black/20 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><h3 className="text-sm font-semibold text-white">Parallel specialist team</h3><p className="mt-1 text-[11px] text-zinc-500">Run the same objective through 2–3 independently configured Agents. Each uses its own instructions, model preference and tool allowlist.</p></div>
+                <div><h3 className="text-sm font-semibold text-white">Parallel specialist team</h3><p className="mt-1 text-[11px] text-zinc-500">Assign a different subtask to 2–3 specialists. Each uses its own instructions, model preference and tool allowlist; all run concurrently.</p></div>
                 <span className="text-[10px] text-zinc-500">{teamAgentIds.length}/3 selected</span>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
