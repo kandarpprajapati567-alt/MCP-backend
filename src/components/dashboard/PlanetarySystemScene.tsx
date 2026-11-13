@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type PlanetarySystemSceneProps = {
   zoom?: number;
@@ -123,6 +123,7 @@ const bodies = [
 
 export function PlanetarySystemScene({ zoom=1, rotation=0, active=true, selectedId=null }: PlanetarySystemSceneProps) {
   const canvasRef=useRef<HTMLCanvasElement>(null);
+  const [fallback,setFallback]=useState(false);
   const stateRef=useRef({zoom,rotation,active,selectedId});
   useEffect(()=>{stateRef.current={zoom,rotation,active,selectedId};},[zoom,rotation,active,selectedId]);
 
@@ -130,7 +131,7 @@ export function PlanetarySystemScene({ zoom=1, rotation=0, active=true, selected
     const canvas=canvasRef.current;
     if(!canvas)return;
     const gl=canvas.getContext("webgl",{alpha:false,antialias:true,powerPreference:"low-power"});
-    if(!gl)return;
+    if(!gl){setFallback(true);return;}
     const compile=(type:number,source:string)=>{
       const shader=gl.createShader(type);
       if(!shader)throw new Error("WebGL shader allocation failed");
@@ -206,10 +207,11 @@ export function PlanetarySystemScene({ zoom=1, rotation=0, active=true, selected
       return ()=>{cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener("visibilitychange",onVisibility);if(program)gl.deleteProgram(program);};
     }catch(error){
       console.error("[planetary-scene] WebGL unavailable:",error);
+      setFallback(true);
       if(program)gl.deleteProgram(program);
       return;
     }
   },[]);
 
-  return <canvas ref={canvasRef} className="planetary-scene-canvas" aria-hidden="true"/>;
+  return <><canvas ref={canvasRef} className="planetary-scene-canvas" aria-hidden="true"/>{fallback&&<div className="planetary-scene-fallback" aria-hidden="true"><i className="fallback-planet fallback-core"/><i className="fallback-planet fallback-moon"/><i className="fallback-planet fallback-agents"/><i className="fallback-planet fallback-providers"/><i className="fallback-planet fallback-android"/><i className="fallback-planet fallback-bots"/><i className="fallback-planet fallback-mcp"/><i className="fallback-planet fallback-memory"/><i className="fallback-planet fallback-external"/></div>}</>;
 }
