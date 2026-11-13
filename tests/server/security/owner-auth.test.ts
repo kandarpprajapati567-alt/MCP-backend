@@ -43,8 +43,7 @@ test("owner API requests accept a Bearer master token", () => {
 });
 
 test("owner API requests accept a valid short-lived HttpOnly session cookie", () => {
-  const now = 1_800_000_000_000;
-  const session = createOwnerSessionToken(validToken, now);
+  const session = createOwnerSessionToken(validToken);
   assert.ok(session);
   const request = new Request("https://backend.example/api/v1/tools", {
     headers: {
