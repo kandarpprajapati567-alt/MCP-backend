@@ -41,7 +41,8 @@ export default function AgentLabPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agentId, setAgentId] = useState("");
-  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);\n  const [teamAssignments, setTeamAssignments] = useState<Record<string, string>>({});
+  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);
+  const [teamAssignments, setTeamAssignments] = useState<Record<string, string>>({});
   const [teamResults, setTeamResults] = useState<TeamMemberResult[]>([]);
   const [taskInput, setTaskInput] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
