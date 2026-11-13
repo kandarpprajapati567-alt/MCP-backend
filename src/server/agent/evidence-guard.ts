@@ -2,6 +2,7 @@ import {
   extractSourceReferenceCandidates,
   type SynthesisToolResult,
 } from "./synthesis-context";
+import { verifySynthesisIntegrity } from "./synthesis-integrity";
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
 
@@ -10,9 +11,8 @@ function normalizeUrl(value: string): string {
 }
 
 /**
- * Adds a deterministic evidence-status label and removes links that were not
- * present in the raw tool outputs. This does not prove that a source is true;
- * it only prevents the model from introducing a new URL as if it were evidence.
+ * Adds deterministic evidence/execution labels and removes links that were not
+ * present in successful tool outputs. It does not establish real-world truth.
  */
 function executionFailureStatus(value: unknown): string | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -68,11 +68,22 @@ export function guardSynthesisAnswer(
     ...(removedUrls > 0 ? [String(removedUrls) + " URL(s) not present in tool evidence were removed."] : []),
   ];
 
+  const integrity = verifySynthesisIntegrity(answer, toolResults);
+  const integrityNotice = [
+    "DETERMINISTIC INTEGRITY CHECK: " + integrity.status.toUpperCase().replaceAll("_", " "),
+    "Tool operations: " + integrity.toolOperations +
+      " · Failed: " + integrity.failedOperations +
+      " · Unsupported answer URLs: " + integrity.unsupportedAnswerUrls,
+    "Independent truth verification: NOT PERFORMED. This check validates execution/citation consistency only.",
+    ...integrity.warnings.map((warning) => "Integrity warning: " + warning),
+  ];
+
   const outcomeNotice = executionOutcomeNotice(toolResults);
   return [
     ...(outcomeNotice ? [outcomeNotice] : []),
     "Evidence status: " + status,
     ...limitations,
+    ...integrityNotice,
     "",
     safeAnswer || "I cannot provide a verified conclusion from the available evidence.",
   ].join("\n");
