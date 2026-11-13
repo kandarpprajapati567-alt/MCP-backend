@@ -475,3 +475,12 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 @media(prefers-reduced-motion:reduce){
   .planetary-scene-canvas{animation:none!important}
 }
+
+
+.galaxy-core{
+  display:block;padding:0;border:0;background:transparent;cursor:pointer;
+  pointer-events:auto;appearance:none;-webkit-appearance:none;
+}
+.galaxy-core:focus-visible{outline:1px solid rgba(181,211,255,.8);outline-offset:7px;border-radius:50%}
+.galaxy-core .core-label{display:grid;pointer-events:none}
+.galaxy-core.is-selected .core-label strong{color:#fff;text-shadow:0 0 18px rgba(131,183,255,.9)}
