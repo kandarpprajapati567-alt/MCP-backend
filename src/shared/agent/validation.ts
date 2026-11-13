@@ -98,13 +98,12 @@ function validatePortableSchema(schema: unknown, depth = 0): boolean {
       return true;
     }
     case "array": {
-      if (!hasOnlyKeys(schema, ["type", "items"], ["description", "minItems", "maxItems", "uniqueItems"])) return false;
+      if (!hasOnlyKeys(schema, ["type", "items"], ["description", "minItems", "maxItems"])) return false;
       if (schema.description !== undefined && !isBoundedText(schema.description, 200)) return false;
       if (!validatePortableSchema(schema.items, depth + 1)) return false;
       if (schema.minItems !== undefined && (!Number.isInteger(schema.minItems) || (schema.minItems as number) < 0 || (schema.minItems as number) > 100)) return false;
       if (schema.maxItems !== undefined && (!Number.isInteger(schema.maxItems) || (schema.maxItems as number) < 0 || (schema.maxItems as number) > 100)) return false;
       if (typeof schema.minItems === "number" && typeof schema.maxItems === "number" && schema.minItems > schema.maxItems) return false;
-      if (schema.uniqueItems !== undefined && typeof schema.uniqueItems !== "boolean") return false;
       return true;
     }
     default:
