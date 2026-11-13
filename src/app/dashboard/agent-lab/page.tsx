@@ -20,7 +20,8 @@ type Task = {
   failed_stage?: string;
   created_at: string;
 };
-type SuiteResult = { name: string; status: "passed" | "failed" | "skipped"; detail: string };\ntype TeamMemberResult = { agentId: string; taskId?: string; status: string; result?: string; message?: string; error?: string };
+type SuiteResult = { name: string; status: "passed" | "failed" | "skipped"; detail: string };
+type TeamMemberResult = { agentId: string; taskId?: string; status: string; result?: string; message?: string; error?: string };
 type TaskDetail = {
   task: Record<string, unknown>;
   events: Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>;
@@ -39,7 +40,9 @@ export default function AgentLabPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [agentId, setAgentId] = useState("");\n  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);\n  const [teamResults, setTeamResults] = useState<TeamMemberResult[]>([]);
+  const [agentId, setAgentId] = useState("");
+  const [teamAgentIds, setTeamAgentIds] = useState<string[]>([]);
+  const [teamResults, setTeamResults] = useState<TeamMemberResult[]>([]);
   const [taskInput, setTaskInput] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [detail, setDetail] = useState<TaskDetail | null>(null);
