@@ -51,15 +51,17 @@ export default function AgentLabPage() {
   const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
 
   async function api(path: string, init: RequestInit = {}) {
-    return fetch(path, {
+    const response = await fetch(path, {
       ...init,
       cache: "no-store",
+      credentials: "same-origin",
       headers: {
-        "x-fs-owner-token": token,
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(init.headers ?? {}),
       },
     });
+    if (response.status === 401) setConnected(false);
+    return response;
   }
 
   async function refresh() {
@@ -83,16 +85,68 @@ export default function AgentLabPage() {
     }
   }
 
-  async function connect() {
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/v1/auth/session", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => response.ok
+        ? await response.json() as { authenticated?: boolean }
+        : { authenticated: false })
+      .then(async (data) => {
+        if (!active) return;
+        const authenticated = data.authenticated === true;
+        setConnected(authenticated);
+        if (authenticated) {
+          try { await refresh(); }
+          catch (cause) {
+            if (active) setError(cause instanceof Error ? cause.message : "Agent Lab data could not be loaded.");
+          }
+        }
+      })
+      .catch(() => { if (active) setConnected(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function openSession() {
+    if (token.length < 32) {
+      setError("Enter the owner master token once to open a secure browser session.");
+      return;
+    }
     setBusy(true); setError(""); setMessage("");
     try {
-      await refresh();
+      const response = await fetch("/api/v1/auth/session", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await response.json() as { authenticated?: boolean; error?: string; expiresIn?: number };
+      if (!response.ok || data.authenticated !== true) throw new Error(data.error ?? "Unable to open owner session.");
+      setToken("");
       setConnected(true);
-      setMessage("Agent Lab connected. The owner token stays in this page's memory.");
+      await refresh();
+      setMessage("Secure owner session opened for 8 hours. The master token was cleared and is not sent with dashboard requests.");
     } catch (cause) {
       setConnected(false);
-      setError(cause instanceof Error ? cause.message : "Connection failed.");
+      setError(cause instanceof Error ? cause.message : "Session setup failed.");
     } finally { setBusy(false); }
+  }
+
+  async function closeSession() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await fetch("/api/v1/auth/session", { method: "DELETE", cache: "no-store", credentials: "same-origin" });
+    } finally {
+      setToken("");
+      setConnected(false);
+      setAgents([]);
+      setTools([]);
+      setTasks([]);
+      setDetail(null);
+      setSuiteResults([]);
+      setBusy(false);
+      setMessage("Secure owner session closed.");
+    }
   }
 
   async function prepareFreeTestAgent() {
@@ -404,15 +458,19 @@ export default function AgentLabPage() {
 
       {!connected ? (
         <section className="rounded-2xl border border-border bg-zinc-950/70 p-5">
-          <h2 className="font-semibold text-white">Secure owner connection</h2>
-          <p className="mt-1 text-sm text-zinc-400">Enter the owner master token. It is held only in this page's memory and is not saved to browser storage.</p>
+          <h2 className="font-semibold text-white">Secure owner session</h2>
+          <p className="mt-1 text-sm text-zinc-400">Enter the master token once. It is exchanged for an 8-hour HttpOnly, SameSite=Strict browser session and then cleared from this page.</p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" aria-label="Owner master token" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
-            <button type="button" disabled={busy || token.length < 32} onClick={() => void connect()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Connecting…" : "Open Agent Lab"}</button>
+            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter FS_OWNER_TOKEN once" aria-label="Owner master token" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
+            <button type="button" disabled={busy || token.length < 32} onClick={() => void openSession()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Opening session…" : "Open secure session"}</button>
           </div>
         </section>
       ) : (
         <>
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/20 p-3">
+            <p className="text-xs text-emerald-200">Secure owner session active · 8-hour expiry · master token is not sent with dashboard requests.</p>
+            <button type="button" disabled={busy} onClick={() => void closeSession()} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300 disabled:opacity-40">{busy ? "Working…" : "Close session"}</button>
+          </section>
           <section className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Enabled Agents</p><p className="mt-2 text-2xl font-semibold text-white">{enabledCount}</p></div>
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Registered tools</p><p className="mt-2 text-2xl font-semibold text-white">{registeredCount}</p></div>

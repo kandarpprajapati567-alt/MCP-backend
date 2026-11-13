@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type CheckId = "valid_envelope" | "reject_unknown_fields" | "event_deduplication" | "session_isolation" | "timestamp_validation";
@@ -32,9 +32,63 @@ export default function BotChannelsPage() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
-  async function runTest(testId: CheckId | "all") {
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/v1/auth/session", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const data = await response.json() as { authenticated?: boolean };
+        return data.authenticated === true;
+      })
+      .then((authenticated) => { if (active) setConnected(authenticated); })
+      .catch(() => { if (active) setConnected(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function openSession() {
     if (!token.trim()) {
-      setError("Enter the owner master token first. It is kept only in this page's memory.");
+      setError("Enter the owner token once to open a secure browser session.");
+      return;
+    }
+    setBusy("connect");
+    setError("");
+    try {
+      const response = await fetch("/api/v1/auth/session", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await response.json() as { authenticated?: boolean; error?: string; expiresIn?: number };
+      if (!response.ok || data.authenticated !== true) throw new Error(data.error ?? "Unable to open owner session.");
+      setConnected(true);
+      setToken("");
+      setNote("Secure browser session opened. The master token was cleared from this page; the HttpOnly session expires in 8 hours.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to open owner session.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clearSession() {
+    setBusy("logout");
+    try {
+      await fetch("/api/v1/auth/session", { method: "DELETE", cache: "no-store" });
+    } finally {
+      setToken("");
+      setConnected(false);
+      setResults([]);
+      setSummary(undefined);
+      setNote("");
+      setError("");
+      setBusy(null);
+    }
+  }
+
+  async function runTest(testId: CheckId | "all") {
+    if (!connected) {
+      setError("Open a secure owner session before running tests.");
       return;
     }
     setBusy(testId);
@@ -44,13 +98,13 @@ export default function BotChannelsPage() {
       const response = await fetch("/api/v1/channels/test", {
         method: "POST",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", "x-fs-owner-token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ testId }),
       });
       const data = await response.json() as CheckResponse;
       if (response.status === 401) {
         setConnected(false);
-        throw new Error("Owner token rejected. Check the token and try again.");
+        throw new Error("Owner session expired. Open a new session to continue.");
       }
       if (!response.ok && !data.results) throw new Error(data.error ?? `Test request failed (HTTP ${response.status}).`);
       setConnected(true);
@@ -76,16 +130,26 @@ export default function BotChannelsPage() {
             <h2 className="text-base font-semibold text-white">Channel contract Test Center</h2>
             <p className="mt-1 text-xs leading-5 text-slate-400">Owner-authenticated backend checks · no provider API calls · no AI inference cost</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${connected ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{connected ? "Owner verified" : "Not connected"}</span>
+          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${connected ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{connected ? "Secure session active" : "Not connected"}</span>
         </div>
 
-        <label className="mt-5 block text-xs font-medium text-slate-300" htmlFor="owner-token">Owner master token</label>
-        <input id="owner-token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Paste FS owner token" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-teal-400/50" />
-        <p className="mt-2 text-[11px] text-slate-500">Token stays in page memory and is sent only to this same-origin backend. It is not stored in localStorage or shown in reports.</p>
+        {!connected ? (
+          <div className="mt-5">
+            <label className="block text-xs font-medium text-slate-300" htmlFor="owner-token">Owner token · one-time session setup</label>
+            <input id="owner-token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Paste FS owner token once" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-teal-400/50" />
+            <p className="mt-2 text-[11px] text-slate-500">Exchanged for an 8-hour HttpOnly, SameSite=Strict browser session. The master token is not stored in browser storage and is cleared after exchange.</p>
+            <button type="button" disabled={busy !== null} onClick={() => void openSession()} className="mt-4 rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-400 disabled:opacity-50">{busy === "connect" ? "Opening session..." : "Open secure session"}</button>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-3">
+            <p className="text-xs text-emerald-100">Your browser session is active. Tests use the HttpOnly cookie; no token header is sent from this page.</p>
+            <button type="button" disabled={busy !== null} onClick={() => void clearSession()} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.04] disabled:opacity-50">{busy === "logout" ? "Closing..." : "Close session"}</button>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <button type="button" disabled={busy !== null} onClick={() => void runTest("all")} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-400 disabled:opacity-50">{busy === "all" ? "Running..." : "Run all channel tests"}</button>
-          <button type="button" disabled={busy !== null} onClick={() => { setToken(""); setConnected(false); setResults([]); setSummary(undefined); setNote(""); setError(""); }} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/[0.04] disabled:opacity-50">Clear token & report</button>
+          <button type="button" disabled={!connected || busy !== null} onClick={() => void runTest("all")} className="rounded-xl bg-teal-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-400 disabled:opacity-50">{busy === "all" ? "Running..." : "Run all channel tests"}</button>
+          <button type="button" disabled={busy !== null} onClick={() => { setResults([]); setSummary(undefined); setNote(""); setError(""); }} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/[0.04] disabled:opacity-50">Clear report</button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -100,7 +164,7 @@ export default function BotChannelsPage() {
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase ${result?.status === "passed" ? "bg-emerald-400/10 text-emerald-300" : result?.status === "failed" ? "bg-rose-400/10 text-rose-300" : "bg-slate-700/60 text-slate-400"}`}>{result?.status ?? "Not run"}</span>
                 </div>
-                <button type="button" disabled={busy !== null} onClick={() => void runTest(check.id)} className="mt-4 rounded-lg border border-teal-400/20 px-3 py-2 text-xs font-semibold text-teal-200 hover:bg-teal-400/[0.06] disabled:opacity-50">{busy === check.id ? "Testing..." : "Test this check"}</button>
+                <button type="button" disabled={!connected || busy !== null} onClick={() => void runTest(check.id)} className="mt-4 rounded-lg border border-teal-400/20 px-3 py-2 text-xs font-semibold text-teal-200 hover:bg-teal-400/[0.06] disabled:opacity-50">{busy === check.id ? "Testing..." : "Test this check"}</button>
                 {result && <p className="mt-3 text-xs leading-5 text-slate-400">{result.detail}</p>}
               </div>
             );

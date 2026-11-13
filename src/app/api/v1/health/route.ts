@@ -9,6 +9,7 @@ type AuthenticationStatus = "not_required";
 export async function GET() {
   const timestamp = new Date().toISOString();
   const version = "0.1.0-phase-1";
+  const commit = process.env.RENDER_GIT_COMMIT ?? "unknown";
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -19,6 +20,7 @@ export async function GET() {
         status: "degraded",
         timestamp,
         version,
+        commit,
         services: {
           database: "not_configured" satisfies ServiceStatus,
           authentication: "not_required" satisfies AuthenticationStatus,
@@ -41,6 +43,7 @@ export async function GET() {
         status: database === "ok" ? "ok" : "degraded",
         timestamp,
         version,
+        commit,
         services: {
           database,
           authentication: "not_required" satisfies AuthenticationStatus,
@@ -54,6 +57,7 @@ export async function GET() {
         status: "degraded",
         timestamp,
         version,
+        commit,
         services: {
           database: "unavailable" satisfies ServiceStatus,
           authentication: "ok" satisfies ServiceStatus,
