@@ -9,7 +9,7 @@ type Task={id:string;status:string;task:string;updated_at?:string;created_at:str
 type TaskEvent={event_type:string;created_at:string;payload?:Record<string,unknown>};
 type Provider={provider:string};
 type MapNode={id:string;title:string;description:string;status:string;symbol:string};
-const positions=[{id:"providers",className:"node-providers",symbol:"✦"},{id:"android",className:"node-android",symbol:"▯"},{id:"agents",className:"node-agents",symbol:"◈"},{id:"bots",className:"node-bots",symbol:"◉"},{id:"mcp",className:"node-mcp",symbol:"⌘"},{id:"memory",className:"node-memory",symbol:"▤"},{id:"external",className:"node-external",symbol:"◌"}];
+const positions=[{id:"providers",className:"node-providers"},{id:"android",className:"node-android"},{id:"agents",className:"node-agents"},{id:"bots",className:"node-bots"},{id:"mcp",className:"node-mcp"},{id:"memory",className:"node-memory"},{id:"external",className:"node-external"}];
 export function GalaxySystemMap(){
  const [health,setHealth]=useState<Health>({});
  const [ownerReady,setOwnerReady]=useState(false);
@@ -86,7 +86,7 @@ export function GalaxySystemMap(){
  const coreClass=coreStatus==="ok"?"is-live":coreStatus==="degraded"?"is-warning":"is-unknown";
  const transform="translate("+offset.x+"px, "+offset.y+"px) scale("+zoom+") rotate("+rotation+"deg) rotateX(52deg)";
  return <section className="galaxy-map" aria-label="Futuristic System live map">
-  <div className="galaxy-nebula" aria-hidden="true"/><div className="galaxy-stars galaxy-stars-a" aria-hidden="true"/><div className="galaxy-stars galaxy-stars-b" aria-hidden="true"/>
+  <div className="space-image-credit">HUBBLE EXTREME DEEP FIELD · NASA / ESA</div>
   <div className="galaxy-map-top"><div className="galaxy-wordmark"><span className="galaxy-brand-mark">F</span><span><strong>FUTURISTIC SYSTEM</strong><small>LIVE SYSTEM MAP</small></span></div>
    <div className="galaxy-top-actions"><span className={"galaxy-live-indicator "+coreClass}><i/>{health.status==="ok"?"SERVER LIVE":coreStatus.toUpperCase()}</span>
     {ownerReady?<button type="button" className="galaxy-session-button is-connected" onClick={()=>void disconnect()}>OWNER CONNECTED · DISCONNECT</button>:<button type="button" className="galaxy-session-button" onClick={()=>setConnectOpen(value=>!value)}>CONNECT OWNER</button>}
@@ -103,9 +103,8 @@ export function GalaxySystemMap(){
      {ownerReady&&providers.length>0&&<path className="galaxy-link-path galaxy-link-configured" d="M600 380 C490 310 390 230 250 215"/>}
      {ownerReady&&activeTasks.some(task=>!!task.agent_definition_id)&&<circle className="galaxy-flow-particle" r="4"><animateMotion dur="5s" repeatCount="indefinite" path="M600 380 C590 270 590 185 600 110"/></circle>}
     </svg>
-    <div className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")} role="img" aria-label="Central server"><div className="core-orbit core-orbit-one"/><div className="core-orbit core-orbit-two"/><div className="core-crystal"><span>✧</span></div><div className="core-pulse"/></div>
-    {positions.map(position=>{const detail=detailMap[position.id];const active=selectedId===position.id;return <button key={position.id} type="button" title={detail.title+" · "+detail.status} aria-label={detail.title+": "+detail.status} onClick={()=>setSelectedId(active?null:position.id)} className={"galaxy-node "+position.className+(active?" is-selected":"")+(focusedId===position.id?" is-focused":"")}><span className="galaxy-node-ring"/><span className="galaxy-node-symbol">{position.symbol}</span>
-      {position.id==="agents"&&enabledAgents.length>0&&<span className="agent-avatar-orbit">{enabledAgents.slice(0,4).map((agent,index)=><i key={agent.id} className={"agent-avatar avatar-"+index} title={agent.name}>{agent.name.slice(0,1).toUpperCase()}</i>)}</span>}
+    <div className={"galaxy-core "+coreClass+(focusedId==="core"?" is-focused":"")} role="img" aria-label="Central server"><div className="core-event-horizon"/><div className="core-accretion-ring"/><div className="core-label"><strong>FUTURISTIC SYSTEM</strong><small>COMMAND CORE</small></div></div>
+    {positions.map(position=>{const detail=detailMap[position.id];const active=selectedId===position.id;return <button key={position.id} type="button" title={detail.title+" · "+detail.status} aria-label={detail.title+": "+detail.status} onClick={()=>setSelectedId(active?null:position.id)} className={"galaxy-node "+position.className+(active?" is-selected":"")+(focusedId===position.id?" is-focused":"")}><span className="galaxy-node-ring"/><span className="galaxy-node-label">{detail.title}</span>
      </button>;})}
    </div>
   </div>
