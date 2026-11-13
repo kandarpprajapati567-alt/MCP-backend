@@ -194,6 +194,40 @@ export default function AgentLabPage() {
     } finally { setBusy(false); }
   }
 
+  async function monitorTeamTasks(initialMembers: TeamMemberResult[]) {
+    let latest = initialMembers;
+    const activeIds = initialMembers.flatMap((member) => member.taskId ? [member.taskId] : []);
+    if (!activeIds.length) return;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const updates = await Promise.all(activeIds.map(async (taskId) => {
+        try {
+          const response = await api("/api/v1/agent/tasks/" + taskId);
+          if (!response.ok) return null;
+          const data = await response.json();
+          const task = data.task as Record<string, unknown> | undefined;
+          if (!task) return null;
+          const events = Array.isArray(data.events) ? data.events as Array<{ event_type?: string; payload?: Record<string, unknown> }> : [];
+          const failures = events.filter((item) => item.event_type === "task.failed");
+          const lastFailure = failures[failures.length - 1]?.payload?.message;
+          return {
+            taskId,
+            status: String(task.status ?? "unknown"),
+            ...(typeof task.result === "string" ? { result: task.result } : {}),
+            ...(typeof lastFailure === "string" ? { error: lastFailure } : typeof task.error_code === "string" ? { error: task.error_code } : {}),
+          };
+        } catch { return null; }
+      }));
+      const byId = new Map(updates.filter((item): item is NonNullable<typeof item> => item !== null).map((item) => [item.taskId, item]));
+      latest = latest.map((member) => {
+        const current = member.taskId ? byId.get(member.taskId) : undefined;
+        return current ? { ...member, status: current.status, ...(current.result ? { result: current.result } : {}), ...(current.error ? { error: current.error } : {}) } : member;
+      });
+      setTeamResults(latest);
+      if (latest.every((member) => ["completed", "failed", "cancelled"].includes(member.status))) break;
+    }
+  }
+
   async function runTeamTask() {
     if (teamAgentIds.length < 2 || teamAgentIds.length > 3 || teamAgentIds.some((id) => !(teamAssignments[id] ?? taskInput).trim())) return;
     setBusy(true); setError(""); setMessage(""); setDetail(null); setTeamResults([]);
@@ -207,11 +241,12 @@ export default function AgentLabPage() {
       if (!response.ok && response.status !== 207) throw new Error(data.error ?? "Agent team run failed.");
       const members = Array.isArray(data.members) ? data.members as TeamMemberResult[] : [];
       setTeamResults(members);
-      setMessage("Team run " + String(data.status).toUpperCase() + " · " + String(data.summary?.completed ?? 0) + " completed · " + String(data.summary?.failed ?? 0) + " failed. Each specialist has its own task record.");
+      setMessage("Team run " + String(data.status).toUpperCase() + " · " + String(data.summary?.queued ?? 0) + " queued for background execution. Each specialist has an independent task record.");
       setTaskInput("");
       await refresh();
       const firstTaskId = members.find((member) => member.taskId)?.taskId;
       if (firstTaskId) await openTask(firstTaskId);
+      void monitorTeamTasks(members);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Agent team run failed.");
       await refresh().catch(() => undefined);
