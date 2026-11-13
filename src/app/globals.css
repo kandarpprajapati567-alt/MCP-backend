@@ -163,3 +163,26 @@ button:disabled { cursor: not-allowed; }
     linear-gradient(90deg, rgba(148, 163, 184, .035) 1px, transparent 1px);
   background-size: auto, 42px 42px, 42px 42px;
 }
+
+/* System map and command-centre polish */
+.map-node {
+  min-height: 132px;
+  position: relative;
+  overflow: hidden;
+}
+.map-node::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  opacity: .55;
+  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, .55), transparent);
+  transform: scaleX(.35);
+  transform-origin: left;
+  transition: transform .22s ease;
+}
+.map-node:hover::after,
+.map-node:focus-visible::after { transform: scaleX(1); }
+@media (prefers-reduced-motion: reduce) {
+  .map-node::after { transition: none; }
+}
