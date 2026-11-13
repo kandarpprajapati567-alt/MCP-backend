@@ -10,7 +10,7 @@ import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
+import { executeToolCallsWithBoundedParallelism } from "@/server/agent/tool-call-execution";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
@@ -211,7 +211,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     const results: Array<{ callId: string; toolId: string; result: unknown; invocationResult?: ReturnType<typeof createWebInvocationResult> }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
-    await executeToolCallsSequentially(
+    await executeToolCallsWithBoundedParallelism(
       plan.toolCalls,
       async (call) => {
         const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
@@ -240,8 +240,18 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
         invocationEnvelopes.set(call.id, invocation);
         return executeBackendTool(call.toolId, call.arguments);
       },
-      (call) => !deviceTools.some((tool) => tool.id === call.toolId),
-      async (call, execution) => {
+      {
+      maxConcurrency: 3,
+      // Only capabilities explicitly marked read-only may share a batch.
+      // Device jobs, side effects, and unknown remote capabilities stay serial.
+      canRunInParallel: (call) => {
+        if (deviceTools.some((tool) => tool.id === call.toolId)) return false;
+        const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
+          remoteTools.find((tool) => tool.id === call.toolId);
+        return capability?.sideEffect === false;
+      },
+      shouldCaptureFailure: (call) => !deviceTools.some((tool) => tool.id === call.toolId),
+      onOutcome: async (call, execution) => {
         if (deviceTools.some((tool) => tool.id === call.toolId)) return;
         const invocation = invocationEnvelopes.get(call.id);
         const invocationResult = invocation
@@ -285,7 +295,8 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
           });
         }
       },
-      async () => assertTaskNotCancelled(admin, id),
+      beforeEach: async () => assertTaskNotCancelled(admin, id),
+      },
     );
 
     await assertTaskNotCancelled(admin, id);
