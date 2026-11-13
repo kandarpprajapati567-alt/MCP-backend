@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { hasOwnerSession, openOwnerSession, ownerFetch } from "@/lib/client/owner-session";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };
@@ -21,11 +22,7 @@ export default function ConnectionsPage() {
   const [testingServerId, setTestingServerId] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
-    return fetch(path, { ...init, cache: "no-store", headers: {
-      "x-fs-owner-token": token,
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-    } });
+    return ownerFetch(path, init);
   }
 
   async function refresh() {
@@ -39,10 +36,25 @@ export default function ConnectionsPage() {
 
   async function connectOwner() {
     setBusy(true); setError(""); setMessage("");
-    try { await refresh(); setConnected(true); setMessage("Connections Hub connected."); }
+    try {
+      if (token.length >= 32) await openOwnerSession(token);
+      else if (!(await hasOwnerSession())) throw new Error("Open a secure owner session from the main dashboard first.");
+      setToken("");
+      await refresh();
+      setConnected(true);
+      setMessage("Secure owner session active. Connections Hub loaded.");
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Connection failed."); }
     finally { setBusy(false); }
   }
+
+  useEffect(() => {
+    let active = true;
+    void hasOwnerSession().then((authenticated) => {
+      if (active && authenticated) void connectOwner();
+    });
+    return () => { active = false; };
+  }, []);
 
   async function saveTavily() {
     setBusy(true); setError(""); setMessage("");
@@ -111,9 +123,9 @@ export default function ConnectionsPage() {
     <PageHeader title="Connections Hub" description="Connect external services once, then assign their tools to individual Agents." />
     {!connected ? <section className="rounded-2xl border border-border bg-zinc-950/70 p-5">
       <h2 className="font-semibold text-white">Secure owner connection</h2>
-      <p className="mt-1 text-sm text-zinc-400">Enter your owner master token. It remains in this page's memory only.</p>
+      <p className="mt-1 text-sm text-zinc-400">Enter the master token once, or reuse the secure session opened from the main dashboard.</p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-        <input type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} placeholder="FS_OWNER_TOKEN" aria-label="Owner master token" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
+        <input type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} placeholder="Enter FS_OWNER_TOKEN once" aria-label="Owner master token" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
         <button disabled={busy || token.length < 32} onClick={() => void connectOwner()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Connecting…" : "Connect"}</button>
       </div>
     </section> : <>

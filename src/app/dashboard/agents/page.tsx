@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { hasOwnerSession, openOwnerSession, ownerFetch } from "@/lib/client/owner-session";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Agent = {
@@ -59,15 +60,7 @@ export default function AgentsPage() {
   const [message, setMessage] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
-    return fetch(path, {
-      ...init,
-      cache: "no-store",
-      headers: {
-        "x-fs-owner-token": token,
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
+    return ownerFetch(path, init);
   }
 
   async function loadAgents() {
@@ -87,9 +80,12 @@ export default function AgentsPage() {
     setBusy(true);
     setError("");
     try {
+      if (token.length >= 32) await openOwnerSession(token);
+      else if (!(await hasOwnerSession())) throw new Error("Open a secure owner session from the main dashboard first.");
+      setToken("");
       await loadAgents();
       setConnected(true);
-      setMessage("Secure owner connection verified. Agent definitions loaded.");
+      setMessage("Secure owner session verified. Agent definitions loaded.");
     } catch (cause) {
       setConnected(false);
       setError(cause instanceof Error ? cause.message : "Could not connect.");
@@ -97,6 +93,14 @@ export default function AgentsPage() {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    let active = true;
+    void hasOwnerSession().then((authenticated) => {
+      if (active && authenticated) void connect();
+    });
+    return () => { active = false; };
+  }, []);
 
   function beginCreate() {
     setEditingId(null);
@@ -211,7 +215,7 @@ export default function AgentsPage() {
               autoComplete="off"
               value={token}
               onChange={(event) => setToken(event.target.value)}
-              placeholder="FS_OWNER_TOKEN"
+              placeholder="Enter FS_OWNER_TOKEN once"
               aria-label="Owner master token"
               className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white"
             />

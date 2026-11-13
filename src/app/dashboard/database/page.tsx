@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { hasOwnerSession, openOwnerSession, ownerFetch } from "@/lib/client/owner-session";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Device = {
@@ -43,8 +44,8 @@ export default function DatabasePage() {
       const params = new URLSearchParams({ namespace, limit: "30" });
       if (search.trim()) params.set("q", search.trim());
       const [deviceResponse, memoryResponse] = await Promise.all([
-        fetch("/api/v1/devices", { headers: { "x-fs-owner-token": token }, cache: "no-store" }),
-        fetch("/api/v1/memory?" + params.toString(), { headers: { "x-fs-owner-token": token }, cache: "no-store" }),
+        ownerFetch("/api/v1/devices"),
+        ownerFetch("/api/v1/memory?" + params.toString()),
       ]);
       const [deviceData, memoryData] = await Promise.all([deviceResponse.json(), memoryResponse.json()]);
       if (!deviceResponse.ok) throw new Error(deviceData.error ?? "Device registry unavailable.");
@@ -61,8 +62,27 @@ export default function DatabasePage() {
   }
 
   async function connect() {
-    await load("");
+    setBusy(true);
+    setError("");
+    try {
+      if (token.length >= 32) await openOwnerSession(token);
+      else if (!(await hasOwnerSession())) throw new Error("Open a secure owner session from the dashboard first.");
+      setToken("");
+      await load("");
+    } catch (cause) {
+      setConnected(false);
+      setError(cause instanceof Error ? cause.message : "Could not open owner session.");
+      setBusy(false);
+    }
   }
+
+  useEffect(() => {
+    let active = true;
+    void hasOwnerSession().then((authenticated) => {
+      if (active && authenticated) void load("");
+    });
+    return () => { active = false; };
+  }, []);
 
   async function saveMemory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,9 +90,9 @@ export default function DatabasePage() {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/v1/memory", {
+      const response = await ownerFetch("/api/v1/memory", {
         method: "POST",
-        headers: { "x-fs-owner-token": token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ namespace, key: memoryKey, content: memoryContent, importance, source: "manual" }),
       });
       const data = await response.json();
@@ -92,9 +112,9 @@ export default function DatabasePage() {
     if (!window.confirm("Delete memory " + key + "?")) return;
     setError("");
     try {
-      const response = await fetch("/api/v1/memory", {
+      const response = await ownerFetch("/api/v1/memory", {
         method: "DELETE",
-        headers: { "x-fs-owner-token": token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ namespace, key }),
       });
       const data = await response.json();
@@ -108,9 +128,9 @@ export default function DatabasePage() {
 
   async function markOffline(deviceId: string) {
     try {
-      const response = await fetch("/api/v1/devices", {
+      const response = await ownerFetch("/api/v1/devices", {
         method: "DELETE",
-        headers: { "x-fs-owner-token": token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId }),
       });
       if (!response.ok) throw new Error("Device status could not be updated.");
@@ -126,9 +146,9 @@ export default function DatabasePage() {
       {!connected && (
         <section className="rounded-2xl border border-border bg-zinc-950/70 p-5">
           <h2 className="font-semibold text-white">Connect to backend data</h2>
-          <p className="mt-1 text-sm text-zinc-400">The owner token stays in this page's memory only.</p>
+          <p className="mt-1 text-sm text-zinc-400">Enter the master token once, or use the secure session already opened from the main dashboard.</p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
+            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter FS_OWNER_TOKEN once" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
             <button type="button" disabled={busy || token.length < 32} onClick={() => void connect()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Loading…" : "Connect"}</button>
           </div>
         </section>

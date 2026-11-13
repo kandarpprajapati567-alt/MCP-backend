@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { hasOwnerSession, openOwnerSession, ownerFetch } from "@/lib/client/owner-session";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Workflow = "planner" | "coding" | "research" | "summarization" | "chat" | "notes";
@@ -49,10 +50,10 @@ export default function ModelsPage() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/v1/ai/policies", {
-        headers: { "x-fs-owner-token": token },
-        cache: "no-store",
-      });
+      if (token.length >= 32) await openOwnerSession(token);
+      else if (!(await hasOwnerSession())) throw new Error("Open a secure owner session from the main dashboard first.");
+      setToken("");
+      const response = await ownerFetch("/api/v1/ai/policies");
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Backend access was rejected.");
       const available = data.availableProviders ?? [];
@@ -84,6 +85,14 @@ export default function ModelsPage() {
     }
   }
 
+  useEffect(() => {
+    let active = true;
+    void hasOwnerSession().then((authenticated) => {
+      if (active && authenticated) void connect();
+    });
+    return () => { active = false; };
+  }, []);
+
   function selectWorkflow(next: Workflow) {
     setWorkflow(next);
     const saved = policies.find((item) => item.workflow === next);
@@ -114,9 +123,9 @@ export default function ModelsPage() {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/v1/ai/policies", {
+      const response = await ownerFetch("/api/v1/ai/policies", {
         method: "PUT",
-        headers: { "x-fs-owner-token": token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workflow,
           primaryProvider,
@@ -142,9 +151,9 @@ export default function ModelsPage() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/v1/ai/policies", {
+      const response = await ownerFetch("/api/v1/ai/policies", {
         method: "DELETE",
-        headers: { "x-fs-owner-token": token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflow }),
       });
       if (!response.ok) throw new Error("Policy could not be reset.");
@@ -174,9 +183,9 @@ export default function ModelsPage() {
       {!connected ? (
         <section className="rounded-2xl border border-border bg-zinc-950/70 p-5">
           <h2 className="text-base font-semibold text-white">Connect to backend</h2>
-          <p className="mt-1 text-sm text-zinc-400">Enter the owner master token. It stays in this page's memory only.</p>
+          <p className="mt-1 text-sm text-zinc-400">Enter the master token once, or reuse the secure session opened from the main dashboard.</p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
+            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter FS_OWNER_TOKEN once" className="min-w-0 flex-1 rounded-xl border border-border bg-black/30 px-4 py-3 text-sm text-white" />
             <button type="button" disabled={busy || token.length < 32} onClick={() => void connect()} className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Connecting…" : "Load routing"}</button>
           </div>
         </section>
