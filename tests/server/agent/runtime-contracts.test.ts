@@ -33,6 +33,19 @@ test("marks non-idempotent side-effecting tools as requiring approval", () => {
   });
   assert.equal(manifest.sideEffect, true);
   assert.equal(manifest.requiresUserApproval, true);
+  assert.throws(() => createWebInvocationEnvelope({
+    taskId: "123e4567-e89b-12d3-a456-426614174000",
+    toolCallId: "call-1",
+    toolId: "test.write",
+    arguments: {},
+    capability: {
+      ...capability,
+      id: "test.write",
+      sideEffect: true,
+      annotations: { idempotentHint: false, destructiveHint: false },
+    },
+    now: Date.parse("2026-11-13T10:00:00.000Z"),
+  }), /explicit user approval/u);
 });
 
 test("creates a bounded web invocation with a stable task/call idempotency key", () => {
