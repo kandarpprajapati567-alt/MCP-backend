@@ -383,6 +383,7 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
     }).eq("owner_id", PERSONAL_OWNER_ID)
       .eq("id", candidate.id)
       .eq("status", "queued")
+      .is("cancellation_requested_at", null)
       .select("id,task,agent_definition_id,agent_snapshot")
       .maybeSingle();
     if (claimError) throw new Error("Agent task could not be claimed.");
