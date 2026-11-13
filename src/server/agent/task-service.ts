@@ -230,7 +230,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
     };
     const beforeEach = async () => assertTaskNotCancelled(admin, id);
-    const parallelSafeIds = new Set(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
+    const parallelSafeIds = new Set<string>(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
     const canRunInParallel = plan.toolCalls.length > 1 && plan.toolCalls.every((call) => parallelSafeIds.has(call.toolId) && !deviceTools.some((tool) => tool.id === call.toolId));
     if (canRunInParallel) await executeToolCallsWithConcurrency(plan.toolCalls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
     else await executeToolCallsSequentially(plan.toolCalls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
