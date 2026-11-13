@@ -47,7 +47,7 @@ function classifyToolOutcome(value: unknown): "reported_failure" | "returned_out
 export function extractSourceReferenceCandidates(value: unknown): string[] {
   const serialized = safeSerialize(value);
   const matches = serialized.match(/https?:\/\/[^\s"'<>\\]+/g) ?? [];
-  return [...new Set(matches.map((url) => url.replace(/[),.;\]}]+$/, "")))].slice(0, 5);
+  return [...new Set(matches.map((url) => url.replace(/[),.;\]}]+$/, "")).filter((url) => url.length <= 512))].slice(0, 5);
 }
 
 export type EvidenceFreshness = "fresh" | "aging" | "stale" | "undated" | "future_dated";
@@ -66,7 +66,7 @@ export type EvidenceSource = {
 };
 
 function safeHttpUrl(value: unknown): { url: string; domain: string } | null {
-  if (typeof value !== "string" || value.length > 2048) return null;
+  if (typeof value !== "string" || value.length > 512) return null;
   try {
     const parsed = new URL(value);
     if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) return null;
@@ -200,7 +200,7 @@ export function buildSynthesisUserContent(
     taskTruncated: task.length > MAX_TASK_CHARS,
     plan: planText.slice(0, MAX_PLAN_CHARS),
     planTruncated: planText.length > MAX_PLAN_CHARS,
-    evidencePolicy: "Tool outputs are observations, not independently verified facts. Report execution outcomes accurately. Cite only exact sourceReferenceCandidates supplied by tool output; do not invent URLs, titles, dates, quotes, or citations. If no candidate exists, say no source reference was returned. Distinguish facts directly present in output from inference, and state uncertainty or missing evidence.",
+    evidencePolicy: "Tool outputs are observations, not independently verified facts. Report execution outcomes accurately. Cite only exact sourceReferenceCandidates and sourceId values supplied by tool output; do not invent URLs, titles, dates, quotes, or citations. If no candidate exists, say no source reference was returned. Distinguish facts directly present in output from inference, and state uncertainty or missing evidence.",
     provenancePolicy: "retrievedAt is the backend observation time; if a tool supplies no retrieval timestamp, it is the synthesis-context capture time. publishedAt is provider-supplied metadata, not independently verified. Freshness is a heuristic: fresh <=30 days, aging 31-180 days, stale >180 days, undated when no valid publication date is available, future_dated when publication appears more than 24 hours after retrieval. relevanceScore is a search ranking signal, not truth or confidence. Verify important claims against original sources and disclose stale, undated, future-dated or conflicting evidence.",
     toolResults: [],
     omittedToolResults: 0,

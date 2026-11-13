@@ -177,4 +177,21 @@ test("marks provider dates in the future and keeps generic URLs explicitly undat
   assert.equal(parsed.toolResults[0].sources[0].freshness, "future_dated");
   assert.equal(parsed.toolResults[1].sources[0].freshness, "undated");
   assert.equal(parsed.toolResults[1].sources[0].sourceKind, "url_reference");
+  assert.equal(parsed.toolResults[1].sources[0].sourceId, "ev-call-2-src-1");
+});
+
+test("drops oversized source URLs instead of overflowing the bounded evidence context", () => {
+  const oversizedUrl = "https://example.org/" + "x".repeat(600);
+  const content = buildSynthesisUserContent(
+    "Check an unusually long reference",
+    {},
+    [{ callId: "call-1", toolId: "web.search", result: {
+      retrievedAt: "2026-11-13T10:00:00.000Z",
+      results: [{ title: "Oversized", url: oversizedUrl, publishedDate: "2026-11-12", score: 0.8 }],
+    } }],
+  );
+  const parsed = JSON.parse(content);
+  assert.ok(content.length <= 9_500);
+  assert.deepEqual(parsed.toolResults[0].sources, []);
+  assert.deepEqual(parsed.toolResults[0].sourceReferenceCandidates, []);
 });
