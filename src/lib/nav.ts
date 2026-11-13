@@ -7,6 +7,7 @@ export type NavItem = {
 
 export const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", description: "Live system status and activity", icon: "grid" },
+  { href: "/dashboard/system-map", label: "System Map", description: "Architecture, dependencies and service health", icon: "workflow" },
   { href: "/dashboard/agents", label: "Agent Manager", description: "Create and manage specialist agents", icon: "cpu" },
   { href: "/dashboard/agent-lab", label: "Agent Lab", description: "Run tasks and inspect execution traces", icon: "shield" },
   { href: "/dashboard/bot-channels", label: "Bot Gateway", description: "Channel adapters, identity and contract tests", icon: "message-circle" },
