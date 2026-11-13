@@ -16,6 +16,9 @@ import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
+import { TOOL_CATALOG } from "@/server/tools/registry";
+import { listRemoteAgentToolsSafe } from "@/server/mcp/remote";
+import { createWebInvocationEnvelope, createWebInvocationResult } from "@/server/agent/runtime-contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -183,6 +186,8 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     await event(admin, id, "task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
+    const remoteTools = await listRemoteAgentToolsSafe();
+    const invocationEnvelopes = new Map<string, ReturnType<typeof createWebInvocationEnvelope>>();
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
@@ -203,7 +208,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     });
     await event(admin, id, "task.executing");
 
-    const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
+    const results: Array<{ callId: string; toolId: string; result: unknown; invocationResult?: ReturnType<typeof createWebInvocationResult> }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
     await executeToolCallsSequentially(
@@ -222,18 +227,43 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
           });
           return { queuedForDevice: true };
         }
+        const capability = TOOL_CATALOG.find((tool) => tool.id === call.toolId) ??
+          remoteTools.find((tool) => tool.id === call.toolId);
+        if (!capability) throw new Error("Tool capability is no longer registered.");
+        const invocation = createWebInvocationEnvelope({
+          taskId: id,
+          toolCallId: call.id,
+          toolId: call.toolId,
+          arguments: call.arguments,
+          capability,
+        });
+        invocationEnvelopes.set(call.id, invocation);
         return executeBackendTool(call.toolId, call.arguments);
       },
       (call) => !deviceTools.some((tool) => tool.id === call.toolId),
       async (call, execution) => {
         if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+        const invocation = invocationEnvelopes.get(call.id);
+        const invocationResult = invocation
+          ? createWebInvocationResult(
+              invocation,
+              execution.ok ? "completed" : "failed",
+              execution.ok ? undefined : "TOOL_EXECUTION_FAILED",
+            )
+          : undefined;
         if (execution.ok) {
-          results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
+          results.push({
+            callId: call.id,
+            toolId: call.toolId,
+            result: execution.result,
+            ...(invocationResult ? { invocationResult } : {}),
+          });
         } else {
           results.push({
             callId: call.id,
             toolId: call.toolId,
             result: { ok: false, error: execution.error },
+            ...(invocationResult ? { invocationResult } : {}),
           });
         }
         // Persist every completed/failed backend tool outcome immediately. If a
@@ -241,12 +271,17 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
         // the evidence collected before that failure.
         await setTask(admin, id, { tool_results: results });
         if (execution.ok) {
-          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+          await event(admin, id, "tool.completed", {
+            callId: call.id,
+            toolId: call.toolId,
+            ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
+          });
         } else {
           await event(admin, id, "tool.failed", {
             callId: call.id,
             toolId: call.toolId,
             message: execution.error,
+            ...(invocationResult ? { invocationId: invocationResult.invocationId, contractVersion: invocationResult.contractVersion } : {}),
           });
         }
       },
