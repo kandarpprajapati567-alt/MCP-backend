@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 type Agent = { id: string; name: string; role?: string; description?: string; enabled: boolean; allowed_tools?: string[]; max_steps?: number; max_tool_calls?: number };
 type Task = { id: string; status: string; task: string; agent_snapshot?: { name?: string } | null };
-
 const roles = ["Planner", "Research", "Coding", "Execution", "Analysis", "Memory", "Synthesizer"];
 
 export default function AgentMapPage() {
@@ -26,8 +25,7 @@ export default function AgentMapPage() {
         fetch("/api/v1/agent/tasks", { headers, cache: "no-store" }),
       ]);
       if (!agentResponse.ok || !taskResponse.ok) throw new Error(agentResponse.status === 401 || taskResponse.status === 401 ? "Owner token rejected. Check it and retry." : "Agent or task data is unavailable.");
-      const agentData = await agentResponse.json();
-      const taskData = await taskResponse.json();
+      const [agentData, taskData] = await Promise.all([agentResponse.json(), taskResponse.json()]);
       setAgents(Array.isArray(agentData.agents) ? agentData.agents : []);
       setTasks(Array.isArray(taskData.tasks) ? taskData.tasks : []);
       setConnected(true);
@@ -38,27 +36,48 @@ export default function AgentMapPage() {
   const active = agents.filter((agent) => agent.enabled).length;
   const running = tasks.filter((task) => ["running", "in_progress", "processing"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "completed").length;
+  const assigned = roles.reduce((sum, role) => sum + agents.filter((agent) => (agent.role ?? "").toLowerCase() === role.toLowerCase()).length, 0);
 
-  return <div className="agent-map-page mx-auto max-w-[1440px] space-y-6">
-    <PageHeader title="Agentic Operations Map" description="A dedicated view of specialist Agents, their configured responsibilities and observed task activity. This map is read-only." />
-    <section className="rounded-2xl border border-violet-300/20 bg-[radial-gradient(ellipse_at_80%_0%,rgba(139,92,246,.16),transparent_55%),linear-gradient(135deg,#101323,#080d18)] p-5 sm:p-7">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div><p className="text-[10px] font-bold tracking-[.22em] text-violet-200">INTELLIGENCE TOPOLOGY / 01</p><h2 className="mt-2 text-2xl font-semibold text-white">One orchestrator. Specialist workers.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Configured Agent definitions are shown separately from runtime execution. A role or visual link never grants additional tool permissions.</p></div>
-        <Link href="/dashboard/agents" className="rounded-xl border border-violet-200/25 bg-violet-300/10 px-4 py-3 text-xs font-semibold text-violet-100">Manage Agents ↗</Link>
+  return <div className="agent-map-page space-y-7">
+    <PageHeader title="Agent architecture" description="A role-oriented view of the orchestration engine. Saved definitions, observed workload and policy boundaries are kept distinct." />
+
+    <section className="surface-card overflow-hidden p-5 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div><p className="eyebrow">Architecture view / 01</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-stone-100 sm:text-3xl">Orchestrator & specialist layer</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-400">The planner coordinates work. Specialist definitions describe responsibilities; runtime allowlists, permission checks and approvals remain the actual execution boundary.</p></div>
+        <Link href="/dashboard/agents" className="action-secondary">Manage definitions ↗</Link>
       </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-black/25 p-4"><p className="text-[9px] tracking-[.18em] text-slate-500">ENABLED AGENTS</p><strong className="mt-2 block text-2xl text-white">{connected ? active : "—"}</strong></div>
-        <div className="rounded-xl border border-white/10 bg-black/25 p-4"><p className="text-[9px] tracking-[.18em] text-slate-500">OBSERVED RUNNING TASKS</p><strong className="mt-2 block text-2xl text-white">{connected ? running : "—"}</strong></div>
-        <div className="rounded-xl border border-white/10 bg-black/25 p-4"><p className="text-[9px] tracking-[.18em] text-slate-500">TASKS IN HISTORY</p><strong className="mt-2 block text-2xl text-white">{connected ? tasks.length : "—"}</strong><p className="mt-1 text-[10px] text-slate-500">{connected ? completed + " completed" : "Connect to inspect"}</p></div>
+      <div className="mt-7 grid gap-3 md:grid-cols-[1fr_auto_1.4fr] md:items-center">
+        <div className="rounded-xl border border-[#c2a66b]/30 bg-[#c2a66b]/[.07] p-5">
+          <p className="eyebrow">Control plane</p><strong className="mt-2 block text-lg text-stone-100">Planner / Router</strong><p className="mt-2 text-[11px] leading-5 text-stone-400">Task intake · plan validation · routing</p>
+        </div>
+        <div className="hidden px-2 text-2xl text-[#c2a66b] md:block">⟶</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {["Policy gate", "Tool registry", "Task ledger", "Synthesizer"].map((item, index) => <div key={item} className="rounded-lg border border-white/[.09] bg-white/[.025] p-3"><span className="text-[9px] font-bold text-stone-500">0{index + 1}</span><strong className="mt-2 block text-[11px] text-stone-200">{item}</strong></div>)}
+        </div>
+      </div>
+      <div className="mt-4 border-t border-white/[.08] pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3"><p className="eyebrow">Specialist role matrix</p><span className="text-[9px] tracking-[.12em] text-stone-500">DEFINITIONS ≠ LIVE WORKERS</span></div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {roles.map((role, index) => {
+            const matches = agents.filter((agent) => (agent.role ?? "").toLowerCase() === role.toLowerCase());
+            return <article key={role} className="rounded-xl border border-white/[.09] bg-[#181914] p-4">
+              <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-bold tracking-[.16em] text-[#d8bd83]">ROLE / 0{index + 1}</span><span className="rounded-full border border-white/[.1] px-2 py-1 text-[9px] text-stone-400">{matches.length} saved</span></div>
+              <h3 className="mt-3 text-sm font-semibold text-stone-100">{role}</h3>
+              {matches.length ? <div className="mt-3 space-y-2">{matches.map((agent) => <div key={agent.id} className="rounded-lg border border-white/[.07] bg-black/[.12] p-3"><div className="flex items-center justify-between gap-2"><strong className="text-xs text-stone-200">{agent.name}</strong><span className={agent.enabled ? "text-[8px] font-bold text-[#a9c2a7]" : "text-[8px] font-bold text-stone-500"}>{agent.enabled ? "ENABLED" : "PAUSED"}</span></div><p className="mt-2 text-[10px] leading-5 text-stone-500">{agent.description || "No description supplied"}</p><p className="mt-2 text-[9px] text-stone-600">{agent.allowed_tools?.length ?? 0} allowed tools · {agent.max_steps ?? "—"} max steps</p></div>)}</div> : <p className="mt-3 text-[10px] leading-5 text-stone-500">No saved definition for this role.</p>}
+            </article>;
+          })}
+        </div>
+        {agents.filter((agent) => !roles.some((role) => role.toLowerCase() === (agent.role ?? "").toLowerCase())).length > 0 && <div className="mt-3 rounded-xl border border-white/[.09] p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Other definitions</p><div className="mt-3 flex flex-wrap gap-2">{agents.filter((agent) => !roles.some((role) => role.toLowerCase() === (agent.role ?? "").toLowerCase())).map((agent) => <span key={agent.id} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] text-stone-300">{agent.name} · {agent.enabled ? "enabled" : "paused"}</span>)}</div></div>}
       </div>
     </section>
-    {!connected ? <section className="rounded-2xl border border-white/10 bg-[#0c1320] p-5"><h3 className="text-sm font-semibold text-white">Secure owner connection</h3><p className="mt-1 text-xs text-slate-500">Token stays in this page's memory and is used only for read-only Agent/task requests.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><input aria-label="Owner master token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white"/><button type="button" disabled={busy || token.length < 32} onClick={() => void connect()} className="rounded-xl bg-violet-300 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-40">{busy ? "Loading map…" : "Load Agent Map"}</button></div>{error && <p role="alert" className="mt-3 text-xs text-rose-300">{error}</p>}</section> :
-    <section className="rounded-2xl border border-white/10 bg-[#090f1b] p-5 sm:p-7">
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[9px] font-bold tracking-[.2em] text-violet-200">02 / LIVE CONFIGURATION</p><h3 className="mt-2 text-lg font-semibold text-white">Agent network</h3></div><button type="button" disabled={busy} onClick={() => void connect()} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">Refresh</button></div>
-      <div className="mx-auto my-6 max-w-md rounded-xl border border-violet-300/30 bg-violet-300/[.08] p-4 text-center"><span className="text-[9px] font-bold tracking-[.18em] text-violet-200">ORCHESTRATION CORE</span><strong className="mt-1 block text-lg text-white">Planner / Router</strong><p className="mt-1 text-[10px] text-slate-400">Routes only through configured and policy-approved capabilities</p></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{roles.map((role) => { const matches = agents.filter((agent) => (agent.role ?? "").toLowerCase() === role.toLowerCase()); return <div key={role} className="rounded-xl border border-violet-300/15 bg-gradient-to-br from-[#17182a] to-[#0b111e] p-4"><div className="flex items-center justify-between gap-2"><span className="text-[9px] font-bold tracking-[.16em] text-violet-200">{role.toUpperCase()}</span><span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-slate-400">{matches.length} configured</span></div>{matches.length ? matches.map((agent) => <div key={agent.id} className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm text-white">{agent.name}</strong><span className={agent.enabled ? "text-[9px] text-emerald-300" : "text-[9px] text-slate-500"}>{agent.enabled ? "ENABLED" : "PAUSED"}</span></div><p className="mt-1 text-[10px] text-slate-400">{agent.description || "No description supplied"}</p><p className="mt-2 text-[9px] text-slate-500">{agent.allowed_tools?.length ?? 0} allowed tools · {agent.max_steps ?? "—"} max steps</p></div>) : <p className="mt-4 text-xs text-slate-500">No Agent configured for this role yet.</p>}</div>; })}</div>
-      {agents.filter((agent) => !roles.some((role) => role.toLowerCase() === (agent.role ?? "").toLowerCase())).length > 0 && <div className="mt-4 rounded-xl border border-white/10 p-4"><h4 className="text-xs font-semibold text-white">Custom / general Agents</h4><div className="mt-3 flex flex-wrap gap-2">{agents.filter((agent) => !roles.some((role) => role.toLowerCase() === (agent.role ?? "").toLowerCase())).map((agent) => <span key={agent.id} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">{agent.name} · {agent.enabled ? "enabled" : "paused"}</span>)}</div></div>}
-    </section>}
-    <p className="text-[10px] leading-5 text-slate-500">Security boundary: this page reads owner-scoped Agent definitions and task history only. Execution authority remains in the backend tool allowlist, runtime permissions and approval checks.</p>
+
+    <section className="grid gap-3 sm:grid-cols-3">
+      <div className="metric-card"><span className="metric-label">Enabled definitions</span><strong className="metric-value">{connected ? active : "—"}</strong><span className="metric-note">{connected ? agents.length + " total saved" : "Connect to inspect"}</span></div>
+      <div className="metric-card"><span className="metric-label">Observed running tasks</span><strong className="metric-value">{connected ? running : "—"}</strong><span className="metric-note">Current returned task state</span></div>
+      <div className="metric-card"><span className="metric-label">Task history</span><strong className="metric-value">{connected ? tasks.length : "—"}</strong><span className="metric-note">{connected ? completed + " completed · " + assigned + " role-matched definitions" : "Owner access required"}</span></div>
+    </section>
+
+    {!connected ? <section className="surface-card p-5 sm:p-6"><div className="panel-heading"><div><p className="eyebrow">Read-only data connection</p><h3 className="mt-2">Load your Agent architecture</h3><p>Token is used only for owner-scoped Agent and task requests and is not persisted.</p></div></div><div className="flex flex-col gap-3 sm:flex-row"><input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" aria-label="Owner master token" className="min-w-0 flex-1 px-4 py-3 text-sm"/><button type="button" disabled={busy || token.length < 32} onClick={() => void connect()} className="action-primary">{busy ? "Loading…" : "Load architecture"}</button></div>{error && <p role="alert" className="mt-3 text-xs text-[#e3a092]">{error}</p>}</section> : <section className="surface-card p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">Owner data loaded</p><h3 className="mt-2 text-base font-semibold text-stone-100">Architecture snapshot</h3></div><button type="button" disabled={busy} onClick={() => void connect()} className="action-secondary">{busy ? "Refreshing…" : "Refresh snapshot ↻"}</button></div><p className="mt-3 text-xs text-stone-400">{agents.length} Agent definitions and {tasks.length} task records returned by the backend. This is a configuration and history view, not a claim that each role is running as an independent process.</p></section>}
+    <p className="text-[10px] leading-5 text-stone-600">Security invariant: this visual map does not grant permissions. Runtime tool allowlists, permission checks and approval gates remain authoritative.</p>
   </div>;
 }
