@@ -1,0 +1,62 @@
+name: Production smoke tests
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  production-smoke:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for Render health after the main deployment
+        env:
+          BASE_URL: https://mcp-backend-2oyj.onrender.com
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 36); do
+            code=$(curl --silent --show-error --max-time 15 -o /tmp/health.json -w '%{http_code}' "$BASE_URL/api/v1/health" || true)
+            if [ "$code" = "200" ] && node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(x.status === "ok" && x.services?.database === "ok" ? 0 : 1)' /tmp/health.json; then
+              echo "Render health and database probe passed."
+              ready=1
+              break
+            fi
+            echo "Waiting for production deployment (attempt $attempt/36; HTTP $code)."
+            sleep 10
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "Production health did not become ready in time."
+            cat /tmp/health.json || true
+            exit 1
+          fi
+
+      - name: Verify Bot Gateway dashboard is served
+        env:
+          BASE_URL: https://mcp-backend-2oyj.onrender.com
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' "$BASE_URL/dashboard/bot-channels")
+          test "$code" = "200"
+
+      - name: Verify Bot Test Center still rejects unauthenticated writes
+        env:
+          BASE_URL: https://mcp-backend-2oyj.onrender.com
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 -o /tmp/auth.json -w '%{http_code}' \
+            -X POST "$BASE_URL/api/v1/channels/test" \
+            -H 'Content-Type: application/json' \
+            --data '{"testId":"all"}')
+          if [ "$code" != "401" ]; then
+            echo "Expected unauthenticated Test Center request to return 401; got $code."
+            cat /tmp/auth.json || true
+            exit 1
+          fi
+          echo "Unauthenticated Test Center request correctly returned 401."
