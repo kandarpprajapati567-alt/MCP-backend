@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       ? createHash("sha256").update(idempotencyKey + ":" + assignment.agentId).digest("hex")
       : undefined;
     try {
-      const result = await submitAgentTask(assignment.task, assignment.agentId, childKey);
+      const result = await submitAgentTask(assignment.task, assignment.agentId, childKey, { deferExecution: true });
       return {
         agentId: assignment.agentId,
         task: assignment.task,
@@ -58,18 +58,20 @@ export async function POST(request: Request) {
   const completed = members.filter((member) => member.status === "completed").length;
   const failed = members.filter((member) => member.status === "failed").length;
   const waiting = members.filter((member) => member.status === "waiting_for_device").length;
+  const queued = members.filter((member) => member.status === "queued").length;
   const status = failed === members.length ? "failed"
     : failed > 0 ? "partial"
-      : waiting > 0 ? "waiting_for_device"
-        : completed === members.length ? "completed" : "running";
+      : queued === members.length ? "queued"
+        : waiting > 0 ? "waiting_for_device"
+          : completed === members.length ? "completed" : "running";
 
   return json({
     status,
     assignments,
     concurrency: members.length,
-    summary: { total: members.length, completed, failed, waiting },
+    summary: { total: members.length, completed, failed, waiting, queued },
     members,
     executionMode: "bounded_parallel_independent_agents",
-    note: "Each specialist ran its own assigned objective under its saved policy. This is parallel specialist execution, not yet a durable background team coordinator.",
+    note: "Each specialist objective is persisted as an independent task and claimed by the in-process background worker. Shared-memory supervision and dependency-aware delegation are not implemented yet.",
   }, failed === members.length ? 207 : 200);
 }

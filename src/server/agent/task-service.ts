@@ -109,71 +109,24 @@ async function getAvailableDeviceTools(admin: ReturnType<typeof createAdminClien
   return tools.slice(0, 40);
 }
 
-export async function submitAgentTask(taskInput: string, agentId?: string, idempotencyKey?: string) {
-  if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
-    throw new Error("Task must be 1–4000 characters.");
-  }
-  const task = taskInput.trim();
-  const admin = createAdminClient();
-  const agent = agentId ? await loadAgentDefinition(admin, agentId) : null;
-  const requestFingerprint = createAgentTaskRequestFingerprint(task, agent?.id ?? null);
-  if (idempotencyKey) {
-    const { data: existing, error: existingError } = await admin.from("agent_tasks")
-      .select("id,status,request_fingerprint")
-      .eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("idempotency_key", idempotencyKey)
-      .maybeSingle();
-    if (existingError) throw new Error("Task idempotency is unavailable. Apply the Agent task idempotency migration.");
-    if (existing) {
-      if (!isSameAgentTaskRequest(existing.request_fingerprint, requestFingerprint)) {
-        throw new Error("IDEMPOTENCY_KEY_REUSED");
+async function executeAgentTaskRecord(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  task: string,
+  agent: ({ id: string } & AgentDefinitionInput) | null,
+) {
+  const heartbeat = setInterval(() => {
+    void (async () => {
+      try {
+        const { error } = await admin.from("agent_tasks").update({ updated_at: new Date().toISOString() })
+          .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
+          .in("status", ["planning", "executing", "synthesizing"]);
+        if (error) console.warn("[agent-worker] Heartbeat update failed for task", id);
+      } catch {
+        console.warn("[agent-worker] Heartbeat request failed for task", id);
       }
-      return {
-        taskId: existing.id as string,
-        status: existing.status as string,
-        replayed: true,
-        message: "This idempotency key already created the task; the existing task was returned.",
-      };
-    }
-  }
-  const agentSnapshot = agent ? {
-    name: agent.name,
-    role: agent.role,
-    instructions: agent.instructions,
-    providerPreference: agent.providerPreference,
-    modelPreference: agent.modelPreference,
-    allowedTools: agent.allowedTools,
-    maxSteps: agent.maxSteps,
-    maxToolCalls: agent.maxToolCalls,
-  } : null;
-  const { data: created, error: createError } = await admin.from("agent_tasks")
-    .insert({
-      owner_id: PERSONAL_OWNER_ID,
-      status: "queued",
-      task,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey, request_fingerprint: requestFingerprint } : {}),
-      ...(agent ? { agent_definition_id: agent.id, agent_snapshot: agentSnapshot } : {}),
-    }).select("id").single();
-  if (createError || !created) {
-    if (idempotencyKey && createError?.code === "23505") {
-      const { data: raced, error: racedError } = await admin.from("agent_tasks")
-        .select("id,status,request_fingerprint")
-        .eq("owner_id", PERSONAL_OWNER_ID)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle();
-      if (!racedError && raced && isSameAgentTaskRequest(raced.request_fingerprint, requestFingerprint)) {
-        return {
-          taskId: raced.id as string,
-          status: raced.status as string,
-          replayed: true,
-          message: "This idempotency key already created the task; the existing task was returned.",
-        };
-      }
-      if (!racedError && raced) throw new Error("IDEMPOTENCY_KEY_REUSED");
-    }
-    throw new Error("Unable to create task.");
-  }
-  const id = created.id as string;
+    })();
+  }, 30_000);
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
@@ -334,7 +287,185 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       error: "Task execution failed validation or an internal step. Check task history for safe status details.",
       code,
     };
+  } finally {
+    clearInterval(heartbeat);
   }
+}
+
+export async function submitAgentTask(taskInput: string, agentId?: string, idempotencyKey?: string, options: { deferExecution?: boolean } = {}) {
+  if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
+    throw new Error("Task must be 1–4000 characters.");
+  }
+  const task = taskInput.trim();
+  const admin = createAdminClient();
+  const agent = agentId ? await loadAgentDefinition(admin, agentId) : null;
+  const requestFingerprint = createAgentTaskRequestFingerprint(task, agent?.id ?? null);
+  if (idempotencyKey) {
+    const { data: existing, error: existingError } = await admin.from("agent_tasks")
+      .select("id,status,request_fingerprint")
+      .eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existingError) throw new Error("Task idempotency is unavailable. Apply the Agent task idempotency migration.");
+    if (existing) {
+      if (!isSameAgentTaskRequest(existing.request_fingerprint, requestFingerprint)) {
+        throw new Error("IDEMPOTENCY_KEY_REUSED");
+      }
+      return {
+        taskId: existing.id as string,
+        status: existing.status as string,
+        replayed: true,
+        message: "This idempotency key already created the task; the existing task was returned.",
+      };
+    }
+  }
+  const agentSnapshot = agent ? {
+    name: agent.name,
+    role: agent.role,
+    instructions: agent.instructions,
+    providerPreference: agent.providerPreference,
+    modelPreference: agent.modelPreference,
+    allowedTools: agent.allowedTools,
+    maxSteps: agent.maxSteps,
+    maxToolCalls: agent.maxToolCalls,
+  } : null;
+  const { data: created, error: createError } = await admin.from("agent_tasks")
+    .insert({
+      owner_id: PERSONAL_OWNER_ID,
+      status: "queued",
+      task,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey, request_fingerprint: requestFingerprint } : {}),
+      ...(agent ? { agent_definition_id: agent.id, agent_snapshot: agentSnapshot } : {}),
+    }).select("id").single();
+  if (createError || !created) {
+    if (idempotencyKey && createError?.code === "23505") {
+      const { data: raced, error: racedError } = await admin.from("agent_tasks")
+        .select("id,status,request_fingerprint")
+        .eq("owner_id", PERSONAL_OWNER_ID)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (!racedError && raced && isSameAgentTaskRequest(raced.request_fingerprint, requestFingerprint)) {
+        return {
+          taskId: raced.id as string,
+          status: raced.status as string,
+          replayed: true,
+          message: "This idempotency key already created the task; the existing task was returned.",
+        };
+      }
+      if (!racedError && raced) throw new Error("IDEMPOTENCY_KEY_REUSED");
+    }
+    throw new Error("Unable to create task.");
+  }
+  const id = created.id as string;
+  if (options.deferExecution) {
+    return {
+      taskId: id,
+      status: "queued",
+      ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
+      message: "Task persisted and queued for the Agent worker.",
+    };
+  }
+  return executeAgentTaskRecord(admin, id, task, agent);
+}
+
+export async function processQueuedAgentTasks(limit = 3): Promise<number> {
+  const admin = createAdminClient();
+  const batchSize = Math.max(1, Math.min(3, Math.floor(limit)));
+  const { data: queued, error: queueError } = await admin.from("agent_tasks")
+    .select("id")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(batchSize);
+  if (queueError) throw new Error("Agent task queue is unavailable.");
+
+  let processed = 0;
+  await Promise.all((queued ?? []).map(async (candidate) => {
+    const claimedAt = new Date().toISOString();
+    const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
+      status: "planning",
+      updated_at: claimedAt,
+    }).eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("id", candidate.id)
+      .eq("status", "queued")
+      .is("cancellation_requested_at", null)
+      .select("id,task,agent_definition_id,agent_snapshot")
+      .maybeSingle();
+    if (claimError) throw new Error("Agent task could not be claimed.");
+    if (!claimed) return;
+
+    let agent: ({ id: string } & AgentDefinitionInput) | null = null;
+    if (typeof claimed.agent_definition_id === "string") {
+      const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
+      const parsed = parseAgentDefinition({
+        name: snapshot.name,
+        description: typeof snapshot.description === "string" ? snapshot.description : "",
+        role: snapshot.role,
+        instructions: snapshot.instructions,
+        providerPreference: snapshot.providerPreference,
+        modelPreference: snapshot.modelPreference,
+        allowedTools: snapshot.allowedTools,
+        maxSteps: snapshot.maxSteps,
+        maxToolCalls: snapshot.maxToolCalls,
+        enabled: true,
+      });
+      if (!parsed.ok) {
+        await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
+        await event(admin, claimed.id, "task.failed", {
+          code: "AGENT_SNAPSHOT_INVALID",
+          stage: "planning",
+          message: "The saved Agent execution snapshot is invalid; no tools were run.",
+        });
+        processed += 1;
+        return;
+      }
+      agent = { id: claimed.agent_definition_id, ...parsed.value };
+    }
+
+    await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
+    processed += 1;
+  }));
+  return processed;
+}
+
+export async function recoverStaleAgentTasks(staleAfterMs = 10 * 60 * 1000): Promise<number> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - Math.max(60_000, staleAfterMs)).toISOString();
+  const { data: stale, error } = await admin.from("agent_tasks")
+    .select("id,status")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .in("status", ["planning", "executing", "synthesizing"])
+    .lt("updated_at", cutoff)
+    .is("cancellation_requested_at", null)
+    .order("updated_at", { ascending: true })
+    .limit(25);
+  if (error) throw new Error("Stale Agent task recovery is unavailable.");
+
+  let recovered = 0;
+  for (const task of stale ?? []) {
+    const now = new Date().toISOString();
+    const { data: failed, error: updateError } = await admin.from("agent_tasks").update({
+      status: "failed",
+      error_code: "AGENT_WORKER_INTERRUPTED",
+      completed_at: now,
+      updated_at: now,
+    }).eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("id", task.id)
+      .eq("status", task.status)
+      .lt("updated_at", cutoff)
+      .is("cancellation_requested_at", null)
+      .select("id")
+      .maybeSingle();
+    if (updateError) throw new Error("Interrupted Agent task state could not be recovered.");
+    if (!failed) continue;
+    await event(admin, task.id, "task.failed", {
+      code: "AGENT_WORKER_INTERRUPTED",
+      stage: task.status,
+      message: "The Agent worker heartbeat expired. The task was not replayed automatically because tool side effects cannot be assumed safe to repeat. Retry it as a new task.",
+    });
+    recovered += 1;
+  }
+  return recovered;
 }
 
 export async function getAgentTaskStatus(taskId: string) {
