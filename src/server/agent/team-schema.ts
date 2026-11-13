@@ -1,4 +1,5 @@
-export type AgentTeamRequest = { task: string; agentIds: string[] };
+export type AgentTeamMemberRequest = { agentId: string; task: string };
+export type AgentTeamRequest = { members: AgentTeamMemberRequest[] };
 export type AgentTeamParseResult =
   | { ok: true; value: AgentTeamRequest }
   | { ok: false; error: string };
@@ -11,16 +12,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function parseAgentTeamRequest(value: unknown): AgentTeamParseResult {
   if (!isRecord(value)) return { ok: false, error: "A JSON object is required." };
-  if (Object.keys(value).some((key) => key !== "task" && key !== "agentIds")) {
+  if (Object.keys(value).some((key) => key !== "members")) {
     return { ok: false, error: "Team request contains unsupported fields." };
   }
-  if (typeof value.task !== "string" || !value.task.trim() || value.task.length > 4000) {
-    return { ok: false, error: "Task must be 1–4000 characters." };
+  if (!Array.isArray(value.members) || value.members.length < 2 || value.members.length > 3) {
+    return { ok: false, error: "A team must contain 2 or 3 specialist assignments." };
   }
-  if (!Array.isArray(value.agentIds) || value.agentIds.length < 2 || value.agentIds.length > 3 ||
-      value.agentIds.some((id) => typeof id !== "string" || !UUID.test(id)) ||
-      new Set(value.agentIds).size !== value.agentIds.length) {
-    return { ok: false, error: "Choose 2 or 3 different valid Agent IDs." };
+  const members: AgentTeamMemberRequest[] = [];
+  const seen = new Set<string>();
+  for (const member of value.members) {
+    if (!isRecord(member) || Object.keys(member).some((key) => key !== "agentId" && key !== "task") ||
+        typeof member.agentId !== "string" || !UUID.test(member.agentId) || seen.has(member.agentId)) {
+      return { ok: false, error: "Each team member must have a unique valid Agent ID and one task." };
+    }
+    if (typeof member.task !== "string" || !member.task.trim() || member.task.length > 4000) {
+      return { ok: false, error: "Each Agent task must be 1–4000 characters." };
+    }
+    seen.add(member.agentId);
+    members.push({ agentId: member.agentId, task: member.task.trim() });
   }
-  return { ok: true, value: { task: value.task.trim(), agentIds: value.agentIds as string[] } };
+  return { ok: true, value: { members } };
 }
