@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Agent = {
@@ -88,12 +88,19 @@ export default function AgentLabPage() {
     try {
       await refresh();
       setConnected(true);
-      setMessage("Agent Lab connected. The owner token stays in this page's memory.");
+      setMessage("Agent Lab connected. Secure owner session active.");
     } catch (cause) {
       setConnected(false);
       setError(cause instanceof Error ? cause.message : "Connection failed.");
     } finally { setBusy(false); }
   }
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) void connect(); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   async function prepareFreeTestAgent() {
     setBusy(true); setError(""); setMessage("");

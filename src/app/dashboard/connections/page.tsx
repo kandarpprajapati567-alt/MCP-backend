@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };
@@ -43,6 +43,13 @@ export default function ConnectionsPage() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Connection failed."); }
     finally { setBusy(false); }
   }
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store" }).then((response) => response.json())
+      .then((session: { authenticated?: boolean }) => { if (active && session.authenticated) void connectOwner(); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   async function saveTavily() {
     setBusy(true); setError(""); setMessage("");

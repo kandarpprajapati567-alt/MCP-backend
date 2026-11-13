@@ -1,39 +1,43 @@
 "use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { navItems } from "@/lib/nav";
-import { cn } from "@/lib/utils";
-
-const iconMap: Record<string, React.ReactNode> = {
-  grid: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>,
-  cpu: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" /></svg>,
-  code: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>,
-  database: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" /></svg>,
-  activity: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l3-8 4 16 3-8h4" /></svg>,
-  search: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>,
-  plug: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>,
-  shield: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>,
-  settings: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
-};
-
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const pathname = usePathname();
-  return (
-    <nav className="flex h-full flex-col">
-      <div className="flex min-h-[88px] items-center gap-3 border-b border-border px-5">
-        <div className="sidebar-brand flex h-10 w-10 items-center justify-center rounded-2xl text-teal-200">
-          <svg className="h-5 w-5 text-teal-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-        </div>
-        <div className="min-w-0"><p className="truncate text-[14px] font-bold tracking-wide text-zinc-100">Futuristic System</p><p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-teal-300/70">Control Centre</p></div>
-      </div>
-      <div className="px-5 pb-2 pt-5 text-[9px] font-bold uppercase tracking-[0.22em] text-zinc-600">Workspace</div>\n      <ul className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-        {navItems.map((item) => {
-          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          return <li key={item.href}><Link href={item.href} onClick={onNavigate} className={cn("sidebar-link group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all", active ? "bg-teal-300/[0.10] text-teal-200 ring-1 ring-teal-300/20 shadow-[inset_3px_0_0_0_rgba(94,234,212,.8)]" : "text-slate-400 hover:bg-white/[0.045] hover:text-zinc-100")}><span className={cn("shrink-0", active ? "text-teal-200" : "text-slate-500 group-hover:text-slate-300")}>{iconMap[item.icon]}</span><span className="truncate">{item.label}</span></Link></li>;
-        })}
-      </ul>
-      <div className="border-t border-border p-4"><div className="sidebar-footer rounded-2xl px-3.5 py-3"><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">Phase</p><p className="mt-1 text-xs font-medium text-teal-200">Private owner mode</p></div></div>
-    </nav>
-  );
+import {useEffect,useState} from "react";
+import {usePathname} from "next/navigation";
+import {navGroups,navItems,type NavGroup} from "@/lib/nav";
+const glyphs:Record<string,string>={grid:"✧",terminal:"⌘",network:"⌘",activity:"⌁",cpu:"◈",users:"♙",flask:"⚗",layers:"◫",orbit:"◎",message:"◌",plug:"⌁",database:"▤",search:"⌕",code:"</>",settings:"⚙"};
+const groupGlyphs:Record<NavGroup,string>={Command:"⌂",Intelligence:"✧",Automation:"⟳","Connected Systems":"◉",Configuration:"⚙"};
+type Props={collapsed:boolean;theme:"dark"|"light";onToggleCollapsed:()=>void;onHide:()=>void;onToggleTheme:()=>void;onNavigate?:()=>void};
+export function Sidebar({collapsed,theme,onToggleCollapsed,onHide,onToggleTheme,onNavigate}:Props){
+ const pathname=usePathname();
+ const active=navItems.find(item=>pathname===item.href||(item.href!=="/dashboard"&&pathname.startsWith(item.href+"/")));
+ const [expanded,setExpanded]=useState<NavGroup[]>([active?.group??"Command"]);
+ useEffect(()=>{if(active&&!expanded.includes(active.group))setExpanded(current=>[...current,active.group]);},[active?.group,expanded]);
+ function toggle(group:NavGroup){if(collapsed)onToggleCollapsed();setExpanded(current=>current.includes(group)?current.filter(item=>item!==group):[...current,group]);}
+ return <nav aria-label="Main navigation" className="flex h-full flex-col">
+  <div className="sidebar-brand-row">
+   <Link href="/dashboard" onClick={onNavigate} className="sidebar-brand-link" aria-label="Futuristic System home">
+    <span className="sidebar-brand" aria-hidden="true">F</span>
+    {!collapsed&&<span className="min-w-0"><span className="block truncate text-[14px] font-bold text-stone-100">Futuristic System</span><span className="mt-1 block text-[8px] font-bold uppercase tracking-[.19em] text-[#c2a66b]">Private command centre</span></span>}
+   </Link>
+   <button type="button" onClick={onHide} className="sidebar-icon-button" title="Hide sidebar" aria-label="Hide sidebar">‹</button>
+  </div>
+  {!collapsed&&<div className="px-4 pt-4"><div className="workspace-chip"><span className="status-dot"/><span><strong>Owner workspace</strong><small>Private environment</small></span></div></div>}
+  <div className="flex-1 overflow-y-auto px-2 pb-4 pt-3">
+   {navGroups.map(group=>{const items=navItems.filter(item=>item.group===group);const open=expanded.includes(group);return <section key={group} className="sidebar-group">
+    <button type="button" onClick={()=>toggle(group)} className={"sidebar-group-trigger"+(active?.group===group?" is-active":"")} aria-expanded={open} title={group}>
+     <span className="sidebar-group-glyph" aria-hidden="true">{groupGlyphs[group]}</span>
+     {!collapsed&&<><span className="min-w-0 flex-1 truncate text-left">{group}</span><span className={"sidebar-chevron"+(open?" is-open":"")}>⌄</span></>}
+    </button>
+    {!collapsed&&open&&<ul className="sidebar-submenu">{items.map(item=>{const selected=pathname===item.href||(item.href!=="/dashboard"&&pathname.startsWith(item.href+"/"));return <li key={item.href}>
+     <Link href={item.href} onClick={onNavigate} aria-current={selected?"page":undefined} title={item.description} className={"sidebar-link"+(selected?" is-active":"")}>
+      <span className="sidebar-link-glyph" aria-hidden="true">{glyphs[item.icon]??"·"}</span><span className="min-w-0 flex-1 truncate">{item.label}</span>{selected&&<span className="sidebar-active-dot"/>}
+     </Link>
+    </li>;})}</ul>}
+   </section>;})}
+  </div>
+  <div className="sidebar-bottom">
+   <button type="button" onClick={onToggleTheme} className="sidebar-footer-action" title={theme==="dark"?"Switch to light theme":"Switch to dark theme"}><span aria-hidden="true">{theme==="dark"?"☼":"☾"}</span>{!collapsed&&<span>{theme==="dark"?"Light appearance":"Dark appearance"}</span>}</button>
+   <button type="button" onClick={onToggleCollapsed} className="sidebar-footer-action" title={collapsed?"Expand sidebar":"Collapse sidebar"}><span aria-hidden="true">{collapsed?"›":"‹"}</span>{!collapsed&&<span>Collapse navigation</span>}</button>
+   {!collapsed&&<p className="sidebar-security-note">Device permissions remain local and user-controlled.</p>}
+  </div>
+ </nav>;
 }

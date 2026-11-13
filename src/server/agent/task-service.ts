@@ -10,7 +10,8 @@ import { executeBackendTool } from "@/server/tools/executor";
 import { executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { executeToolCallsSequentially } from "@/server/agent/tool-call-execution";
+import { executeToolCallsSequentially, executeToolCallsWithConcurrency, type ToolCallExecution } from "@/server/agent/tool-call-execution";
+import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
@@ -206,52 +207,33 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
     failedStage = "tool_execution";
-    await executeToolCallsSequentially(
-      plan.toolCalls,
-      async (call) => {
-        const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
-        if (deviceTool) {
-          const { data: job, error } = await admin.from("agent_tool_jobs").insert({
-            owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: deviceTool.deviceId,
-            tool_call_id: call.id, tool_id: call.toolId, arguments: call.arguments, status: "queued",
-          }).select("id,device_id,tool_id").single();
-          if (error || !job) throw new Error("Device tool job could not be queued.");
-          pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
-          await event(admin, id, "tool.requested", {
-            jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id,
-          });
-          return { queuedForDevice: true };
-        }
-        return executeBackendTool(call.toolId, call.arguments);
-      },
-      (call) => !deviceTools.some((tool) => tool.id === call.toolId),
-      async (call, execution) => {
-        if (deviceTools.some((tool) => tool.id === call.toolId)) return;
-        if (execution.ok) {
-          results.push({ callId: call.id, toolId: call.toolId, result: execution.result });
-        } else {
-          results.push({
-            callId: call.id,
-            toolId: call.toolId,
-            result: { ok: false, error: execution.error },
-          });
-        }
-        // Persist every completed/failed backend tool outcome immediately. If a
-        // later call hits an infrastructure failure, task history still retains
-        // the evidence collected before that failure.
-        await setTask(admin, id, { tool_results: results });
-        if (execution.ok) {
-          await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-        } else {
-          await event(admin, id, "tool.failed", {
-            callId: call.id,
-            toolId: call.toolId,
-            message: execution.error,
-          });
-        }
-      },
-      async () => assertTaskNotCancelled(admin, id),
-    );
+    const executeCall = async (call: typeof plan.toolCalls[number]) => {
+      const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
+      if (deviceTool) {
+        const { data: job, error } = await admin.from("agent_tool_jobs").insert({
+          owner_id: PERSONAL_OWNER_ID, task_id: id, device_id: deviceTool.deviceId,
+          tool_call_id: call.id, tool_id: call.toolId, arguments: call.arguments, status: "queued",
+        }).select("id,device_id,tool_id").single();
+        if (error || !job) throw new Error("Device tool job could not be queued.");
+        pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
+        await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
+        return { queuedForDevice: true };
+      }
+      return executeBackendTool(call.toolId, call.arguments);
+    };
+    const shouldCaptureFailure = (call: typeof plan.toolCalls[number]) => !deviceTools.some((tool) => tool.id === call.toolId);
+    const persistOutcome = async (call: typeof plan.toolCalls[number], execution: ToolCallExecution) => {
+      if (deviceTools.some((tool) => tool.id === call.toolId)) return;
+      results.push({ callId: call.id, toolId: call.toolId, result: execution.ok ? execution.result : { ok: false, error: execution.error } });
+      await setTask(admin, id, { tool_results: results });
+      if (execution.ok) await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+      else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
+    };
+    const beforeEach = async () => assertTaskNotCancelled(admin, id);
+    const parallelSafeIds = new Set<string>(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
+    const canRunInParallel = plan.toolCalls.length > 1 && plan.toolCalls.every((call) => parallelSafeIds.has(call.toolId) && !deviceTools.some((tool) => tool.id === call.toolId));
+    if (canRunInParallel) await executeToolCallsWithConcurrency(plan.toolCalls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
+    else await executeToolCallsSequentially(plan.toolCalls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
 
     await assertTaskNotCancelled(admin, id);
     if (pendingJobs.length) {

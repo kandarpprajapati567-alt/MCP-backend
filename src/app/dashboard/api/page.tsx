@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 
 const endpoints = [
+  { method: "GET / POST / DELETE", path: "/api/v1/session", description: "Exchange the owner key for a short-lived HttpOnly browser session, inspect session status or revoke the session." },
   { method: "POST", path: "/api/mcp", description: "MCP Streamable HTTP JSON-RPC endpoint." },
   { method: "GET", path: "/api/v1/health", description: "Public backend and database health." },
   { method: "GET / POST", path: "/api/v1/agent/tasks", description: "Create agent tasks and read execution history." },
@@ -23,7 +24,7 @@ export default function ApiPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader title="API Management" description="Versioned HTTPS API surface for Futuristic System and future connected clients." />
       <Card>
-        <CardHeader title="Live API catalogue" description="Owner APIs use the master token; paired-device endpoints use revocable device-scoped tokens. Health is public." />
+        <CardHeader title="Live API catalogue" description="Owner APIs accept the master token or a signed short-lived HttpOnly browser session; paired-device endpoints use revocable device-scoped tokens. Health is public." />
         <div className="space-y-2">
           {endpoints.map((item) => (
             <div key={item.path} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[150px_1fr]">

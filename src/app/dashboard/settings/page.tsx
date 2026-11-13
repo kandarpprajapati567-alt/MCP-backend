@@ -31,8 +31,8 @@ export default function SettingsPage() {
           <Link href="/dashboard/models" className="text-sm text-cyan-300">Open AI routing →</Link>
         </Card>
         <Card>
-          <CardHeader title="MCP client connection" description="Endpoint and protocol details for future Android integration." />
-          <Link href="/dashboard/mcp" className="text-sm text-cyan-300">Open MCP server →</Link>
+          <CardHeader title="Android server pairing" description="Generate a one-time code in the Command Console, then enter it in Android Settings → Server Connection. Device credentials are scoped and revocable." />
+          <div className="flex flex-wrap gap-4"><Link href="/dashboard/command" className="text-sm text-cyan-300">Open pairing controls →</Link><Link href="/dashboard/database" className="text-sm text-cyan-300">Manage paired devices →</Link></div>
         </Card>
       </div>
     </div>

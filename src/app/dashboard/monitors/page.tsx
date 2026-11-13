@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -10,9 +10,8 @@ type Task = { id: string; status: string; task: string; created_at: string };
 type Tool = { id: string; sideEffect: boolean; permission: string };
 type Provider = { provider: string };
 
-function Metric({ label, value, note, tone = "cyan" }: { label: string; value: string | number; note: string; tone?: string }) {
-  const colors: Record<string, string> = { cyan: "text-cyan-200", violet: "text-violet-200", emerald: "text-emerald-200", amber: "text-amber-200" };
-  return <div className="rounded-xl border border-white/10 bg-gradient-to-br from-[#172234] to-[#0b111c] p-4"><p className="text-[9px] font-bold tracking-[.17em] text-slate-500">{label}</p><strong className={"mt-2 block text-2xl " + (colors[tone] ?? colors.cyan)}>{value}</strong><p className="mt-1 text-[10px] text-slate-500">{note}</p></div>;
+function Metric({ label, value, note }: { label: string; value: string | number; note: string }) {
+  return <div className="metric-card"><span className="metric-label">{label}</span><strong className="metric-value">{value}</strong><span className="metric-note">{note}</span></div>;
 }
 
 export default function MonitorsPage() {
@@ -32,8 +31,11 @@ export default function MonitorsPage() {
     try {
       const healthResponse = await fetch("/api/v1/health", { cache: "no-store" });
       const healthData = await healthResponse.json();
+      if (!healthResponse.ok) throw new Error("Health endpoint did not return a successful response.");
       setHealth(healthData);
-      if (token.length >= 32) {
+      const sessionResponse = await fetch("/api/v1/session", { cache: "no-store" });
+      const sessionData = sessionResponse.ok ? await sessionResponse.json() as { authenticated?: boolean } : {};
+      if (token.length >= 32 || sessionData.authenticated) {
         const headers = { "x-fs-owner-token": token };
         const responses = await Promise.all([
           fetch("/api/v1/agents", { headers, cache: "no-store" }),
@@ -43,29 +45,63 @@ export default function MonitorsPage() {
         ]);
         if (responses.some((response) => !response.ok)) throw new Error(responses.some((response) => response.status === 401) ? "Owner token rejected." : "Some owner monitor data is unavailable.");
         const [agentData, taskData, toolData, providerData] = await Promise.all(responses.map((response) => response.json()));
-        setAgents(agentData.agents ?? []); setTasks(taskData.tasks ?? []); setTools(toolData.tools ?? []); setProviders(providerData.providers ?? []); setConnected(true);
+        setAgents(agentData.agents ?? []); setTasks(taskData.tasks ?? []);
+        setTools(toolData.tools ?? []); setProviders(providerData.providers ?? []); setConnected(true);
       }
       setCheckedAt(new Date().toLocaleString());
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Monitor refresh failed."); }
     finally { setBusy(false); }
   }
 
+  useEffect(() => { void refresh(); }, []);
+
   const running = tasks.filter((task) => ["running", "in_progress", "processing"].includes(task.status)).length;
   const completed = tasks.filter((task) => task.status === "completed").length;
   const failed = tasks.filter((task) => ["failed", "error"].includes(task.status)).length;
+  const database = health.services?.database ?? "unknown";
+  const auth = health.services?.authentication ?? "unknown";
 
-  return <div className="monitor-page mx-auto max-w-[1440px] space-y-6">
-    <PageHeader title="AI Operations Monitors" description="A workstation-style monitoring wall for task flow, backend health, AI capacity and verified capabilities."/>
-    <section className="rounded-2xl border border-cyan-200/15 bg-[radial-gradient(ellipse_at_90%_0%,rgba(34,211,238,.13),transparent_50%),linear-gradient(140deg,#101b2a,#080d16)] p-5 sm:p-7">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-[9px] font-bold tracking-[.22em] text-cyan-200">OPERATIONS WALL / 03</p><h2 className="mt-2 text-2xl font-semibold text-white">AI system status & work monitor</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Health and task counters come from backend responses. Device battery, server CPU, model memory and energy draw are not currently exposed by this API.</p></div><button type="button" disabled={busy} onClick={() => void refresh()} className="rounded-xl bg-cyan-200 px-4 py-3 text-xs font-bold text-slate-950 disabled:opacity-50">{busy ? "Refreshing…" : "Refresh telemetry ↻"}</button></div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="CORE API" value={health.status ?? "Not checked"} note={health.version ?? "Version not reported"}/><Metric label="DATABASE" value={health.services?.database ?? "Unknown"} note="Supabase health indicator" tone="emerald"/><Metric label="AUTHENTICATION" value={health.services?.authentication ?? "Unknown"} note="Backend health indicator" tone="violet"/><Metric label="LAST SAMPLE" value={checkedAt ? (checkedAt.includes(",") ? checkedAt.slice(checkedAt.lastIndexOf(",") + 1).trim() : checkedAt) : "—"} note={checkedAt || "No sample yet"} tone="amber"/></div>
+  return <div className="monitor-page space-y-7">
+    <PageHeader title="Operations room" description="A live-read view of the services and workloads the backend actually exposes. Unavailable telemetry stays clearly marked as unavailable." />
+
+    <section className="command-deck p-5 sm:p-8">
+      <div className="relative grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
+        <div><p className="eyebrow">Operations / monitor wall</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-stone-100 sm:text-3xl">System health & workload</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-stone-400">Refresh to sample the public health endpoint. Connect owner access to inspect Agent definitions, task history, tools and configured providers.</p></div>
+        <button type="button" disabled={busy} onClick={() => void refresh()} className="action-primary">{busy ? "Sampling…" : "Refresh monitor data ↻"}</button>
+      </div>
+      <div className="mt-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="monitor-tile monitor-tile-primary"><span className="monitor-label">CORE API</span><strong>{health.status ?? "Not checked"}</strong><span className="monitor-foot">Version {health.version ?? "not reported"}</span></div>
+        <div className="monitor-tile"><span className="monitor-label">DATABASE</span><strong>{database}</strong><span className="monitor-foot">Backend health indicator</span></div>
+        <div className="monitor-tile"><span className="monitor-label">AUTH SERVICE</span><strong>{auth}</strong><span className="monitor-foot">Backend health indicator</span></div>
+        <div className="monitor-tile"><span className="monitor-label">LAST SAMPLE</span><strong className="!text-base">{checkedAt ? checkedAt.split(",").slice(-1)[0].trim() : "—"}</strong><span className="monitor-foot">{checkedAt || "No sample yet"}</span></div>
+      </div>
     </section>
-    {!connected && <section className="rounded-xl border border-white/10 bg-[#0b121e] p-5"><h3 className="text-sm font-semibold text-white">Unlock owner telemetry</h3><p className="mt-1 text-xs text-slate-500">Connect to view Agent, task, tool and provider counts. The token remains in memory only.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><input aria-label="Owner master token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white"/><button type="button" disabled={busy || token.length < 32} onClick={() => void refresh()} className="rounded-xl border border-cyan-200/25 bg-cyan-200/[.08] px-5 py-3 text-xs font-bold text-cyan-100 disabled:opacity-40">Connect monitors</button></div></section>}
-    {connected && <><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="ENABLED AGENTS" value={agents.filter((agent) => agent.enabled).length} note={agents.length + " definitions registered"} tone="violet"/><Metric label="RUNNING TASKS" value={running} note="Current observed task state" tone="cyan"/><Metric label="COMPLETED / FAILED" value={completed + " / " + failed} note={tasks.length + " recent tasks returned"} tone="emerald"/><Metric label="TOOLS / PROVIDERS" value={tools.length + " / " + providers.length} note={tools.filter((tool) => !tool.sideEffect).length + " read-only tools in catalog"} tone="amber"/></section>
-    <section className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-white/10 bg-[#0b121e] p-5"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-white">Work queue</h3><Link href="/dashboard/agent-lab" className="text-[10px] text-cyan-200">Open Agent Lab ↗</Link></div><div className="mt-4 space-y-2">{tasks.slice(0,8).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[.07] bg-white/[.02] p-3"><div className="min-w-0"><p className="truncate text-xs text-slate-200">{task.task}</p><p className="mt-1 text-[9px] text-slate-500">{new Date(task.created_at).toLocaleString()}</p></div><span className="shrink-0 text-[9px] font-bold uppercase text-cyan-200">{task.status}</span></div>)}{tasks.length === 0 && <p className="text-xs text-slate-500">No recent tasks returned.</p>}</div></div>
-    <div className="rounded-xl border border-white/10 bg-[#0b121e] p-5"><h3 className="text-sm font-semibold text-white">AI strength & capability</h3><p className="mt-1 text-[10px] text-slate-500">Counts describe configuration, not benchmark intelligence or guaranteed performance.</p><div className="mt-4 space-y-3">{[{name:"Tool breadth",value:tools.length,detail:"Registered backend tools"},{name:"Read-only surface",value:tools.filter((tool) => !tool.sideEffect).length,detail:"Tools not marked side-effecting"},{name:"Configured providers",value:providers.length,detail:"Provider credentials configured"},{name:"Specialist Agents",value:agents.length,detail:"Saved Agent definitions"}].map((item) => <div key={item.name}><div className="flex justify-between text-xs"><span className="text-slate-300">{item.name}</span><strong className="text-white">{item.value}</strong></div><p className="mt-1 text-[9px] text-slate-500">{item.detail}</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{width: Math.min(100,item.value*10)+"%"}}/></div></div>)}</div></div></section></>}
-    <section className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-amber-200/15 bg-[#17140f] p-4"><p className="text-[9px] font-bold tracking-[.15em] text-amber-100">DEVICE POWER</p><strong className="mt-2 block text-lg text-white">Not measured</strong><p className="mt-1 text-[10px] text-slate-500">Android battery telemetry is not connected to this web monitor.</p></div><div className="rounded-xl border border-white/10 bg-[#111722] p-4"><p className="text-[9px] font-bold tracking-[.15em] text-slate-400">SERVER COMPUTE</p><strong className="mt-2 block text-lg text-white">Not exposed</strong><p className="mt-1 text-[10px] text-slate-500">CPU, RAM and GPU metrics require a trusted telemetry source.</p></div><div className="rounded-xl border border-white/10 bg-[#111722] p-4"><p className="text-[9px] font-bold tracking-[.15em] text-slate-400">MODEL POWER</p><strong className="mt-2 block text-lg text-white">Not measured</strong><p className="mt-1 text-[10px] text-slate-500">No inference energy or token-speed data is currently supplied.</p></div></section>
-    {error && <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-300/[.06] p-3 text-xs text-rose-200">{error}</p>}
-    <p className="text-[10px] leading-5 text-slate-500">No synthetic telemetry is generated. A missing metric is shown as unavailable rather than estimated.</p>
+
+    {!connected && <section className="surface-card p-5 sm:p-6"><div className="panel-heading"><div><p className="eyebrow">Owner telemetry</p><h3 className="mt-2">Unlock workload metrics</h3><p>Connect to view owner-scoped Agent, task, tool and provider counts. The token remains in this page's memory only.</p></div></div><div className="flex flex-col gap-3 sm:flex-row"><input aria-label="Owner master token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="FS_OWNER_TOKEN" className="min-w-0 flex-1 px-4 py-3 text-sm"/><button type="button" disabled={busy || token.length < 32} onClick={() => void refresh()} className="action-primary">Connect monitors</button></div></section>}
+
+    {connected && <>
+      <div className="metric-grid">
+        <Metric label="Enabled agents" value={agents.filter((agent) => agent.enabled).length} note={agents.length + " saved definitions"} />
+        <Metric label="Running tasks" value={running} note="Current returned task state" />
+        <Metric label="Completed / failed" value={completed + " / " + failed} note={tasks.length + " returned task records"} />
+        <Metric label="Tools / providers" value={tools.length + " / " + providers.length} note={tools.filter((tool) => !tool.sideEffect).length + " read-only tools in registry"} />
+      </div>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="surface-card p-5 sm:p-6"><div className="panel-heading"><div><p className="eyebrow">Task stream</p><h3 className="mt-2">Recent work queue</h3><p>Latest task records returned by the backend.</p></div><Link href="/dashboard/agent-lab" className="action-secondary">Agent workbench ↗</Link></div>
+          <div className="space-y-2">{tasks.slice(0, 8).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[.08] bg-black/[.12] p-3"><div className="min-w-0"><p className="truncate text-xs text-stone-200">{task.task}</p><p className="mt-1 text-[9px] text-stone-500">{new Date(task.created_at).toLocaleString()}</p></div><span className="shrink-0 text-[9px] font-bold uppercase text-[#d8bd83]">{task.status.replace(/_/g, " ")}</span></div>)}{tasks.length === 0 && <p className="text-xs text-stone-500">No recent tasks returned.</p>}</div>
+        </div>
+        <div className="surface-card p-5 sm:p-6"><div className="panel-heading"><div><p className="eyebrow">Capability inventory</p><h3 className="mt-2">Registered system surface</h3><p>Counts describe configuration, not intelligence benchmarks or guaranteed performance.</p></div></div>
+          <div className="space-y-4">{[{name:"Tool registry",value:tools.length,detail:"Registered backend capabilities"},{name:"Read-only tools",value:tools.filter((tool) => !tool.sideEffect).length,detail:"Tools not marked side-effecting"},{name:"Configured providers",value:providers.length,detail:"Provider credentials configured"},{name:"Agent definitions",value:agents.length,detail:"Saved specialist definitions"}].map((item) => <div key={item.name} className="flex items-center justify-between gap-4 border-b border-white/[.07] pb-3 last:border-0"><div><p className="text-xs font-semibold text-stone-200">{item.name}</p><p className="mt-1 text-[10px] text-stone-500">{item.detail}</p></div><strong className="text-xl font-semibold text-[#d8bd83]">{item.value}</strong></div>)}</div>
+        </div>
+      </section>
+    </>}
+
+    <section className="grid gap-3 md:grid-cols-3">
+      <div className="surface-card p-4"><p className="eyebrow">Device power</p><strong className="mt-3 block text-lg text-stone-100">Not measured</strong><p className="mt-2 text-[10px] leading-5 text-stone-500">Android battery telemetry is not connected to this web monitor.</p></div>
+      <div className="surface-card p-4"><p className="eyebrow">Server compute</p><strong className="mt-3 block text-lg text-stone-100">Not exposed</strong><p className="mt-2 text-[10px] leading-5 text-stone-500">CPU, RAM and GPU metrics require a trusted telemetry source.</p></div>
+      <div className="surface-card p-4"><p className="eyebrow">Model performance</p><strong className="mt-3 block text-lg text-stone-100">Not measured</strong><p className="mt-2 text-[10px] leading-5 text-stone-500">No inference speed, token throughput or energy data is currently supplied.</p></div>
+    </section>
+    {error && <p role="alert" className="rounded-xl border border-[#c96b59]/30 bg-[#c96b59]/[.08] p-4 text-xs text-[#e3a092]">{error}</p>}
+    <p className="text-[10px] leading-5 text-stone-600">Telemetry policy: only values returned by the backend are displayed. Missing metrics are not estimated or fabricated.</p>
   </div>;
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PERSONAL_OWNER_ID, verifyOwnerMasterToken, verifyOwnerRequest } from "../../../src/server/security/owner-auth";
+import { PERSONAL_OWNER_ID, verifyOwnerMasterToken, verifyOwnerRequest, createOwnerSessionValue, isValidOwnerSessionValue, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS } from "../../../src/server/security/owner-auth";
 
 const original = process.env.FS_OWNER_TOKEN;
 const validToken = "test-owner-token-which-is-long-enough-1234567890";
@@ -43,4 +43,17 @@ test("owner API requests reject invalid tokens and cross-origin requests", () =>
   });
   assert.equal(verifyOwnerRequest(invalid), null);
   assert.equal(verifyOwnerRequest(crossOrigin), null);
+});
+
+
+test("owner sessions are signed, time-bounded and accepted through a cookie", () => {
+  const now = Date.now();
+  const value = createOwnerSessionValue(now);
+  assert.equal(isValidOwnerSessionValue(value, now), true);
+  assert.equal(isValidOwnerSessionValue(value, now + (OWNER_SESSION_TTL_SECONDS + 1) * 1000), false);
+  assert.equal(isValidOwnerSessionValue(value + "x", now), false);
+  const request = new Request("https://backend.example/api/v1/tools", {
+    headers: { cookie: OWNER_SESSION_COOKIE + "=" + value },
+  });
+  assert.equal(verifyOwnerRequest(request), PERSONAL_OWNER_ID);
 });
