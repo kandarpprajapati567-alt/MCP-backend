@@ -26,5 +26,5 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
     return status;
   }
 
-  return executeBackendTool(name, args);
+  return executeBackendTool(name, args, { source: "mcp_direct" });
 }

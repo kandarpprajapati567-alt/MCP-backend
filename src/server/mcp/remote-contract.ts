@@ -55,13 +55,24 @@ export function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpToo
       !isRecord(raw.annotations) || raw.annotations.readOnlyHint !== true || raw.annotations.destructiveHint === true ||
       !isRecord(raw.inputSchema) || raw.inputSchema.type !== "object" || !isRecord(raw.inputSchema.properties)) return null;
 
+  const rootKeys = new Set(["type", "properties", "required", "additionalProperties", "title", "description", "$schema"]);
+  if (Object.keys(raw.inputSchema).some((key) => !rootKeys.has(key)) ||
+      (raw.inputSchema.additionalProperties !== undefined && raw.inputSchema.additionalProperties !== false)) return null;
+
   const entries = Object.entries(raw.inputSchema.properties);
   if (entries.length > 24) return null;
-  const properties: Record<string, unknown> = {};
+  const properties: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const [key, schema] of entries) {
     if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(key) || !isRecord(schema) ||
         !["string", "number", "integer", "boolean"].includes(String(schema.type))) return null;
     const type = schema.type;
+    const allowedKeys = type === "string"
+      ? new Set(["type", "minLength", "maxLength"])
+      : type === "number" || type === "integer"
+        ? new Set(["type", "minimum", "maximum"])
+        : new Set(["type"]);
+    if (Object.keys(schema).some((propertyKey) => !allowedKeys.has(propertyKey))) return null;
+
     if (type === "string") {
       if ((schema.maxLength !== undefined && (typeof schema.maxLength !== "number" || !Number.isInteger(schema.maxLength) || schema.maxLength < 1)) ||
           (schema.minLength !== undefined && (typeof schema.minLength !== "number" || !Number.isInteger(schema.minLength) || schema.minLength < 0))) return null;
@@ -82,10 +93,12 @@ export function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpToo
       properties[key] = { type: "boolean" };
     }
   }
-  const required = Array.isArray(raw.inputSchema.required)
-    ? raw.inputSchema.required.filter((item): item is string => typeof item === "string" && item in properties)
-    : [];
-  if (required.length > 24) return null;
+
+  const rawRequired = raw.inputSchema.required === undefined ? [] : raw.inputSchema.required;
+  if (!Array.isArray(rawRequired) || rawRequired.length > 24 ||
+      rawRequired.some((item) => typeof item !== "string" || !Object.hasOwn(properties, item)) ||
+      new Set(rawRequired).size !== rawRequired.length) return null;
+  const required = rawRequired as string[];
   const description = typeof raw.description === "string" ? raw.description.slice(0, 500) : "Read-only tool from a connected remote MCP server.";
   return {
     id: "remote_mcp." + serverId + "." + raw.name,
@@ -95,9 +108,10 @@ export function sanitizeRemoteTool(serverId: string, raw: unknown): RemoteMcpToo
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: raw.annotations.idempotentHint === true, openWorldHint: true },
   };
 }
+
 export function validateRemoteToolArguments(schema: RemoteInputSchema, args: unknown): args is JsonRecord {
-  if (!isRecord(args) || Object.keys(args).some((key) => !(key in schema.properties))) return false;
-  if (schema.required.some((key) => !(key in args))) return false;
+  if (!isRecord(args) || Object.keys(args).some((key) => !Object.hasOwn(schema.properties, key))) return false;
+  if (schema.required.some((key) => !Object.hasOwn(args, key))) return false;
   for (const [key, value] of Object.entries(args)) {
     const property = schema.properties[key];
     if (!isRecord(property)) return false;
@@ -111,7 +125,9 @@ export function validateRemoteToolArguments(schema: RemoteInputSchema, args: unk
           (typeof property.maximum === "number" && value > property.maximum)) return false;
     } else if (property.type === "boolean" && typeof value !== "boolean") return false;
   }
-  return Buffer.byteLength(JSON.stringify(args), "utf8") <= 16_000;
+  try {
+    return Buffer.byteLength(JSON.stringify(args), "utf8") <= 16_000;
+  } catch {
+    return false;
+  }
 }
-
-

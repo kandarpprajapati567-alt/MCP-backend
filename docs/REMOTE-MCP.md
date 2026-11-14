@@ -17,16 +17,16 @@ Remote MCP servers can be registered from **Dashboard → Connections → Remote
 - Every request resolves the hostname again, rejects the connection if any returned address is non-public, then pins the HTTPS socket to one validated address. TLS certificate validation and SNI still use the registered hostname.
 - Redirects are not followed; non-HTTPS and non-443 ports are rejected.
 - URL credentials, fragments and query strings are rejected so bearer secrets cannot be hidden in URLs.
-- Request timeout is 12 seconds; response body is capped at 1 MB; request arguments are capped at 16 KB.
+- Request timeout is 12 seconds; each remote HTTP response is capped at 1 MB; request arguments are capped at 16 KB; returned tool content is capped at 12 items and 80 KB of serialized JSON.
 - Only tools with `annotations.readOnlyHint === true` and no destructive hint are exposed.
-- Remote input schemas are reduced to bounded flat string, number, integer and boolean fields. Nested, array, object and unknown schemas are excluded.
-- Credentials and remote response bodies are never written to application logs by this connector.
+- Remote input schemas are reduced to bounded flat string, number, integer and boolean fields. Unsupported constraints, unknown required keys, permissive additional properties, nested, array, object and unknown schemas are rejected.
+- Credentials, raw arguments, endpoint URLs and remote response bodies are never written to application logs or the audit table.
 
 **Trust warning:** MCP annotations are declarations made by the remote server, not cryptographic proof that a tool has no side effects. Connect only servers you trust. This first implementation intentionally excludes write-capable and unannotated tools; it does not provide a general remote-code or arbitrary-URL execution channel.
 
 ## Database and environment
 
-Apply `supabase/migrations/20261112100000_create_remote_mcp_servers.sql` and configure the existing `AI_PROVIDER_ENCRYPTION_KEY` (32-byte base64 AES-256 key). No additional paid service is required.
+Apply `supabase/migrations/20261112100000_create_remote_mcp_servers.sql` and `supabase/migrations/20261114110000_create_remote_mcp_audit_events.sql`, then configure the existing `AI_PROVIDER_ENCRYPTION_KEY` (32-byte base64 AES-256 key). The audit migration is a repository change only until an owner explicitly applies it; this PR does not modify the live database. No additional paid service is required.
 
 ## API
 
@@ -35,5 +35,8 @@ Apply `supabase/migrations/20261112100000_create_remote_mcp_servers.sql` and con
 - `POST /api/v1/connections/remote-mcp` with `{ "action": "test", "serverId": "uuid" }` — repeat the authenticated MCP handshake and `tools/list`, then refresh the sanitized tool manifest. The Connections Hub exposes this as **Test connection** for each saved server.
 - **Dashboard → Agent Lab** includes **Run Agent test** for a real task-pipeline execution and **Run safe test suite** for no-cost deterministic Mock-provider checks, with pass/fail/skipped results and execution history.
 - `DELETE /api/v1/connections/remote-mcp` — disconnect `{ "serverId": "uuid" }`.
+- `GET /api/v1/connections/remote-mcp/audit?limit=50` — owner-only, bounded audit history; optional `serverId` and `taskId` filters. It returns tool identity, source, argument digest, status, timestamps, duration, byte counts and stable error codes only.
+
+Each invocation must persist an audit start record before contacting the remote server. Agent task calls are tagged `agent_task`; direct owner MCP calls are tagged `mcp_direct`. Raw arguments are represented only by a SHA-256 digest. If audit start cannot be persisted, the network call is blocked. If completion cannot be persisted, the result is withheld and the record is marked `audit_pending` when possible.
 
 All endpoints require the owner master token. Plaintext bearer credentials are never returned.

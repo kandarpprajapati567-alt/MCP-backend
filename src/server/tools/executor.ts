@@ -4,6 +4,7 @@ import { executeRegisteredTool } from "@/server/tools/registry";
 import { getProviderAdapter, listProviderAdapters } from "@/server/models/catalog";
 import { listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile } from "@/server/tools/github";
 import { searchWeb } from "@/server/tools/web-search";
+import type { RemoteMcpInvocationContext } from "@/server/mcp/remote-audit";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -17,7 +18,7 @@ function escapeLike(value: string) {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-export async function executeBackendTool(name: string, args: Record<string, unknown>) {
+export async function executeBackendTool(name: string, args: Record<string, unknown>, context?: RemoteMcpInvocationContext) {
   if (name === "github.list_branches") return listGitHubBranches(args);
   if (name === "github.list_commits") return listGitHubCommits(args);
   if (name === "github.list_files") return listGitHubFiles(args);
@@ -25,7 +26,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
   if (name === "web.search") return searchWeb(args);
   if (name.startsWith("remote_mcp.")) {
     const { callRemoteMcpTool } = await import("@/server/mcp/remote");
-    return callRemoteMcpTool(name, args);
+    return callRemoteMcpTool(name, args, context);
   }
   if (name === "models.list_providers") {
     if (Object.keys(args).length) throw new Error("models.list_providers does not accept arguments.");

@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { decryptProviderSecret, encryptProviderSecret } from "@/server/ai/secrets/encryption";
 import { isPublicIpv4Address, normalizeRemoteMcpEndpoint, sanitizeRemoteTool, validateRemoteToolArguments, type RemoteMcpTool } from "./remote-contract";
+import { boundRemoteMcpContent, runRemoteMcpAuditedInvocation, type RemoteMcpInvocationContext } from "./remote-audit";
 
 const MCP_PROTOCOL_VERSION = "2025-11-25";
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -55,7 +56,7 @@ async function postRemoteMcp(
   bearerToken?: string,
   sessionId?: string,
   protocolVersion?: string,
-): Promise<{ status: number; payload: unknown; sessionId?: string }> {
+): Promise<{ status: number; payload: unknown; responseBytes: number; sessionId?: string }> {
   const pinnedAddress = await resolvePublicAddress(url.hostname);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -98,7 +99,7 @@ async function postRemoteMcp(
         try { payload = parseResponseBody(responseText); }
         catch (error) { return reject(error); }
         const nextSession = res.headers["mcp-session-id"];
-        resolve({ status, payload, ...(typeof nextSession === "string" ? { sessionId: nextSession } : {}) });
+        resolve({ status, payload, responseBytes: total, ...(typeof nextSession === "string" ? { sessionId: nextSession } : {}) });
       });
     });
     req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("Remote MCP request timed out.")));
@@ -229,11 +230,16 @@ export async function disconnectRemoteMcpServer(serverId: string) {
   return { disconnected: true, serverId };
 }
 
-export async function callRemoteMcpTool(toolId: string, args: Record<string, unknown>) {
+export async function callRemoteMcpTool(
+  toolId: string,
+  args: Record<string, unknown>,
+  context?: RemoteMcpInvocationContext,
+) {
   const match = toolId.match(/^remote_mcp\.([0-9a-f-]{36})\.([A-Za-z0-9][A-Za-z0-9_.-]{0,79})$/u);
   if (!match) throw new Error("Remote MCP tool identifier is invalid.");
   const [, serverId, toolName] = match;
-  const { data: server, error } = await createAdminClient().from("remote_mcp_servers")
+  const admin = createAdminClient();
+  const { data: server, error } = await admin.from("remote_mcp_servers")
     .select("endpoint_url,encrypted_secret,iv,auth_tag,key_version,enabled,discovered_tools")
     .eq("owner_id", PERSONAL_OWNER_ID).eq("id", serverId).maybeSingle();
   if (error || !server || !server.enabled) throw new Error("Remote MCP server is not connected.");
@@ -244,17 +250,79 @@ export async function callRemoteMcpTool(toolId: string, args: Record<string, unk
   const token = server.encrypted_secret
     ? decryptProviderSecret({ encrypted_secret: server.encrypted_secret, iv: server.iv, auth_tag: server.auth_tag, key_version: server.key_version })
     : undefined;
-  const { sessionId } = await openRemoteSession(endpoint, token);
-  const response = await postRemoteMcp(endpoint, {
-    jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: toolName, arguments: args },
-  }, token, sessionId, MCP_PROTOCOL_VERSION);
-  const result = rpcResult(response.payload);
-  if (result.isError === true) throw new Error("Remote MCP tool reported an execution error.");
-  const content = Array.isArray(result.content) ? result.content : [];
-  const bounded = content.slice(0, 12).map((item) => {
-    if (!isRecord(item)) return { type: "text", text: "[Unsupported remote content]" };
-    if (item.type === "text" && typeof item.text === "string") return { type: "text", text: item.text.slice(0, 8000) };
-    return { type: typeof item.type === "string" ? item.type.slice(0, 40) : "unknown", text: "[Non-text content omitted]" };
+
+  const auditId = randomUUID();
+  const startedAt = new Date().toISOString();
+  return runRemoteMcpAuditedInvocation({
+    id: auditId,
+    ownerId: PERSONAL_OWNER_ID,
+    serverId,
+    toolId,
+    toolName,
+    source: context?.source ?? "unknown",
+    ...(context?.taskId ? { taskId: context.taskId } : {}),
+    args,
+    startedAt,
+  }, {
+    start: async (record) => {
+      const { data, error: auditError } = await admin.from("remote_mcp_audit_events")
+        .insert(record).select("id").single();
+      if (auditError || !data) throw new Error("Remote MCP audit storage is unavailable; invocation was blocked.");
+    },
+    complete: async (patch) => {
+      const { data, error: auditError } = await admin.from("remote_mcp_audit_events")
+        .update(patch).eq("owner_id", PERSONAL_OWNER_ID).eq("id", auditId)
+        .select("id").maybeSingle();
+      if (auditError || !data) throw new Error("Remote MCP audit completion could not be persisted.");
+    },
+    fail: async (patch) => {
+      const { error: auditError } = await admin.from("remote_mcp_audit_events")
+        .update(patch).eq("owner_id", PERSONAL_OWNER_ID).eq("id", auditId);
+      if (auditError) throw new Error("Remote MCP failure audit could not be persisted.");
+    },
+    pending: async (patch) => {
+      const { error: auditError } = await admin.from("remote_mcp_audit_events")
+        .update(patch).eq("owner_id", PERSONAL_OWNER_ID).eq("id", auditId);
+      if (auditError) throw new Error("Remote MCP pending audit could not be persisted.");
+    },
+  }, async () => {
+    const { sessionId } = await openRemoteSession(endpoint, token);
+    const response = await postRemoteMcp(endpoint, {
+      jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: toolName, arguments: args },
+    }, token, sessionId, MCP_PROTOCOL_VERSION);
+    const result = rpcResult(response.payload);
+    if (result.isError === true) throw new Error("Remote MCP tool reported an execution error.");
+    const content = boundRemoteMcpContent(result.content);
+    const value = { server: serverId, tool: toolName, content };
+    return {
+      value,
+      responseBytes: response.responseBytes,
+      outputBytes: Buffer.byteLength(JSON.stringify(value), "utf8"),
+      contentItems: content.length,
+    };
   });
-  return { server: serverId, tool: toolName, content: bounded };
+}
+
+export async function listRemoteMcpAuditEvents(filters: {
+  serverId?: string;
+  taskId?: string;
+  limit?: number;
+} = {}) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if ((filters.serverId && !uuidPattern.test(filters.serverId)) ||
+      (filters.taskId && !uuidPattern.test(filters.taskId))) {
+    throw new Error("Remote MCP audit filters are invalid.");
+  }
+  const limit = filters.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Remote MCP audit limit is invalid.");
+  let query = createAdminClient().from("remote_mcp_audit_events")
+    .select("id,server_id,task_id,tool_id,tool_name,source,argument_digest,status,started_at,completed_at,duration_ms,response_bytes,output_bytes,content_items,error_code")
+    .eq("owner_id", PERSONAL_OWNER_ID)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (filters.serverId) query = query.eq("server_id", filters.serverId);
+  if (filters.taskId) query = query.eq("task_id", filters.taskId);
+  const { data, error } = await query;
+  if (error) throw new Error("Remote MCP audit history is unavailable.");
+  return data ?? [];
 }

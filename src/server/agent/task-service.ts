@@ -278,7 +278,7 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
           capability,
         });
         invocationEnvelopes.set(call.id, invocation);
-        return executeBackendTool(call.toolId, call.arguments);
+        return executeBackendTool(call.toolId, call.arguments, { source: "agent_task", taskId: id });
       },
       {
         maxConcurrency: 3,
