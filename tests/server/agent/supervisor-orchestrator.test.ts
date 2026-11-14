@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assignSubtasksToAgents,
   buildFallbackSupervisorPlan,
+  isExplicitFreePlannerModel,
   parseSupervisorPlan,
   runStageTwoDiagnostics,
 } from "../../../src/server/agent/supervisor-orchestrator";
@@ -12,6 +13,13 @@ const agents = [
   { id: "developer", name: "Developer Agent", description: "Repository coding", role: "Software engineer", allowedTools: ["github.read_file"], enabled: true },
   { id: "disabled", name: "Disabled Agent", description: "Research", role: "Research analyst", allowedTools: ["web.search"], enabled: false },
 ];
+
+test("Supervisor AI planning is allowed only for explicit OpenRouter free model IDs", () => {
+  assert.equal(isExplicitFreePlannerModel("openrouter", "meta-llama/llama-3.3-70b-instruct:free"), true);
+  assert.equal(isExplicitFreePlannerModel("openai", "gpt-4o-mini:free"), false);
+  assert.equal(isExplicitFreePlannerModel("openrouter", "openai/gpt-4o-mini"), false);
+  assert.equal(isExplicitFreePlannerModel("openrouter", "openai/gpt-4o-mini:free extra"), false);
+});
 
 test("fallback planner splits explicit independent workstreams within the three-task limit", () => {
   const plan = buildFallbackSupervisorPlan("Research official docs; Analyze the risks; Write the report");
