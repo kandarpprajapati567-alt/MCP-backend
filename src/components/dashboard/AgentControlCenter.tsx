@@ -65,6 +65,17 @@ type Template = {
 
 const templates: Template[] = [
   {
+    id: "writing",
+    name: "Writing & Reasoning Specialist",
+    role: "Writing and reasoning assistant",
+    description: "Drafts, explains and reasons from your prompt using a configured AI model. No external tools are assigned.",
+    instructions: "Create clear, useful writing or reasoning outputs from the user's supplied context. This Agent has no external tools. Do not claim to have researched, searched, verified facts, accessed files or performed actions. Clearly state uncertainty and ask for source material when needed.",
+    tools: [],
+    icon: "✎",
+    tone: "border-fuchsia-400/25 bg-fuchsia-400/[.06]",
+  },
+
+  {
     id: "research",
     name: "Research Specialist",
     role: "Research analyst",
@@ -231,7 +242,7 @@ export default function AgentControlCenter() {
     setShowEditor(true);
     setError("");
     setNotice(template.id !== "custom" && selected.length < template.tools.length
-      ? "Some tools required by this template are not currently registered. Review its Allowed tools before saving; an Agent without tools cannot execute tasks."
+      ? "Some tools required by this template are not currently registered. Review its Allowed tools before saving. Without tools, only model-only prompts can run when a real AI provider is configured."
       : "");
   }
 
