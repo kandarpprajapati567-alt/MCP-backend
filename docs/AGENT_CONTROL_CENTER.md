@@ -19,7 +19,7 @@ Agent templates are starting configurations, not new permissions. A template can
 - A role/name match alone does not qualify an Agent for a specialist workstream; at least one matching tool capability is required.
 - Plans remain schema-validated and bounded. Auto Team remains capped at three workstreams and the worker remains capped at three concurrent tasks.
 - Empty tool output, failed tool calls, failed/cancelled/expired device jobs and empty device payloads cannot be reported as successful tool evidence.
-- The Supervisor uses an explicitly configured OpenRouter `:free` planner model only. If it is unavailable, deterministic local decomposition is used; no paid fallback is enabled.
+- The Supervisor uses an explicitly configured OpenRouter `:free` planner model only. If it is unavailable, deterministic local decomposition is used; no paid fallback is enabled. The current Supervisor dispatches independent workstreams only; it does not yet persist a dependency graph or shared team-memory context. Dependent steps should be submitted as one task rather than assumed to run in order.
 - Side-effect tools remain explicit allowlist choices and continue to be subject to runtime permission checks.
 
 ## Performance indicators
@@ -37,4 +37,4 @@ The current backend tool catalog includes read-only GitHub repository inspection
 
 ## Verification
 
-The Agent Lab's individual and full test actions remain the supported owner-facing integration test path. Unit tests cover plan validation, local fallback behavior, evidence checks, specialist assignment and registered-tool filtering. CI/typecheck/build and a deployed smoke test must pass on the candidate commit before calling the release production-ready.
+The Agent Lab's individual and full test actions remain the supported owner-facing integration test path. Unit tests cover plan validation, local fallback behavior, tool-backed versus model-only execution policy, evidence checks, specialist assignment and registered-tool filtering. This is evaluation-driven quality control, not an autonomous self-modifying or self-training loop. CI/typecheck/build and a deployed smoke test must pass on the candidate commit before calling the release production-ready.
