@@ -22,3 +22,13 @@ test("model-only mode cannot replace source-backed research", () => {
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.code, "AGENT_SOURCE_EVIDENCE_REQUIRED");
 });
+
+test("model-only prompts may creatively find names, but not official source material", () => {
+  assert.deepEqual(resolveAgentExecutionMode(0, "openai", "Find a creative name for my app"), {
+    ok: true,
+    mode: "model_only",
+  });
+  const research = resolveAgentExecutionMode(0, "openai", "Find official Android permission documentation");
+  assert.equal(research.ok, false);
+  if (!research.ok) assert.equal(research.code, "AGENT_SOURCE_EVIDENCE_REQUIRED");
+});
