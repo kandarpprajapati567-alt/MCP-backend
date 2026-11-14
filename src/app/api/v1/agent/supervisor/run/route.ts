@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
-import { assignSubtasksToAgents, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
+import { assignSubtasksToAgents, filterAgentToolsToAvailable, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
 import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
 import { isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
@@ -47,9 +47,17 @@ export async function POST(request: Request) {
     for (const device of deviceRows ?? []) {
       if (!Array.isArray(device.capabilities)) continue;
       for (const capability of device.capabilities) {
-        if (capability && typeof capability === "object" && !Array.isArray(capability) &&
-            typeof (capability as Record<string, unknown>).id === "string") {
-          availableToolIds.add((capability as Record<string, unknown>).id as string);
+        if (capability && typeof capability === "object" && !Array.isArray(capability)) {
+          const record = capability as Record<string, unknown>;
+          const schema = record.inputSchema;
+          if (typeof record.id === "string" && typeof record.description === "string" &&
+              typeof record.permission === "string" && typeof record.sideEffect === "boolean" &&
+              schema && typeof schema === "object" && !Array.isArray(schema) &&
+              (schema as Record<string, unknown>).type === "object" &&
+              (schema as Record<string, unknown>).properties &&
+              typeof (schema as Record<string, unknown>).properties === "object") {
+            availableToolIds.add(record.id);
+          }
         }
       }
     }
@@ -58,7 +66,7 @@ export async function POST(request: Request) {
       name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
-      allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string" && availableToolIds.has(item)) : [],
+      allowedTools: Array.isArray(agent.allowed_tools) ? filterAgentToolsToAvailable(agent.allowed_tools.filter((item): item is string => typeof item === "string"), availableToolIds) : [],
       enabled: agent.enabled === true,
     }));
     const planned = await createSupervisorPlan(PERSONAL_OWNER_ID, goal);
