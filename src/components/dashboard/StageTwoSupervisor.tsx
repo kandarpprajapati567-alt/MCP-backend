@@ -22,11 +22,11 @@ export function StageTwoSupervisor({ token, agents }: Props) {
   const [tests, setTests] = useState<TestResult[]>([]);
   const [testSummary, setTestSummary] = useState("");
 
-  async function request(path: string, method: "GET" | "POST", body?: unknown) {
+  async function request(path: string, method: "GET" | "POST", body?: unknown, extraHeaders: Record<string, string> = {}) {
     return fetch(path, {
       method,
       cache: "no-store",
-      headers: { "x-fs-owner-token": token, ...(body ? { "Content-Type": "application/json" } : {}) },
+      headers: { "x-fs-owner-token": token, ...(body ? { "Content-Type": "application/json" } : {}), ...extraHeaders },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(20000),
     });
@@ -52,7 +52,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
     event.preventDefault();
     setBusy(true); setError(""); setResult(null);
     try {
-      const response = await request("/api/v1/agent/supervisor/run", "POST", { goal });
+      const response = await request("/api/v1/agent/supervisor/run", "POST", { goal }, { "Idempotency-Key": crypto.randomUUID() });
       const data = await response.json() as DispatchResult;
       if (!response.ok && response.status !== 207 && response.status !== 202) throw new Error(data.error ?? "Supervisor dispatch failed.");
       setResult(data);
