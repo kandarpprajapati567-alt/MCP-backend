@@ -131,6 +131,13 @@ export function buildFallbackSupervisorPlan(goal: string): SupervisorPlan {
   };
 }
 
+export function filterAgentToolsToAvailable(
+  allowedTools: readonly string[],
+  availableToolIds: ReadonlySet<string>,
+): string[] {
+  return [...new Set(allowedTools.filter((toolId) => availableToolIds.has(toolId)))].slice(0, 40);
+}
+
 function profileText(agent: AssignableAgent): string {
   return [agent.name, agent.description, agent.role].join(" ").toLowerCase();
 }
