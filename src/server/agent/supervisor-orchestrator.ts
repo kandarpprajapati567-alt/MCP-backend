@@ -142,37 +142,71 @@ function profileText(agent: AssignableAgent): string {
   return [agent.name, agent.description, agent.role].join(" ").toLowerCase();
 }
 
+function capabilityGroup(capability: string): string | null {
+  if (capability === "general") return null;
+  if (capability === "research" || capability === "web") return "research";
+  if (capability === "coding" || capability === "github") return "coding";
+  return capability;
+}
+
 function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score: number; reasons: string[]; capabilityMatch: boolean } {
   const profile = profileText(agent);
   const tools = agent.allowedTools.map((tool) => tool.toLowerCase());
   let score = 1;
-  let capabilityMatch = false;
   const reasons: string[] = [];
+  const matchedGroups = new Set<string>();
+  const requiredGroups = new Set(subtask.requiredCapabilities
+    .map(capabilityGroup)
+    .filter((group): group is string => group !== null));
   const hasTool = (pattern: RegExp) => tools.some((tool) => pattern.test(tool));
+
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
+      if (hasTool(/web\.search|search|browser|remote\.search/)) {
+        score += 5;
+        matchedGroups.add("research");
+        reasons.push("research/search tools");
+      }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding" || capability === "github") {
-      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
+      if (hasTool(/github\.|code\.|repo|git/)) {
+        score += 5;
+        matchedGroups.add("coding");
+        reasons.push("development/repository tools");
+      }
       if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
     } else if (capability === "analysis") {
-      if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
+      if (hasTool(/text\.|analytics|data|metrics/)) {
+        score += 3;
+        matchedGroups.add("analysis");
+        reasons.push("analysis tools");
+      }
       if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
     } else if (capability === "writing") {
-      if (hasTool(/text\.|document|notes/)) { score += 3; capabilityMatch = true; reasons.push("writing tools"); }
+      if (hasTool(/text\.|document|notes/)) {
+        score += 3;
+        matchedGroups.add("writing");
+        reasons.push("writing tools");
+      }
       if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
     } else if (capability === "android") {
-      if (hasTool(/device\.|android\.|mobile/)) { score += 6; capabilityMatch = true; reasons.push("Android/device tools"); }
+      if (hasTool(/device\.|android\.|mobile/)) {
+        score += 6;
+        matchedGroups.add("android");
+        reasons.push("Android/device tools");
+      }
       if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
     } else if (capability === "general") {
       score += 1;
     }
   }
+
   const words = subtask.objective.toLowerCase().match(/[a-z]{4,}/g) ?? [];
   const profileWords = new Set(profile.match(/[a-z]{4,}/g) ?? []);
   const overlap = [...new Set(words)].filter((word) => profileWords.has(word)).length;
   if (overlap) { score += Math.min(3, overlap); reasons.push("objective/profile match"); }
+
+  const capabilityMatch = [...requiredGroups].every((group) => matchedGroups.has(group));
   return { score, reasons, capabilityMatch };
 }
 
