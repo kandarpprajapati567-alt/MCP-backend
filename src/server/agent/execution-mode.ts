@@ -4,7 +4,7 @@ export type AgentExecutionModeResult =
   | { ok: true; mode: AgentExecutionMode }
   | { ok: false; code: "AGENT_NO_EXECUTION_EVIDENCE" | "AGENT_SOURCE_EVIDENCE_REQUIRED"; message: string };
 
-const SOURCE_REQUIRED_INTENT = /\b(research|search|find|investigate|look\s+up|latest|current|news|sources?|citations?|references?|verify|fact[ -]?check)\b/i;
+const SOURCE_REQUIRED_INTENT = /\b(research|search|investigate|look\s+up|latest|current|news|sources?|citations?|references?|verify|fact[ -]?check|find\s+(?:official|reliable|credible|recent|latest|current|sources?|documentation|docs|information|evidence|references?))\b/i;
 
 export function resolveAgentExecutionMode(
   toolCallCount: number,
