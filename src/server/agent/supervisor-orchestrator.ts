@@ -92,7 +92,7 @@ function inferCapabilities(text: string): string[] {
   const value = text.toLowerCase();
   const found: string[] = [];
   if (/research|search|source|reference|latest|news|investigat|compare|competitor/.test(value)) found.push("research", "web");
-  if (/code|coding|program|debug|bug|implement|repository|github|software|api/.test(value)) found.push("coding", "github");
+  if (/code|coding|program|debug|bug|fix|repair|patch|refactor|implement|repository|github|software|api/.test(value)) found.push("coding", "github");
   if (/analy[sz]|data|metric|evaluate|audit|review|risk|test|verify/.test(value)) found.push("analysis");
   if (/write|draft|document|report|summari[sz]|content|note|explain/.test(value)) found.push("writing");
   if (/android|phone|device|mobile|permission|app/.test(value)) found.push("android");
@@ -174,6 +174,10 @@ export function assignSubtasksToAgents(
   for (const subtask of subtasks) {
     const ranked = enabled.map((agent) => ({ agent, ...scoreAgent(agent, subtask) }))
       .sort((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name));
+    const specialized = subtask.requiredCapabilities.some((capability) => capability !== "general");
+    if (specialized && ranked[0].score <= 1) {
+      return { ok: false, error: "No enabled Agent matches the required capabilities for subtask: " + subtask.title };
+    }
     const distinct = ranked.find((candidate) => !used.has(candidate.agent.id));
     const chosen = distinct ?? ranked[0];
     used.add(chosen.agent.id);
