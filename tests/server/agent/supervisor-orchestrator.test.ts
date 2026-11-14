@@ -93,3 +93,19 @@ test("Stage 2 self-test reports every diagnostic check as passed", () => {
   assert.equal(results.length, 5);
   assert.ok(results.every((item) => item.status === "passed"));
 });
+
+
+test("role labels alone never qualify an Agent without a matching registered tool", () => {
+  const labelOnly = [{
+    id: "label-only",
+    name: "Research Agent",
+    description: "Web research",
+    role: "Research analyst",
+    allowedTools: [],
+    enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "research", title: "Research", objective: "Research official sources", requiredCapabilities: ["research", "web"] },
+  ], labelOnly);
+  assert.equal(result.ok, false);
+});
