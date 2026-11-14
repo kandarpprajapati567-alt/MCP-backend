@@ -16,7 +16,8 @@ export function inspectExecutionEvidence(value: unknown): ExecutionEvidenceCheck
   }
 
   for (const item of value) {
-    if (!isRecord(item) || typeof item.toolId !== "string" || !("result" in item)) {
+    if (!isRecord(item) || typeof item.toolId !== "string" || !("result" in item) ||
+        item.result === null || item.result === undefined) {
       return {
         ok: false,
         code: "AGENT_NO_EXECUTION_EVIDENCE",
@@ -39,11 +40,19 @@ export function inspectExecutionEvidence(value: unknown): ExecutionEvidenceCheck
       };
     }
     if (isRecord(result) && typeof result.status === "string" &&
-        ["failed", "cancelled", "expired"].includes(result.status)) {
+        ["failed", "cancelled", "expired", "error"].includes(result.status.toLowerCase())) {
       return {
         ok: false,
         code: "AGENT_TOOL_EXECUTION_FAILED",
         message: "At least one device tool did not complete successfully.",
+      };
+    }
+    if (isRecord(result) && result.status === "completed" &&
+        "result" in result && (result.result === null || result.result === undefined)) {
+      return {
+        ok: false,
+        code: "AGENT_NO_EXECUTION_EVIDENCE",
+        message: "A device tool completed without returning an evidence payload.",
       };
     }
   }
