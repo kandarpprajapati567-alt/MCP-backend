@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StageTwoSupervisor } from "@/components/dashboard/StageTwoSupervisor";
 
 type Agent = {
   id: string;
@@ -489,6 +490,8 @@ export default function AgentLabPage() {
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Registered tools</p><p className="mt-2 text-2xl font-semibold text-white">{registeredCount}</p></div>
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Recent tasks</p><p className="mt-2 text-2xl font-semibold text-white">{tasks.length}</p></div>
           </section>
+
+          <StageTwoSupervisor token={token} agents={agents.map((agent) => ({ id: agent.id, name: agent.name, enabled: agent.enabled }))} />
 
           <section className="space-y-4 rounded-2xl border border-border bg-zinc-950/70 p-5">
             <div><h2 className="font-semibold text-white">Run an Agent test</h2><p className="mt-1 text-xs text-zinc-500">This calls the same production Agent task pipeline: planning, policy validation, tools, synthesis and persistence.</p></div>
