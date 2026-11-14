@@ -42,8 +42,7 @@ export function evaluateSafeAgentTaskRetry(input: AgentTaskRetryInput): AgentTas
   if (input.status !== "failed") return { allowed: false, reason: "NOT_FAILED" };
   if (input.cancellationRequestedAt !== null && input.cancellationRequestedAt !== undefined &&
       input.cancellationRequestedAt !== "") return { allowed: false, reason: "CANCELLED" };
-  if (input.failedStage !== "planning" ||
-      !["AGENT_EXECUTION_FAILED", "AGENT_WORKER_INTERRUPTED"].includes(String(input.errorCode))) {
+  if (input.failedStage !== "planning" || input.errorCode !== "AGENT_EXECUTION_FAILED") {
     return { allowed: false, reason: "UNSAFE_FAILURE" };
   }
   if (input.plan !== null && input.plan !== undefined) return { allowed: false, reason: "PLAN_ALREADY_CREATED" };

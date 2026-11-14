@@ -16,7 +16,7 @@ const safe = {
 
 test("permits retries only for side-effect-free planning failures", () => {
   assert.deepEqual(evaluateSafeAgentTaskRetry(safe), { allowed: true, nextAttempt: 1 });
-  assert.deepEqual(evaluateSafeAgentTaskRetry({ ...safe, errorCode: "AGENT_WORKER_INTERRUPTED" }), { allowed: true, nextAttempt: 1 });
+  assert.deepEqual(evaluateSafeAgentTaskRetry({ ...safe, errorCode: "AGENT_WORKER_INTERRUPTED" }), { allowed: false, reason: "UNSAFE_FAILURE" });
 });
 
 test("refuses active, cancelled and non-planning failures", () => {

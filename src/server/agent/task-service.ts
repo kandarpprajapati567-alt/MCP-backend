@@ -288,6 +288,7 @@ async function executeAgentTaskRecord(
           modelPreference: agent.modelPreference,
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
+    assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
     const result = synthesis.route.providerId !== "mock"
       ? guardSynthesisAnswer(synthesis.result.text, results)
       : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
