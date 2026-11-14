@@ -5,6 +5,7 @@ import type { AIGenerationRequest, AIProviderCapability } from "../providers/typ
 import type { AgentProviderPreference } from "@/server/agent/definition-schema";
 import { createRuntimeProviderRegistry } from "../providers/runtime-registry";
 import { executeWorkflow, type ProviderAttemptObservation } from "./executor";
+import { selectAgentExecutionRoute } from "./agent-provider-policy";
 import type { AIWorkflow, ModelRoutePolicy, ProviderRegistry } from "./types";
 
 const DEFAULT_MODELS: Record<string, string> = {
@@ -79,27 +80,6 @@ export async function executeUserWorkflow(
   return executeWorkflow(workflow, policy, providers, request, onAttempt);
 }
 
-
-export function selectAgentExecutionRoute(
-  preference: AgentProviderPreference,
-  modelPreference: string | null,
-  basePolicy: ModelRoutePolicy,
-  availableProviders: readonly string[],
-): { providerId: "mock" | "openrouter"; model: string } {
-  const requestedProvider = preference === "auto" ? basePolicy.primaryProvider : preference;
-  const requestedModel = modelPreference?.trim() ||
-    (requestedProvider === basePolicy.primaryProvider
-      ? basePolicy.primaryModel
-      : DEFAULT_MODELS[requestedProvider] ?? DEFAULT_MODELS.mock);
-
-  // The personal deployment is zero-budget: only an explicitly selected
-  // OpenRouter model marked :free may use a remote inference provider.
-  if (requestedProvider === "openrouter" && requestedModel.includes("/") && requestedModel.endsWith(":free") && !/\s/.test(requestedModel) &&
-      availableProviders.includes("openrouter")) {
-    return { providerId: "openrouter", model: requestedModel };
-  }
-  return { providerId: "mock", model: DEFAULT_MODELS.mock };
-}
 
 export async function executeAgentWorkflow(
   userId: string,
