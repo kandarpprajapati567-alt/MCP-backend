@@ -100,7 +100,7 @@ function inferCapabilities(text: string): string[] {
 }
 
 export function buildFallbackSupervisorPlan(goal: string): SupervisorPlan {
-  const clean = goal.trim().replace(/\s+/g, " ");
+  const clean = goal.trim().replace(/[^\S\n]+/g, " ").replace(/\n{2,}/g, "\n");
   const staged = clean.replace(
     /\s+and\s+(?=(?:research|analy[sz]e|write|draft|implement|build|create|prepare|compare|review|test|verify|summari[sz]e|find|investigate|evaluate)\b)/gi,
     "; ",
@@ -108,9 +108,10 @@ export function buildFallbackSupervisorPlan(goal: string): SupervisorPlan {
   const parts = staged
     .split(/\s*(?:\band then\b|\bthen\b|;|\n)\s*/i)
     .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-  const objectives = parts.length ? parts : [clean];
+    .filter(Boolean);
+  const objectives = parts.length > 3
+    ? [...parts.slice(0, 2), parts.slice(2).join("; ")]
+    : parts.length ? parts : [clean];
   return {
     goal: clean.slice(0, 500),
     summary: objectives.length > 1
@@ -129,28 +130,29 @@ function profileText(agent: AssignableAgent): string {
   return [agent.name, agent.description, agent.role].join(" ").toLowerCase();
 }
 
-function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score: number; reasons: string[] } {
+function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score: number; reasons: string[]; capabilityMatch: boolean } {
   const profile = profileText(agent);
   const tools = agent.allowedTools.map((tool) => tool.toLowerCase());
   let score = 1;
+  let capabilityMatch = false;
   const reasons: string[] = [];
   const hasTool = (pattern: RegExp) => tools.some((tool) => pattern.test(tool));
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; reasons.push("research/search tools"); }
-      if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
+      if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
+      if (/research|web|search|analyst/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("research role"); }
     } else if (capability === "coding" || capability === "github") {
-      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; reasons.push("development/repository tools"); }
-      if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
+      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
+      if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("engineering role"); }
     } else if (capability === "analysis") {
-      if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; reasons.push("analysis tools"); }
-      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
+      if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
+      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("analysis role"); }
     } else if (capability === "writing") {
-      if (hasTool(/text\.|document|notes/)) { score += 3; reasons.push("writing tools"); }
-      if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
+      if (hasTool(/text\.|document|notes/)) { score += 3; capabilityMatch = true; reasons.push("writing tools"); }
+      if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("writing role"); }
     } else if (capability === "android") {
-      if (hasTool(/device\.|android\.|mobile/)) { score += 6; reasons.push("Android/device tools"); }
-      if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
+      if (hasTool(/device\.|android\.|mobile/)) { score += 6; capabilityMatch = true; reasons.push("Android/device tools"); }
+      if (/android|mobile|device/.test(profile)) { score += 4; capabilityMatch = true; reasons.push("Android/device role"); }
     } else if (capability === "general") {
       score += 1;
     }
@@ -159,7 +161,7 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
   const profileWords = new Set(profile.match(/[a-z]{4,}/g) ?? []);
   const overlap = [...new Set(words)].filter((word) => profileWords.has(word)).length;
   if (overlap) { score += Math.min(3, overlap); reasons.push("objective/profile match"); }
-  return { score, reasons };
+  return { score, reasons, capabilityMatch };
 }
 
 export function assignSubtasksToAgents(
@@ -175,11 +177,12 @@ export function assignSubtasksToAgents(
     const ranked = enabled.map((agent) => ({ agent, ...scoreAgent(agent, subtask) }))
       .sort((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name));
     const specialized = subtask.requiredCapabilities.some((capability) => capability !== "general");
-    if (specialized && ranked[0].score <= 1) {
+    const eligible = specialized ? ranked.filter((candidate) => candidate.capabilityMatch) : ranked;
+    if (!eligible.length) {
       return { ok: false, error: "No enabled Agent matches the required capabilities for subtask: " + subtask.title };
     }
-    const distinct = ranked.find((candidate) => !used.has(candidate.agent.id));
-    const chosen = distinct ?? ranked[0];
+    const distinct = eligible.find((candidate) => !used.has(candidate.agent.id));
+    const chosen = distinct ?? eligible[0];
     used.add(chosen.agent.id);
     assignments.push({
       subtaskId: subtask.id,
