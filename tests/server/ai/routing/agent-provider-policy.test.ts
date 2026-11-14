@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectAgentExecutionRoute } from "../../../../src/server/ai/routing/runtime-executor";
+import { selectAgentExecutionRoute } from "../../../../src/server/ai/routing/agent-provider-policy";
 
 const basePolicy = {
   primaryProvider: "openrouter",
