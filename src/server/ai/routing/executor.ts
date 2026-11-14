@@ -75,7 +75,9 @@ export async function executeWorkflow(
         latencyMs: Math.min(300000, Math.max(0, Date.now() - startedAt)),
         errorCode: cause.code,
       };
-      if (!cause.retryable) throw cause;
+      const hasMockFallback = orderedRoutes.slice(orderedRoutes.indexOf(route) + 1)
+        .some((candidate) => candidate.providerId === "mock");
+      if (!cause.retryable && !hasMockFallback) throw cause;
       lastRetryableError = cause;
     } finally {
       try { onAttempt?.(observation); } catch { /* Monitoring must not affect generation. */ }

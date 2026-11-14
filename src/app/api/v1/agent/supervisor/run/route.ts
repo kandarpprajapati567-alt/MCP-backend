@@ -70,7 +70,13 @@ export async function POST(request: Request) {
       executionMode: "supervisor_planned_capability_routed_parallel_queue",
       limits: { maxSubtasks: 3, workerConcurrency: 3 },
     }, status === "completed" ? 200 : status === "queued" ? 202 : 207);
-  } catch {
-    return json({ error: "Supervisor could not dispatch this goal. No unverified assignment was reported as successful." }, 503);
+  } catch (cause) {
+    const diagnostic = safeAgentFailureMessage(cause);
+    console.error("[supervisor] Dispatch failed:", diagnostic);
+    return json({
+      error: diagnostic,
+      code: "SUPERVISOR_DISPATCH_FAILED",
+      message: "No unverified assignment was reported as successful. Review the Agent registry and server diagnostics, then retry.",
+    }, 503);
   }
 }

@@ -30,3 +30,27 @@ test("does not report a tool task as successful when the Agent has not been assi
 test("asks for source text instead of processing the whole instruction", () => {
   assert.throws(() => buildLocalAgentPlan("Count words", agent(["text.word_count"])), /Add the text to process/);
 });
+
+
+test("local research planner emits only the allow-listed web search tool", () => {
+  const researchAgent = agent(["web.search"]);
+  const plan = buildLocalAgentPlan(
+    "Research the official Render documentation for deploying a Next.js application.",
+    researchAgent,
+  );
+  assert.deepEqual(plan.toolCalls, [{
+    id: "call-1",
+    toolId: "web.search",
+    arguments: {
+      query: "Research the official Render documentation for deploying a Next.js application.",
+      maxResults: 5,
+    },
+  }]);
+});
+
+test("local research planner rejects Agents without web search permission", () => {
+  assert.throws(
+    () => buildLocalAgentPlan("Research official Render documentation", agent(["text.word_count"])),
+    /cannot use web.search/,
+  );
+});

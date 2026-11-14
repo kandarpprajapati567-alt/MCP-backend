@@ -5,6 +5,7 @@ import type { AIGenerationRequest, AIProviderCapability } from "../providers/typ
 import type { AgentProviderPreference } from "@/server/agent/definition-schema";
 import { createRuntimeProviderRegistry } from "../providers/runtime-registry";
 import { executeWorkflow, type ProviderAttemptObservation } from "./executor";
+import { selectAgentExecutionRoute } from "./agent-provider-policy";
 import type { AIWorkflow, ModelRoutePolicy, ProviderRegistry } from "./types";
 
 const DEFAULT_MODELS: Record<string, string> = {
@@ -89,24 +90,19 @@ export async function executeAgentWorkflow(
 ) {
   const providers = await createRuntimeProviderRegistry(userId);
   const basePolicy = await getUserWorkflowPolicy(userId, workflow, providers);
-  const providerId = preferences.providerPreference === "auto"
-    ? basePolicy.primaryProvider
-    : preferences.providerPreference;
-  if (!providers[providerId]) {
-    throw new Error("The Agent's selected AI provider is not configured.");
-  }
-
-  const fallbackProviders = [...new Set([
-    ...basePolicy.fallbackProviders.filter((id) => id !== providerId),
-    ...(providerId === "mock" ? [] : ["mock"]),
-  ])];
+  const selected = selectAgentExecutionRoute(
+    preferences.providerPreference,
+    preferences.modelPreference,
+    basePolicy,
+    Object.keys(providers),
+  );
+  const providerId = selected.providerId;
   const policy: ModelRoutePolicy = {
     ...basePolicy,
     primaryProvider: providerId,
-    primaryModel: providerId === "mock" ? DEFAULT_MODELS.mock :
-      preferences.modelPreference?.trim() ||
-      (providerId === basePolicy.primaryProvider ? basePolicy.primaryModel : DEFAULT_MODELS[providerId]),
-    fallbackProviders,
+    primaryModel: selected.model,
+    fallbackProviders: providerId === "openrouter" ? ["mock"] : [],
+    ...(providerId === "openrouter" ? { fallbackModel: DEFAULT_MODELS.mock } : {}),
   };
   return executeWorkflow(workflow, policy, providers, request, onAttempt);
 }

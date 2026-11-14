@@ -8,8 +8,9 @@ import type { ProviderRegistry } from "../routing/types";
 
 /**
  * Builds a request-scoped provider registry for one authenticated user.
- * Only fixed, supported adapters are created; credentials never leave this
- * server-only module and callers cannot provide provider URLs or adapter code.
+ * The deterministic Mock provider must remain available even when an optional
+ * encrypted provider credential is absent, stale, or cannot be decrypted.
+ * Credentials never leave this server-only module.
  */
 export async function createRuntimeProviderRegistry(
   userId: string,
@@ -22,16 +23,21 @@ export async function createRuntimeProviderRegistry(
     mock: createMockAIProvider(),
   };
 
-  const [openaiKey, openrouterKey] = await Promise.all([
+  const [openaiResult, openrouterResult] = await Promise.allSettled([
     loadProviderSecret(userId, "openai"),
     loadProviderSecret(userId, "openrouter"),
   ]);
 
-  if (openaiKey) {
-    providers.openai = new OpenAICompatibleProvider("openai", openaiKey);
+  if (openaiResult.status === "fulfilled" && openaiResult.value) {
+    providers.openai = new OpenAICompatibleProvider("openai", openaiResult.value);
+  } else if (openaiResult.status === "rejected") {
+    console.warn("[ai-runtime] OpenAI credential unavailable; deterministic Mock remains enabled.");
   }
-  if (openrouterKey) {
-    providers.openrouter = new OpenAICompatibleProvider("openrouter", openrouterKey);
+
+  if (openrouterResult.status === "fulfilled" && openrouterResult.value) {
+    providers.openrouter = new OpenAICompatibleProvider("openrouter", openrouterResult.value);
+  } else if (openrouterResult.status === "rejected") {
+    console.warn("[ai-runtime] OpenRouter credential unavailable; deterministic Mock remains enabled.");
   }
 
   return Object.freeze(providers);

@@ -4,7 +4,7 @@ export type LocalAgentPlan = {
   version: 1;
   goal: string;
   steps: Array<{ id: string; objective: string; expectedOutcome: string }>;
-  toolCalls: Array<{ id: string; toolId: string; arguments: { text: string } }>;
+  toolCalls: Array<{ id: string; toolId: string; arguments: Record<string, unknown> }>;
 };
 
 function extractInput(task: string, toolId: string): string {
@@ -33,6 +33,23 @@ function extractInput(task: string, toolId: string): string {
 
 export function buildLocalAgentPlan(task: string, agent?: AgentDefinitionInput): LocalAgentPlan {
   const lower = task.toLowerCase();
+  const requestsResearch = /\b(research|search|find|investigate|look up|latest|documentation|sources?)\b/i.test(lower);
+  if (requestsResearch) {
+    if (agent && (!agent.allowedTools.includes("web.search") || agent.maxToolCalls === 0)) {
+      throw new Error("This Agent cannot use web.search. Assign the approved web.search tool in Agent Manager, then retry.");
+    }
+    return {
+      version: 1,
+      goal: task.slice(0, 500),
+      steps: [{
+        id: "step-1",
+        objective: "Search public web sources for the user's stated research objective.",
+        expectedOutcome: "A bounded list of source titles, URLs and excerpts.",
+      }],
+      toolCalls: [{ id: "call-1", toolId: "web.search", arguments: { query: task.slice(0, 500), maxResults: 5 } }],
+    };
+  }
+
   const toolId = lower.includes("word count") || lower.includes("count word")
     ? "text.word_count"
     : lower.includes("keyword")

@@ -188,6 +188,10 @@ async function executeAgentTaskRecord(
     if (canRunInParallel) await executeToolCallsWithConcurrency(plan.toolCalls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
     else await executeToolCallsSequentially(plan.toolCalls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
 
+    if (results.some((item) => isRecord(item.result) && item.result.ok === false)) {
+      throw new Error("One or more registered tool calls failed.");
+    }
+
     await assertTaskNotCancelled(admin, id);
     if (pendingJobs.length) {
       await assertTaskNotCancelled(admin, id);
@@ -276,8 +280,10 @@ async function executeAgentTaskRecord(
     const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);
+    console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
     try {
-      await setTask(admin, id, { status: "failed", error_code: code });
+      const failedAt = new Date().toISOString();
+      await setTask(admin, id, { status: "failed", error_code: code, completed_at: failedAt });
       await event(admin, id, "task.failed", { code, stage: failedStage, message });
     }
     catch { /* Preserve the original task failure. */ }
