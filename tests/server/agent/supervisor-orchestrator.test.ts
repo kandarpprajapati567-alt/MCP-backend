@@ -44,6 +44,14 @@ test("capability assignment routes research and coding to matching specialists",
   }
 });
 
+test("specialized tasks are not dispatched to an unrelated Agent", () => {
+  const genericOnly = [{ id: "general", name: "General Agent", description: "General assistant", role: "Assistant", allowedTools: [], enabled: true }];
+  const result = assignSubtasksToAgents([
+    { id: "code", title: "Fix code", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
+  ], genericOnly);
+  assert.equal(result.ok, false);
+});
+
 test("disabled agents are excluded and no-enabled-agent state is explicit", () => {
   const result = assignSubtasksToAgents([{ id: "one", title: "Research", objective: "Research", requiredCapabilities: ["research"] }], agents);
   assert.equal(result.ok, true);
