@@ -19,6 +19,14 @@ test("fallback planner splits explicit independent workstreams within the three-
   assert.match(plan.subtasks[1].objective, /Analyze/);
 });
 
+test("fallback planner separates clear action clauses joined by and", () => {
+  const plan = buildFallbackSupervisorPlan("Research official docs and analyze the risks and write a report");
+  assert.equal(plan.subtasks.length, 3);
+  assert.match(plan.subtasks[0].objective, /Research/);
+  assert.match(plan.subtasks[1].objective, /analyze/i);
+  assert.match(plan.subtasks[2].objective, /write/i);
+});
+
 test("supervisor schema rejects unsupported capability labels", () => {
   const result = parseSupervisorPlan({
     goal: "Test", summary: "Plan", subtasks: [{ id: "one", title: "One", objective: "Do work", requiredCapabilities: ["root"] }],
