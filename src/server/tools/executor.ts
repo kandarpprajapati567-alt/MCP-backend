@@ -4,6 +4,7 @@ import { executeRegisteredTool } from "@/server/tools/registry";
 import { getProviderAdapter, listProviderAdapters } from "@/server/models/catalog";
 import { listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile } from "@/server/tools/github";
 import { searchWeb } from "@/server/tools/web-search";
+import type { RemoteMcpInvocationContext } from "@/server/mcp/remote-audit";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
