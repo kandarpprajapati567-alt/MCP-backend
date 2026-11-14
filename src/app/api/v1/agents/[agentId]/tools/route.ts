@@ -38,7 +38,15 @@ export async function GET(request: Request, context: Context) {
 
     return json({
       agentId,
-      ...buildAgentToolAccessReport(registry.tools, allowedTools),
+      ...buildAgentToolAccessReport(registry.tools.map((tool) => ({
+        id: tool.id,
+        description: tool.description,
+        permission: tool.permission,
+        sideEffect: tool.sideEffect,
+        target: tool.target,
+        available: tool.available,
+        availabilityNote: tool.availabilityNote,
+      })), allowedTools),
       sources: registry.sources,
       policy: "Allowlist assignment is not a permission grant. Runtime validation, explicit approval and Android device-side OS permissions and consent remain mandatory.",
       availabilityPolicy: "Availability describes registry state or a recent device heartbeat. It does not guarantee external provider credentials or remote network reachability; those are checked during invocation.",
