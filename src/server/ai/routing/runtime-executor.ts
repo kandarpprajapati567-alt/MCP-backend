@@ -94,7 +94,7 @@ export function selectAgentExecutionRoute(
 
   // The personal deployment is zero-budget: only an explicitly selected
   // OpenRouter model marked :free may use a remote inference provider.
-  if (requestedProvider === "openrouter" && requestedModel.includes("/") && requestedModel.endsWith(":free") && !/\\s/.test(requestedModel) &&
+  if (requestedProvider === "openrouter" && requestedModel.includes("/") && requestedModel.endsWith(":free") && !/\s/.test(requestedModel) &&
       availableProviders.includes("openrouter")) {
     return { providerId: "openrouter", model: requestedModel };
   }
