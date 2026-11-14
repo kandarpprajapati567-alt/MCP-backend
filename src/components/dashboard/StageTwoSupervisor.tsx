@@ -93,6 +93,34 @@ export function StageTwoSupervisor({ token, agents }: Props) {
     } finally { setTesting(false); }
   }
 
+  async function runLiveAcceptanceTest() {
+    const acceptanceGoal = "Count words in: alpha beta gamma delta";
+    setGoal(acceptanceGoal);
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const response = await request(
+        "/api/v1/agent/supervisor/run",
+        "POST",
+        { goal: acceptanceGoal },
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
+      const data = await response.json() as DispatchResult;
+      setResult(data);
+      if (!response.ok && response.status !== 207 && response.status !== 202) {
+        setError(data.error ?? "Live execution acceptance test could not be queued.");
+        return;
+      }
+      if (data.status === "failed" || data.status === "partial") {
+        setError(data.error ?? "The live acceptance test was only partially queued.");
+      } else {
+        setError("");
+      }
+      void monitorExecution(data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Live execution acceptance test failed.");
+    } finally { setBusy(false); }
+  }
+
   async function dispatchGoal(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setError(""); setResult(null);
@@ -133,6 +161,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
         <div className="flex flex-wrap gap-2">
           <button type="submit" disabled={busy || !goal.trim() || agents.filter((agent) => agent.enabled).length === 0} className="rounded-xl bg-violet-300 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Planning & assigning…" : "Run Supervisor"}</button>
           <button type="button" disabled={testing || busy} onClick={() => void runTests()} className="rounded-xl border border-cyan-700/70 bg-cyan-950/30 px-5 py-2.5 text-sm font-semibold text-cyan-100 disabled:opacity-40">{testing ? "Testing Stage 2…" : "Test Stage 2"}</button>
+          <button type="button" disabled={busy || testing} onClick={() => void runLiveAcceptanceTest()} className="rounded-xl border border-emerald-700/70 bg-emerald-950/30 px-5 py-2.5 text-sm font-semibold text-emerald-100 disabled:opacity-40">Run Live Execution Test</button>
         </div>
       </form>
 
@@ -154,7 +183,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       </div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
-      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. The test button runs deterministic module checks plus live read-only Agent registry and queue checks; it uses no AI credits and creates no tasks.</p>
+      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. Test Stage 2 runs deterministic module checks plus live read-only Agent registry and queue checks. Run Live Execution Test creates one deterministic word-count task, routes it through the Supervisor and persistent worker, and uses the Mock provider with no AI credits.</p>
     </section>
   );
 }
