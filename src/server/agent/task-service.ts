@@ -17,6 +17,21 @@ import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
+import {
+  AgentTaskBudgetExceededError,
+  assertAgentTaskPlanWithinBudget,
+  assertAgentTaskTimeBudget,
+  assertAgentTaskToolResultWithinBudget,
+  getAgentTaskJsonByteLength,
+  resolveAgentTaskBudget,
+} from "@/server/agent/task-budget";
+import {
+  AGENT_TASK_RETRY_PREFIX,
+  createAgentTaskRetryKey,
+  evaluateSafeAgentTaskRetry,
+  MAX_AGENT_TASK_RETRIES,
+  parseAgentTaskRetryKey,
+} from "@/server/agent/task-retry-policy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -114,7 +129,12 @@ async function executeAgentTaskRecord(
   id: string,
   task: string,
   agent: ({ id: string } & AgentDefinitionInput) | null,
+  retryInfo?: { rootTaskId: string; attempt: number },
 ) {
+  const budget = resolveAgentTaskBudget(agent ?? undefined);
+  const startedAt = Date.now();
+  let totalToolResultBytes = 0;
+  let toolResultBudgetExceeded = false;
   const heartbeat = setInterval(() => {
     void (async () => {
       try {
@@ -130,7 +150,9 @@ async function executeAgentTaskRecord(
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
-    await event(admin, id, "task.created");
+    await event(admin, id, "task.created", retryInfo
+      ? { retryOf: retryInfo.rootTaskId, attempt: retryInfo.attempt, retryPolicy: "planning-only" }
+      : {});
     await assertTaskNotCancelled(admin, id);
     await setTask(admin, id, { status: "planning" });
     await assertTaskNotCancelled(admin, id);
@@ -143,8 +165,8 @@ async function executeAgentTaskRecord(
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
     await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
-    if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
-        plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId)))) {
+    assertAgentTaskPlanWithinBudget(plan, budget);
+    if (agent && plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId))) {
       throw new Error("Agent execution policy rejected the generated plan.");
     }
     await setTask(admin, id, { plan, status: "executing" });
@@ -153,6 +175,14 @@ async function executeAgentTaskRecord(
       toolCalls: plan.toolCalls.length,
       deviceToolsAvailable: deviceTools.length,
       planner: planned ? "configured-workflow-policy" : "local-safe-planner",
+      budget: {
+        maxSteps: budget.maxSteps,
+        maxToolCalls: budget.maxToolCalls,
+        maxExecutionMs: budget.maxExecutionMs,
+        maxToolResultBytes: budget.maxToolResultBytes,
+        maxTotalToolResultBytes: budget.maxTotalToolResultBytes,
+        maxSynthesisTokens: budget.maxSynthesisTokens,
+      },
       ...(agent ? { agentId: agent.id, agentName: agent.name, maxSteps: agent.maxSteps, maxToolCalls: agent.maxToolCalls } : {}),
     });
     await event(admin, id, "task.executing");
@@ -177,17 +207,40 @@ async function executeAgentTaskRecord(
     const shouldCaptureFailure = (call: typeof plan.toolCalls[number]) => !deviceTools.some((tool) => tool.id === call.toolId);
     const persistOutcome = async (call: typeof plan.toolCalls[number], execution: ToolCallExecution) => {
       if (deviceTools.some((tool) => tool.id === call.toolId)) return;
-      results.push({ callId: call.id, toolId: call.toolId, result: execution.ok ? execution.result : { ok: false, error: execution.error } });
-      await setTask(admin, id, { tool_results: results });
-      if (execution.ok) await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-      else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
+      if (toolResultBudgetExceeded) {
+        results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Task result budget was exhausted before this output could be retained." } });
+        await setTask(admin, id, { tool_results: results });
+        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Task result budget was exhausted." });
+        return;
+      }
+      const value = execution.ok ? execution.result : { ok: false, error: execution.error };
+      try {
+        const bytes = getAgentTaskJsonByteLength(value);
+        assertAgentTaskToolResultWithinBudget(bytes, totalToolResultBytes, budget);
+        totalToolResultBytes += bytes;
+        results.push({ callId: call.id, toolId: call.toolId, result: value });
+        await setTask(admin, id, { tool_results: results });
+        if (execution.ok) await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
+        else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
+      } catch (cause) {
+        if (!(cause instanceof AgentTaskBudgetExceededError)) throw cause;
+        toolResultBudgetExceeded = true;
+        results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Tool output exceeded the configured task result budget." } });
+        await setTask(admin, id, { tool_results: results });
+        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Tool output exceeded the configured task result budget." });
+      }
     };
-    const beforeEach = async () => assertTaskNotCancelled(admin, id);
+    const beforeEach = async () => {
+      await assertTaskNotCancelled(admin, id);
+      if (toolResultBudgetExceeded) throw new AgentTaskBudgetExceededError("tool results");
+      assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
+    };
     const parallelSafeIds = new Set<string>(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
     const canRunInParallel = plan.toolCalls.length > 1 && plan.toolCalls.every((call) => parallelSafeIds.has(call.toolId) && !deviceTools.some((tool) => tool.id === call.toolId));
     if (canRunInParallel) await executeToolCallsWithConcurrency(plan.toolCalls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
     else await executeToolCallsSequentially(plan.toolCalls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
 
+    if (toolResultBudgetExceeded) throw new AgentTaskBudgetExceededError("tool results");
     if (results.some((item) => isRecord(item.result) && item.result.ok === false)) {
       throw new Error("One or more registered tool calls failed.");
     }
@@ -217,6 +270,7 @@ async function executeAgentTaskRecord(
 
     await assertTaskNotCancelled(admin, id);
     failedStage = "synthesis";
+    assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.synthesizing");
@@ -226,7 +280,7 @@ async function executeAgentTaskRecord(
         { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
-      maxOutputTokens: 1800,
+      maxOutputTokens: budget.maxSynthesisTokens,
     };
     const synthesis = agent
       ? await executeAgentWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest, {
@@ -277,8 +331,10 @@ async function executeAgentTaskRecord(
       if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
     }
-    const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
-      ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
+    const code = error instanceof AgentTaskBudgetExceededError
+      ? "AGENT_BUDGET_EXCEEDED"
+      : error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
+        ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);
     console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
     try {
@@ -301,6 +357,9 @@ async function executeAgentTaskRecord(
 export async function submitAgentTask(taskInput: string, agentId?: string, idempotencyKey?: string, options: { deferExecution?: boolean } = {}) {
   if (typeof taskInput !== "string" || !taskInput.trim() || taskInput.length > 4000) {
     throw new Error("Task must be 1–4000 characters.");
+  }
+  if (idempotencyKey?.startsWith(AGENT_TASK_RETRY_PREFIX)) {
+    throw new Error("RESERVED_IDEMPOTENCY_KEY_PREFIX");
   }
   const task = taskInput.trim();
   const admin = createAdminClient();
@@ -374,6 +433,135 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
   return executeAgentTaskRecord(admin, id, task, agent);
 }
 
+export async function retryAgentTask(taskId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+    throw new Error("INVALID_TASK_ID");
+  }
+  const admin = createAdminClient();
+  const { data: task, error: taskError } = await admin.from("agent_tasks")
+    .select("id,status,task,plan,tool_results,error_code,agent_definition_id,agent_snapshot,cancellation_requested_at,idempotency_key")
+    .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle();
+  if (taskError) throw new Error("TASK_RETRY_UNAVAILABLE");
+  if (!task) return null;
+
+  const parsedRetryKey = parseAgentTaskRetryKey(task.idempotency_key);
+  const rootTaskId = parsedRetryKey?.rootTaskId ?? task.id;
+  const [retryResult, failureResult, activityResult, jobResult] = await Promise.all([
+    admin.from("agent_tasks").select("id,status,created_at,idempotency_key")
+      .eq("owner_id", PERSONAL_OWNER_ID)
+      .like("idempotency_key", AGENT_TASK_RETRY_PREFIX + rootTaskId + ":%")
+      .order("created_at", { ascending: false })
+      .limit(MAX_AGENT_TASK_RETRIES + 1),
+    admin.from("agent_task_events").select("payload,created_at")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", task.id)
+      .eq("event_type", "task.failed")
+      .order("created_at", { ascending: false }).limit(1),
+    admin.from("agent_task_events").select("id")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", task.id)
+      .in("event_type", ["tool.requested", "tool.claimed", "tool.completed", "tool.failed"])
+      .limit(1),
+    admin.from("agent_tool_jobs").select("id")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", task.id).limit(1),
+  ]);
+  if (retryResult.error || failureResult.error || activityResult.error || jobResult.error) {
+    throw new Error("TASK_RETRY_UNAVAILABLE");
+  }
+
+  const retries = retryResult.data ?? [];
+  const terminal = new Set(["completed", "failed", "cancelled"]);
+  const latestRetry = retries[0];
+  const latestAttemptId = latestRetry?.id ?? rootTaskId;
+  if (task.id !== latestAttemptId && latestRetry && !terminal.has(latestRetry.status)) {
+    const parsedLatest = parseAgentTaskRetryKey(latestRetry.idempotency_key);
+    return {
+      taskId: latestRetry.id as string,
+      status: latestRetry.status as string,
+      retryOf: task.id,
+      attempt: parsedLatest?.attempt ?? retries.length,
+      replayed: true,
+      message: "This safe retry is already queued or running; the existing task was returned.",
+    };
+  }
+
+  const failurePayload = failureResult.data?.[0]?.payload;
+  const failedStage = isRecord(failurePayload) && typeof failurePayload.stage === "string"
+    ? failurePayload.stage : null;
+  const decision = evaluateSafeAgentTaskRetry({
+    status: task.status,
+    errorCode: task.error_code,
+    failedStage,
+    plan: task.plan,
+    toolResults: task.tool_results,
+    cancellationRequestedAt: task.cancellation_requested_at,
+    hasToolActivity: (activityResult.data?.length ?? 0) > 0,
+    hasDeviceJobs: (jobResult.data?.length ?? 0) > 0,
+    retryCount: retries.length,
+    isLatestAttempt: task.id === latestAttemptId,
+    retryInProgress: retries.some((item) => !terminal.has(item.status)),
+  });
+  if (!decision.allowed) throw new Error("TASK_RETRY_" + decision.reason);
+
+  if (typeof task.agent_definition_id === "string") {
+    if (!isRecord(task.agent_snapshot)) throw new Error("TASK_RETRY_AGENT_SNAPSHOT_INVALID");
+    const snapshot = task.agent_snapshot;
+    const parsed = parseAgentDefinition({
+      name: snapshot.name,
+      description: typeof snapshot.description === "string" ? snapshot.description : "",
+      role: snapshot.role,
+      instructions: snapshot.instructions,
+      providerPreference: snapshot.providerPreference,
+      modelPreference: snapshot.modelPreference,
+      allowedTools: snapshot.allowedTools,
+      maxSteps: snapshot.maxSteps,
+      maxToolCalls: snapshot.maxToolCalls,
+      enabled: true,
+    });
+    if (!parsed.ok) throw new Error("TASK_RETRY_AGENT_SNAPSHOT_INVALID");
+  }
+
+  const retryKey = createAgentTaskRetryKey(rootTaskId, decision.nextAttempt);
+  const { data: created, error: createError } = await admin.from("agent_tasks").insert({
+    owner_id: PERSONAL_OWNER_ID,
+    status: "queued",
+    task: task.task,
+    idempotency_key: retryKey,
+    request_fingerprint: createAgentTaskRequestFingerprint(
+      String(task.task),
+      typeof task.agent_definition_id === "string" ? task.agent_definition_id : null,
+    ),
+    ...(typeof task.agent_definition_id === "string"
+      ? { agent_definition_id: task.agent_definition_id, agent_snapshot: task.agent_snapshot }
+      : {}),
+  }).select("id").single();
+
+  if (createError || !created) {
+    if (createError?.code === "23505") {
+      const { data: existing, error: existingError } = await admin.from("agent_tasks").select("id,status")
+        .eq("owner_id", PERSONAL_OWNER_ID).eq("idempotency_key", retryKey).maybeSingle();
+      if (!existingError && existing) {
+        return {
+          taskId: existing.id as string,
+          status: existing.status as string,
+          retryOf: task.id,
+          attempt: decision.nextAttempt,
+          replayed: true,
+          message: "This safe retry was already queued; the existing task was returned.",
+        };
+      }
+    }
+    throw new Error("TASK_RETRY_UNAVAILABLE");
+  }
+
+  return {
+    taskId: created.id as string,
+    status: "queued",
+    retryOf: task.id,
+    attempt: decision.nextAttempt,
+    replayed: false,
+    message: "A new task was queued from a planning-only failure. The original failed task remains unchanged.",
+  };
+}
+
 export async function processQueuedAgentTasks(limit = 3): Promise<number> {
   const admin = createAdminClient();
   const batchSize = Math.max(1, Math.min(3, Math.floor(limit)));
@@ -395,7 +583,7 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
       .eq("id", candidate.id)
       .eq("status", "queued")
       .is("cancellation_requested_at", null)
-      .select("id,task,agent_definition_id,agent_snapshot")
+      .select("id,task,agent_definition_id,agent_snapshot,idempotency_key")
       .maybeSingle();
     if (claimError) throw new Error("Agent task could not be claimed.");
     if (!claimed) return;
@@ -428,7 +616,14 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
       agent = { id: claimed.agent_definition_id, ...parsed.value };
     }
 
-    await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
+    const retryKey = parseAgentTaskRetryKey(claimed.idempotency_key);
+    await executeAgentTaskRecord(
+      admin,
+      claimed.id,
+      String(claimed.task),
+      agent,
+      retryKey ? { rootTaskId: retryKey.rootTaskId, attempt: retryKey.attempt } : undefined,
+    );
     processed += 1;
   }));
   return processed;

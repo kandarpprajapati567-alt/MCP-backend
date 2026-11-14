@@ -102,7 +102,8 @@ export async function POST(request: Request) {
     return json(result, status);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Unable to submit task.";
-    const status = message.startsWith("Task must") || message.includes("valid agent ID") ? 400
+    const status = message.startsWith("Task must") || message.includes("valid agent ID") ||
+      message === "RESERVED_IDEMPOTENCY_KEY_PREFIX" ? 400
       : message === "IDEMPOTENCY_KEY_REUSED" || message.includes("disabled") ? 409
         : message.includes("does not exist") ? 404 : 503;
     const publicMessage = message === "IDEMPOTENCY_KEY_REUSED"
