@@ -148,8 +148,8 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-violet-300">Stage 02 · Orchestration</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Supervisor Command</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">One goal in, bounded workstreams out. Supervisor plans, capability matching selects enabled specialists, and assigned tasks enter the existing persistent worker queue.</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">Team Workbench</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">Describe a goal once. The Supervisor chooses enabled specialists using their assigned tools, then sends work to the persistent task queue.</p>
         </div>
         <span className="rounded-full border border-violet-700/50 px-3 py-1 text-[10px] text-violet-200">{agents.filter((agent) => agent.enabled).length} enabled agents</span>
       </div>
@@ -159,13 +159,13 @@ export function StageTwoSupervisor({ token, agents }: Props) {
           <textarea required minLength={1} maxLength={4000} rows={4} value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Example: Research official Android background execution guidance; analyze how it affects our app; prepare an implementation brief." className="w-full rounded-xl border border-border bg-black/35 px-3 py-3 text-sm text-white" />
         </label>
         <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={busy || !goal.trim() || agents.filter((agent) => agent.enabled).length === 0} className="rounded-xl bg-violet-300 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Planning & assigning…" : "Run Supervisor"}</button>
-          <button type="button" disabled={testing || busy} onClick={() => void runTests()} className="rounded-xl border border-cyan-700/70 bg-cyan-950/30 px-5 py-2.5 text-sm font-semibold text-cyan-100 disabled:opacity-40">{testing ? "Testing Stage 2…" : "Test Stage 2"}</button>
-          <button type="button" disabled={busy || testing} onClick={() => void runLiveAcceptanceTest()} className="rounded-xl border border-emerald-700/70 bg-emerald-950/30 px-5 py-2.5 text-sm font-semibold text-emerald-100 disabled:opacity-40">Run Live Execution Test</button>
+          <button type="submit" disabled={busy || !goal.trim() || agents.filter((agent) => agent.enabled).length === 0} className="rounded-xl bg-violet-300 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Planning & assigning…" : "Run with Auto Team"}</button>
+          <button type="button" disabled={testing || busy} onClick={() => void runTests()} className="rounded-xl border border-cyan-700/70 bg-cyan-950/30 px-5 py-2.5 text-sm font-semibold text-cyan-100 disabled:opacity-40">{testing ? "Testing Stage 2…" : "Run diagnostics"}</button>
+          <button type="button" disabled={busy || testing} onClick={() => void runLiveAcceptanceTest()} className="rounded-xl border border-emerald-700/70 bg-emerald-950/30 px-5 py-2.5 text-sm font-semibold text-emerald-100 disabled:opacity-40">Try a real test task</button>
         </div>
       </form>
 
-      {testSummary && <div className="rounded-xl border border-border bg-black/25 p-3"><p className="text-xs font-semibold text-white">Stage 2 diagnostics · {testSummary}</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{tests.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg bg-black/25 p-2"><div><p className="text-xs text-zinc-200">{item.id.replace(/_/g, " ")}</p><p className="mt-1 text-[10px] text-zinc-500">{item.detail}</p></div><span className={item.status === "passed" ? "text-[10px] font-bold text-emerald-300" : "text-[10px] font-bold text-red-300"}>{item.status.toUpperCase()}</span></div>)}</div></div>}
+      {testSummary && <div className="rounded-xl border border-border bg-black/25 p-3"><p className="text-xs font-semibold text-white">System diagnostics · {testSummary}</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{tests.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg bg-black/25 p-2"><div><p className="text-xs text-zinc-200">{item.id.replace(/_/g, " ")}</p><p className="mt-1 text-[10px] text-zinc-500">{item.detail}</p></div><span className={item.status === "passed" ? "text-[10px] font-bold text-emerald-300" : "text-[10px] font-bold text-red-300"}>{item.status.toUpperCase()}</span></div>)}</div></div>}
 
       {result?.plan && <div className="space-y-3 rounded-xl border border-border bg-black/25 p-4">
         <div><p className="text-xs font-semibold text-white">Supervisor plan</p><p className="mt-1 text-xs text-zinc-400">{result.summary} · planner: {result.planner ?? "unknown"}</p></div>
@@ -183,7 +183,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       </div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
-      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. Test Stage 2 runs deterministic module checks plus live read-only Agent registry and queue checks. Run Live Execution Test creates one deterministic word-count task, routes it through the Supervisor and persistent worker, and uses the Mock provider with no AI credits.</p>
+      <p className="text-[10px] text-zinc-500">Auto Team is limited to three workstreams and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; otherwise it uses the zero-cost local planner. Diagnostics include live registry checks. The real test task uses deterministic text processing and Mock mode, with no AI credits.</p>
     </section>
   );
 }
