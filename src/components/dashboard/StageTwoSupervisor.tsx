@@ -100,7 +100,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       </div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
-      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Planning currently uses zero-cost deterministic local decomposition; semantic AI planning stays disabled until a verified free model is available. The test button runs deterministic module checks plus live read-only Agent registry and queue checks; it uses no AI credits and creates no tasks.</p>
+      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. The test button runs deterministic module checks plus live read-only Agent registry and queue checks; it uses no AI credits and creates no tasks.</p>
     </section>
   );
 }
