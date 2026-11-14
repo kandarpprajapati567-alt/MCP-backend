@@ -100,7 +100,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       </div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
-      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. AI planning uses a configured provider when available; otherwise explicit local task splitting is used. The test button runs deterministic module checks without AI credits or creating tasks.</p>
+      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Planning currently uses zero-cost deterministic local decomposition; semantic AI planning stays disabled until a verified free model is available. The test button runs deterministic module checks without AI credits or creating tasks.</p>
     </section>
   );
 }
