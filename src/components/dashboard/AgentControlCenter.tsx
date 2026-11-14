@@ -68,7 +68,7 @@ const templates: Template[] = [
     id: "research",
     name: "Research Specialist",
     role: "Research analyst",
-    description: "Finds and organizes information from connected research sources.",
+    description: "Finds and organizes information. Requires a connected Web Search (Tavily) integration.",
     instructions: "Research the user's request using only assigned, registered tools. Keep source URLs and distinguish retrieved evidence from assumptions. If a source tool is unavailable, say so clearly.",
     tools: ["web.search", "github.list_files", "github.read_file", "github.list_commits"],
     icon: "⌕",
