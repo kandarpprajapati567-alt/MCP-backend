@@ -32,6 +32,10 @@ export type AgentAssignment = {
   reason: string;
 };
 
+export function isExplicitFreePlannerModel(providerId: string, model: string): boolean {
+  return providerId === "openrouter" && /^[a-z0-9._-]+\\/[a-z0-9._-]+:free$/i.test(model.trim());
+}
+
 const CAPABILITIES = new Set(["research", "coding", "analysis", "writing", "android", "web", "github", "general"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
