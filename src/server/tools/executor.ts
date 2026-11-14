@@ -18,7 +18,7 @@ function escapeLike(value: string) {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-export async function executeBackendTool(name: string, args: Record<string, unknown>) {
+export async function executeBackendTool(name: string, args: Record<string, unknown>, context?: RemoteMcpInvocationContext) {
   if (name === "github.list_branches") return listGitHubBranches(args);
   if (name === "github.list_commits") return listGitHubCommits(args);
   if (name === "github.list_files") return listGitHubFiles(args);
