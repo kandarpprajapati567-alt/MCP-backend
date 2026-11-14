@@ -33,7 +33,7 @@ function extractInput(task: string, toolId: string): string {
 
 export function buildLocalAgentPlan(task: string, agent?: AgentDefinitionInput): LocalAgentPlan {
   const lower = task.toLowerCase();
-  const requestsResearch = /\\b(research|search|find|investigate|look up|latest|documentation|sources?)\\b/i.test(lower);
+  const requestsResearch = /\b(research|search|find|investigate|look up|latest|documentation|sources?)\b/i.test(lower);
   if (requestsResearch) {
     if (agent && (!agent.allowedTools.includes("web.search") || agent.maxToolCalls === 0)) {
       throw new Error("This Agent cannot use web.search. Assign the approved web.search tool in Agent Manager, then retry.");
