@@ -30,6 +30,7 @@ export function safeAgentFailureMessage(error: unknown): string {
     "GitHub rejected GITHUB_READ_TOKEN. Check that the token is valid and not expired.",
     "GitHub denied repository read access or the API rate limit was reached. Check token permissions.",
     "The requested file is too large or is not a supported text file.",
+    "Agent execution budget exceeded.",
     "One or more registered tool calls failed.",
     "Web Search connection could not be loaded.",
     "Web Search is not connected. Add a Tavily API key in Dashboard → Connections.",
