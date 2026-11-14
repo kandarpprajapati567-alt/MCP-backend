@@ -13,6 +13,7 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially, executeToolCallsWithConcurrency, type ToolCallExecution } from "@/server/agent/tool-call-execution";
 import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
+import { inspectExecutionEvidence } from "@/server/agent/execution-evidence";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
@@ -212,6 +213,31 @@ async function executeAgentTaskRecord(
         ...(completed ? { result: latest.result } : failed
           ? { error: "Device execution finished, but task finalization failed. Check Task History for diagnostics.", code: latest.error_code }
           : { message: "Waiting for a connected device to execute its registered tools." }),
+      };
+    }
+
+    const evidence = inspectExecutionEvidence(results);
+    if (!evidence.ok) {
+      const failedAt = new Date().toISOString();
+      await setTask(admin, id, {
+        status: "failed",
+        error_code: evidence.code,
+        completed_at: failedAt,
+        tool_results: results,
+      });
+      await event(admin, id, "task.failed", {
+        code: evidence.code,
+        stage: "tool_execution",
+        message: evidence.message,
+      });
+      return {
+        taskId: id,
+        status: "failed",
+        ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
+        plan,
+        toolResults: results,
+        error: evidence.message,
+        code: evidence.code,
       };
     }
 
