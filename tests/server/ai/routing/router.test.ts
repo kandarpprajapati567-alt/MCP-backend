@@ -234,3 +234,31 @@ test("records retryable primary failure before successful fallback", async () =>
     { providerId: "backup", outcome: "success", errorCode: undefined },
   ]);
 });
+
+
+test("falls back to deterministic Mock after a non-retryable provider error when Mock is explicitly available", async () => {
+  const primary: AIProvider = {
+    id: "openrouter",
+    capabilities: ["text-generation"],
+    async generate() {
+      throw new AIProviderError("AUTHENTICATION_FAILED", "Credential rejected", false);
+    },
+  };
+  const mock: AIProvider = {
+    id: "mock",
+    capabilities: ["text-generation"],
+    async generate(request) {
+      return { provider: "mock", model: request.model ?? "mock-v1", text: "safe local fallback", finishReason: "stop", requestId: "mock-fallback" };
+    },
+  };
+  const execution = await executeWorkflow("planner", {
+    ...policy,
+    primaryProvider: "openrouter",
+    fallbackProviders: ["mock"],
+    fallbackModel: "mock-v1",
+  }, { openrouter: primary, mock }, {
+    messages: [{ role: "user", content: "hello" }],
+  });
+  assert.equal(execution.route.providerId, "mock");
+  assert.equal(execution.result.text, "safe local fallback");
+});
