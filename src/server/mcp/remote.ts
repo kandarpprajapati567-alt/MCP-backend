@@ -235,7 +235,7 @@ export async function callRemoteMcpTool(
   args: Record<string, unknown>,
   context?: RemoteMcpInvocationContext,
 ) {
-  const match = toolId.match(/^remote_mcp\\.([0-9a-f-]{36})\\.([A-Za-z0-9][A-Za-z0-9_.-]{0,79})$/u);
+  const match = toolId.match(/^remote_mcp\.([0-9a-f-]{36})\.([A-Za-z0-9][A-Za-z0-9_.-]{0,79})$/u);
   if (!match) throw new Error("Remote MCP tool identifier is invalid.");
   const [, serverId, toolName] = match;
   const admin = createAdminClient();
