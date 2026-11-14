@@ -92,3 +92,29 @@ test("rejects oversized, nested, and unsafe remote tool schemas", () => {
     inputSchema: { type: "object", properties: {} },
   }), null);
 });
+
+
+test("rejects unsupported schema keywords, unknown required keys and permissive additional properties", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  const base = (property: Record<string, unknown>, root: Record<string, unknown> = {}) => ({
+    name: "strict_lookup",
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: "object", properties: { query: property }, ...root },
+  });
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string", pattern: "^[a-z]+$" })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string", enum: ["safe"] })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string" }, { required: ["missing"] })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string" }, { required: ["query", "query"] })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string" }, { additionalProperties: true })), null);
+  assert.equal(sanitizeRemoteTool(id, base({ type: "string" }, { $ref: "#/definitions/query" })), null);
+});
+
+test("does not treat inherited object properties as declared Remote MCP arguments", () => {
+  const tool = sanitizeRemoteTool("123e4567-e89b-42d3-a456-426614174000", {
+    name: "strict_lookup",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+  });
+  assert.ok(tool);
+  assert.equal(validateRemoteToolArguments(tool.inputSchema, JSON.parse('{"query":"ok","toString":"unexpected"}')), false);
+});
