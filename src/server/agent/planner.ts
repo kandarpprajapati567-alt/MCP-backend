@@ -66,5 +66,8 @@ export async function createAgentPlan(
     maxToolCalls: agent?.maxToolCalls,
   });
   if (!parsed.ok) throw new Error(parsed.error);
+  if (parsed.value.toolCalls.length === 0) {
+    throw new Error("Planner produced no executable tool calls. The task was rejected instead of being marked completed.");
+  }
   return parsed.value;
 }
