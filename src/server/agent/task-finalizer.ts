@@ -6,6 +6,7 @@ import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/de
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
+import { inspectExecutionEvidence } from "@/server/agent/execution-evidence";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
 
@@ -110,6 +111,27 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
       });
       if (cancelledEventError) throw new Error("Task cancellation event could not be persisted.");
     }
+    return true;
+  }
+
+  const evidence = inspectExecutionEvidence(toolResults);
+  if (!evidence.ok) {
+    const now = new Date().toISOString();
+    const { error: failureUpdateError } = await admin.from("agent_tasks").update({
+      status: "failed",
+      tool_results: toolResults,
+      error_code: evidence.code,
+      completed_at: now,
+      updated_at: now,
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "synthesizing");
+    if (failureUpdateError) throw new Error("Failed device execution could not be recorded.");
+    const { error: failedEventError } = await admin.from("agent_task_events").insert({
+      task_id: taskId,
+      owner_id: PERSONAL_OWNER_ID,
+      event_type: "task.failed",
+      payload: { code: evidence.code, stage: "device_execution", message: evidence.message },
+    });
+    if (failedEventError) throw new Error("Device execution failure event could not be persisted.");
     return true;
   }
 

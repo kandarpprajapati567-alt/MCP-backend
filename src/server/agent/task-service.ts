@@ -13,6 +13,8 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially, executeToolCallsWithConcurrency, type ToolCallExecution } from "@/server/agent/tool-call-execution";
 import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
+import { inspectExecutionEvidence } from "@/server/agent/execution-evidence";
+import { resolveAgentExecutionMode } from "@/server/agent/execution-mode";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
@@ -137,10 +139,18 @@ async function executeAgentTaskRecord(
     await event(admin, id, "task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
-    const planned = agent
+    const plannedExecution = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
+    const planned = plannedExecution?.plan ?? null;
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
+    const executionModeResult = resolveAgentExecutionMode(
+      plan.toolCalls.length,
+      plannedExecution?.providerId ?? "mock",
+      task,
+    );
+    if (!executionModeResult.ok) throw new Error(executionModeResult.message);
+    const executionMode = executionModeResult.mode;
     await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
@@ -152,7 +162,9 @@ async function executeAgentTaskRecord(
       steps: plan.steps.length,
       toolCalls: plan.toolCalls.length,
       deviceToolsAvailable: deviceTools.length,
-      planner: planned ? "configured-workflow-policy" : "local-safe-planner",
+      planner: plannedExecution?.providerId ?? "local-safe-planner",
+      ...(plannedExecution ? { plannerModel: plannedExecution.model } : {}),
+      executionMode,
       ...(agent ? { agentId: agent.id, agentName: agent.name, maxSteps: agent.maxSteps, maxToolCalls: agent.maxToolCalls } : {}),
     });
     await event(admin, id, "task.executing");
@@ -215,14 +227,45 @@ async function executeAgentTaskRecord(
       };
     }
 
+    if (executionMode === "tool_backed") {
+      const evidence = inspectExecutionEvidence(results);
+      if (!evidence.ok) {
+        const failedAt = new Date().toISOString();
+        await setTask(admin, id, {
+          status: "failed",
+          error_code: evidence.code,
+          completed_at: failedAt,
+          tool_results: results,
+        });
+        await event(admin, id, "task.failed", {
+          code: evidence.code,
+          stage: "tool_execution",
+          message: evidence.message,
+        });
+        return {
+          taskId: id,
+          status: "failed",
+          ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
+          plan,
+          toolResults: results,
+          error: evidence.message,
+          code: evidence.code,
+        };
+      }
+    }
+
     await assertTaskNotCancelled(admin, id);
     failedStage = "synthesis";
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.synthesizing");
+    const synthesisSystemPrompt = buildSynthesisSystemPrompt(agent?.role, agent?.instructions) +
+      (executionMode === "model_only"
+        ? "\nMODEL-ONLY EXECUTION: No external tools were run. Do not claim browsing, research, file access, code changes, deployment, device actions, citations or independent fact verification. Work only from the user's supplied context and clearly state uncertainty."
+        : "");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
-        { role: "system", content: buildSynthesisSystemPrompt(agent?.role, agent?.instructions) },
+        { role: "system", content: synthesisSystemPrompt },
         { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
@@ -234,6 +277,9 @@ async function executeAgentTaskRecord(
           modelPreference: agent.modelPreference,
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
+    if (executionMode === "model_only" && synthesis.route.providerId === "mock") {
+      throw new Error("Model-only task synthesis requires a real configured AI provider. No tool evidence was available, so the task was not completed.");
+    }
     const result = synthesis.route.providerId !== "mock"
       ? guardSynthesisAnswer(synthesis.result.text, results)
       : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
@@ -248,12 +294,13 @@ async function executeAgentTaskRecord(
       .select("id").maybeSingle();
     if (completionError) throw new Error("Task completion could not be saved.");
     if (!completedTask) throw new AgentTaskCancelledError();
-    await event(admin, id, "task.completed");
+    await event(admin, id, "task.completed", { toolResults: results.length, executionMode, plannerProvider: plannedExecution?.providerId ?? "local-safe-planner", synthesisProvider: synthesis.route.providerId });
     return {
       taskId: id,
       status: "completed",
       ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
       plan,
+      executionMode,
       toolResults: results,
       result,
     };
@@ -277,7 +324,7 @@ async function executeAgentTaskRecord(
       if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
     }
-    const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
+    const code = error instanceof Error && /invalid|registered|validation|planner|source evidence|model-only/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);
     console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });

@@ -93,3 +93,49 @@ test("Stage 2 self-test reports every diagnostic check as passed", () => {
   assert.equal(results.length, 5);
   assert.ok(results.every((item) => item.status === "passed"));
 });
+
+
+test("role labels alone never qualify an Agent without a matching registered tool", () => {
+  const labelOnly = [{
+    id: "label-only",
+    name: "Research Agent",
+    description: "Web research",
+    role: "Research analyst",
+    allowedTools: [],
+    enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "research", title: "Research", objective: "Research official sources", requiredCapabilities: ["research", "web"] },
+  ], labelOnly);
+  assert.equal(result.ok, false);
+});
+
+
+test("Supervisor removes tool IDs that are not in the current registry", async () => {
+  const { filterAgentToolsToAvailable } = await import("../../../src/server/agent/supervisor-orchestrator");
+  const available = new Set(["web.search", "github.read_file"]);
+  assert.deepEqual(
+    filterAgentToolsToAvailable(["web.search", "shell.exec", "github.read_file", "web.search"], available),
+    ["web.search", "github.read_file"],
+  );
+});
+
+
+test("combined specialist work requires every actual tool capability, not just one role match", () => {
+  const researchOnly = [{
+    id: "research-only", name: "Research Analyst", description: "Research and analysis",
+    role: "Research analyst", allowedTools: ["web.search"], enabled: true,
+  }];
+  const bothTools = [{
+    id: "research-analysis", name: "Research Analyst", description: "Research and analysis",
+    role: "Research analyst", allowedTools: ["web.search", "text.text_stats"], enabled: true,
+  }];
+  const task = [{
+    id: "combined", title: "Research and analyze", objective: "Research sources and analyze the findings",
+    requiredCapabilities: ["research", "web", "analysis"],
+  }];
+  assert.equal(assignSubtasksToAgents(task, researchOnly).ok, false);
+  const matched = assignSubtasksToAgents(task, bothTools);
+  assert.equal(matched.ok, true);
+  if (matched.ok) assert.equal(matched.assignments[0].agentId, "research-analysis");
+});

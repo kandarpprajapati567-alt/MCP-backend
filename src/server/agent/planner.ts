@@ -13,12 +13,18 @@ export type AvailableDeviceTool = AgentAvailableTool & {
   sideEffect: boolean;
 };
 
+export type AgentPlanExecution = {
+  plan: AgentPlan;
+  providerId: string;
+  model: string;
+};
+
 export async function createAgentPlan(
   userId: string,
   task: string,
   deviceTools: readonly AvailableDeviceTool[] = [],
   agent?: AgentDefinitionInput,
-): Promise<AgentPlan | null> {
+): Promise<AgentPlanExecution | null> {
   if (typeof task !== "string" || task.trim().length < 1 || task.length > 4000) {
     throw new Error("Task must be between 1 and 4000 characters.");
   }
@@ -66,5 +72,9 @@ export async function createAgentPlan(
     maxToolCalls: agent?.maxToolCalls,
   });
   if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.value;
+  return {
+    plan: parsed.value,
+    providerId: execution.route.providerId,
+    model: execution.result.model,
+  };
 }

@@ -62,15 +62,19 @@ export function buildLocalAgentPlan(task: string, agent?: AgentDefinitionInput):
     throw new Error("This Agent cannot use " + toolId + ". Assign the tool in Agent Manager, then retry.");
   }
 
-  const toolText = toolId ? extractInput(task, toolId) : "";
+  if (!toolId) {
+    throw new Error("The safe local planner has no executable tool for this request. Configure an approved tool or an available free planner model; the task was not run.");
+  }
+
+  const toolText = extractInput(task, toolId);
   return {
     version: 1,
     goal: task.slice(0, 500),
     steps: [{
       id: "step-1",
-      objective: toolId ? "Process only the text supplied by the user." : "Interpret the request and complete the available safe operation.",
-      expectedOutcome: toolId ? "A result derived from the supplied text." : "A bounded result with execution evidence.",
+      objective: "Process only the text supplied by the user.",
+      expectedOutcome: "A result derived from the supplied text.",
     }],
-    toolCalls: toolId ? [{ id: "call-1", toolId, arguments: { text: toolText } }] : [],
+    toolCalls: [{ id: "call-1", toolId, arguments: { text: toolText } }],
   };
 }

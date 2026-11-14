@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildLocalAgentPlan } from "../../../src/server/agent/local-plan";
+import { inspectExecutionEvidence } from "../../../src/server/agent/execution-evidence";
 import type { AgentDefinitionInput } from "../../../src/server/agent/definition-schema";
 
 const agent = (allowedTools: string[]): AgentDefinitionInput => ({
@@ -31,6 +32,9 @@ test("asks for source text instead of processing the whole instruction", () => {
   assert.throws(() => buildLocalAgentPlan("Count words", agent(["text.word_count"])), /Add the text to process/);
 });
 
+test("rejects unsupported local tasks instead of returning an empty executable plan", () => {
+  assert.throws(() => buildLocalAgentPlan("Implement a new dashboard feature", agent(["github.read_file"])), /no executable tool/);
+});
 
 test("local research planner emits only the allow-listed web search tool", () => {
   const researchAgent = agent(["web.search"]);
@@ -53,4 +57,46 @@ test("local research planner rejects Agents without web search permission", () =
     () => buildLocalAgentPlan("Research official Render documentation", agent(["text.word_count"])),
     /cannot use web.search/,
   );
+});
+
+test("empty execution output is never accepted as evidence", () => {
+  assert.deepEqual(inspectExecutionEvidence([]), {
+    ok: false,
+    code: "AGENT_NO_EXECUTION_EVIDENCE",
+    message: "No registered tool returned evidence. The task cannot be marked completed.",
+  });
+});
+
+test("device failures and cancelled jobs are not accepted as successful evidence", () => {
+  for (const status of ["failed", "cancelled", "expired"]) {
+    const result = inspectExecutionEvidence([{
+      callId: "call-1", toolId: "android.device.read", status, result: { status, result: null },
+    }]);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "AGENT_TOOL_EXECUTION_FAILED");
+  }
+});
+
+test("successful backend and device tool outputs are accepted as evidence", () => {
+  assert.deepEqual(inspectExecutionEvidence([
+    { callId: "call-1", toolId: "text.word_count", result: { wordCount: 2 } },
+    { callId: "call-2", toolId: "android.device.read", status: "completed", result: { status: "completed", result: { battery: 80 } } },
+  ]), { ok: true });
+});
+
+test("tool failures are not accepted as successful evidence", () => {
+  const result = inspectExecutionEvidence([
+    { callId: "call-1", toolId: "web.search", result: { ok: false, error: "provider unavailable" } },
+  ]);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "AGENT_TOOL_EXECUTION_FAILED");
+});
+
+test("does not accept a device job that completed without an evidence payload", () => {
+  const result = inspectExecutionEvidence([{
+    callId: "call-1", toolId: "android.device.read", status: "completed",
+    result: { status: "completed", result: null },
+  }]);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "AGENT_NO_EXECUTION_EVIDENCE");
 });

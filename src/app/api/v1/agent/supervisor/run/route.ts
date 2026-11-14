@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
-import { assignSubtasksToAgents, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
+import { assignSubtasksToAgents, filterAgentToolsToAvailable, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
 import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
 import { isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { readJsonBody } from "@/server/http/read-json";
+import { TOOL_CATALOG } from "@/server/tools/registry";
+import { listRemoteAgentToolsSafe } from "@/server/mcp/remote";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -30,12 +32,41 @@ export async function POST(request: Request) {
       .select("id,name,description,role,allowed_tools,enabled")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true).limit(100);
     if (error) return json({ error: "Agent registry is unavailable." }, 503);
+    const remoteTools = await listRemoteAgentToolsSafe();
+    const availableToolIds = new Set<string>([
+      ...TOOL_CATALOG.map((tool) => tool.id),
+      ...remoteTools.map((tool) => tool.id),
+    ]);
+    const deviceCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: deviceRows } = await admin.from("agent_devices")
+      .select("capabilities")
+      .eq("owner_id", PERSONAL_OWNER_ID)
+      .eq("status", "online")
+      .gte("last_seen_at", deviceCutoff)
+      .limit(10);
+    for (const device of deviceRows ?? []) {
+      if (!Array.isArray(device.capabilities)) continue;
+      for (const capability of device.capabilities) {
+        if (capability && typeof capability === "object" && !Array.isArray(capability)) {
+          const record = capability as Record<string, unknown>;
+          const schema = record.inputSchema;
+          if (typeof record.id === "string" && typeof record.description === "string" &&
+              typeof record.permission === "string" && typeof record.sideEffect === "boolean" &&
+              schema && typeof schema === "object" && !Array.isArray(schema) &&
+              (schema as Record<string, unknown>).type === "object" &&
+              (schema as Record<string, unknown>).properties &&
+              typeof (schema as Record<string, unknown>).properties === "object") {
+            availableToolIds.add(record.id);
+          }
+        }
+      }
+    }
     const agents: AssignableAgent[] = (data ?? []).map((agent) => ({
       id: agent.id,
       name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
-      allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string") : [],
+      allowedTools: Array.isArray(agent.allowed_tools) ? filterAgentToolsToAvailable(agent.allowed_tools.filter((item): item is string => typeof item === "string"), availableToolIds) : [],
       enabled: agent.enabled === true,
     }));
     const planned = await createSupervisorPlan(PERSONAL_OWNER_ID, goal);
