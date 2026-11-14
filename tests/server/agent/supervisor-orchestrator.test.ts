@@ -109,3 +109,13 @@ test("role labels alone never qualify an Agent without a matching registered too
   ], labelOnly);
   assert.equal(result.ok, false);
 });
+
+
+test("Supervisor removes tool IDs that are not in the current registry", async () => {
+  const { filterAgentToolsToAvailable } = await import("../../../src/server/agent/supervisor-orchestrator");
+  const available = new Set(["web.search", "github.read_file"]);
+  assert.deepEqual(
+    filterAgentToolsToAvailable(["web.search", "shell.exec", "github.read_file", "web.search"], available),
+    ["web.search", "github.read_file"],
+  );
+});
