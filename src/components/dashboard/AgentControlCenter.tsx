@@ -492,7 +492,7 @@ export default function AgentControlCenter() {
                     <button type="submit" disabled={busy || !taskInput.trim() || (selectedAgentId === "auto" && enabledAgents.length === 0)} className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Working…" : "Run task →"}</button>
                   </div>
                   {selectedAgent && <p className="text-[11px] text-zinc-500">Selected specialist: {selectedAgent.name} · {(selectedAgent.allowed_tools ?? []).length} assigned tools</p>}
-                  {selectedAgent && (selectedAgent.allowed_tools ?? []).length === 0 && <p role="alert" className="text-xs text-amber-200">This Agent has no assigned tools. It can only run model-only prompts when a real AI provider is configured; research and source-checking tasks need a search tool.</p>}
+                  {selectedAgent && (selectedAgent.allowed_tools ?? []).length === 0 && <p role="alert" className="text-xs text-amber-200">This Agent has no assigned tools. It can run writing/reasoning prompts only with a real AI provider (not Mock); research and source-checking tasks need a search tool.</p>}
                 </form>
                 {runInfo && <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold text-white">Execution monitor</p><span className={"rounded-full border px-2.5 py-1 text-[10px] " + statusTone(runInfo.status)}>{runInfo.status.replaceAll("_", " ")}</span></div>
