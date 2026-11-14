@@ -33,7 +33,8 @@ export type AgentAssignment = {
 };
 
 export function isExplicitFreePlannerModel(providerId: string, model: string): boolean {
-  return providerId === "openrouter" && /^[a-z0-9._-]+\\/[a-z0-9._-]+:free$/i.test(model.trim());
+  const normalized = model.trim();
+  return providerId === "openrouter" && normalized.includes("/") && normalized.endsWith(":free") && !/\s/.test(normalized);
 }
 
 const CAPABILITIES = new Set(["research", "coding", "analysis", "writing", "android", "web", "github", "general"]);
