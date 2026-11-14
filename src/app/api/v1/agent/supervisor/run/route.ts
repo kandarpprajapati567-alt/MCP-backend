@@ -56,10 +56,12 @@ export async function POST(request: Request) {
         return { ...assignment, objective: subtask.objective, status: "failed", error: safeAgentFailureMessage(cause) };
       }
     }));
-    const failed = members.filter((member) => member.status === "failed").length;
-    const queued = members.filter((member) => member.status === "queued").length;
+    const failed = members.filter((member) => member.status === "failed" || member.status === "cancelled").length;
+    const active = members.some((member) => ["queued", "planning", "executing", "waiting_for_device", "synthesizing"].includes(member.status));
+    const completed = members.every((member) => member.status === "completed");
+    const status = failed === members.length ? "failed" : failed ? "partial" : active ? "queued" : completed ? "completed" : "partial";
     return json({
-      status: failed === members.length ? "failed" : failed ? "partial" : "queued",
+      status,
       goal: planned.value.goal,
       summary: planned.value.summary,
       planner: planned.planner,
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
       assignments: members,
       executionMode: "supervisor_planned_capability_routed_parallel_queue",
       limits: { maxSubtasks: 3, workerConcurrency: 3 },
-    }, failed === members.length ? 207 : 202);
+    }, status === "completed" ? 200 : status === "queued" ? 202 : 207);
   } catch {
     return json({ error: "Supervisor could not dispatch this goal. No unverified assignment was reported as successful." }, 503);
   }
