@@ -119,3 +119,23 @@ test("Supervisor removes tool IDs that are not in the current registry", async (
     ["web.search", "github.read_file"],
   );
 });
+
+
+test("combined specialist work requires every actual tool capability, not just one role match", () => {
+  const researchOnly = [{
+    id: "research-only", name: "Research Analyst", description: "Research and analysis",
+    role: "Research analyst", allowedTools: ["web.search"], enabled: true,
+  }];
+  const bothTools = [{
+    id: "research-analysis", name: "Research Analyst", description: "Research and analysis",
+    role: "Research analyst", allowedTools: ["web.search", "text.text_stats"], enabled: true,
+  }];
+  const task = [{
+    id: "combined", title: "Research and analyze", objective: "Research sources and analyze the findings",
+    requiredCapabilities: ["research", "web", "analysis"] as const,
+  }];
+  assert.equal(assignSubtasksToAgents(task, researchOnly).ok, false);
+  const matched = assignSubtasksToAgents(task, bothTools);
+  assert.equal(matched.ok, true);
+  if (matched.ok) assert.equal(matched.assignments[0].agentId, "research-analysis");
+});
