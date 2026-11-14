@@ -19,7 +19,39 @@ type Agent = {
   created_at: string;
   updated_at: string;
 };
-type Tool = { id: string; description: string; sideEffect: boolean };
+type ToolTarget = "backend" | "remote_mcp" | "device";
+type Tool = {
+  id: string;
+  description: string;
+  sideEffect: boolean;
+  permission: string;
+  target: ToolTarget;
+  available: boolean;
+  availabilityNote?: string;
+};
+type ToolAccessReport = {
+  tools: Array<Tool & {
+    assigned: boolean;
+    status: string;
+    assignmentDecision: "allowlisted" | "denied";
+    denialReasons: string[];
+    risk: "read_only" | "side_effect";
+  }>;
+  unavailableAssignments: string[];
+  summary: {
+    total: number;
+    assigned: number;
+    available: number;
+    allowlisted: number;
+    denied: number;
+    assignmentRequired: number;
+    unavailable: number;
+    assignedUnavailable: number;
+  };
+  sources: { backend: string; remoteMcp: string; devices: string };
+  policy: string;
+  availabilityPolicy: string;
+};
 
 type Draft = {
   name: string;
@@ -58,6 +90,10 @@ export default function AgentsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [accessAgentId, setAccessAgentId] = useState<string | null>(null);
+  const [accessReports, setAccessReports] = useState<Record<string, ToolAccessReport>>({});
+  const [accessLoadingId, setAccessLoadingId] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
     return ownerFetch(path, init);
@@ -74,6 +110,9 @@ export default function AgentsPage() {
     if (!toolResponse.ok) throw new Error(toolData.error ?? "Could not load registered tools.");
     setAgents(data.agents ?? []);
     setTools((toolData.tools ?? []).filter((tool: Tool) => tool.id !== "device.dispatch_tool" && !tool.id.startsWith("agent.")));
+    setAccessReports({});
+    setAccessAgentId(null);
+    setAccessError("");
   }
 
   async function connect() {
@@ -104,7 +143,7 @@ export default function AgentsPage() {
 
   function beginCreate() {
     setEditingId(null);
-    setDraft({ ...emptyDraft, allowedTools: tools.filter((tool) => !tool.sideEffect).map((tool) => tool.id) });
+    setDraft({ ...emptyDraft, allowedTools: tools.filter((tool) => tool.available && !tool.sideEffect && tool.target !== "device").map((tool) => tool.id) });
     setShowEditor(true);
     setError("");
     setMessage("");
@@ -127,6 +166,31 @@ export default function AgentsPage() {
     setShowEditor(true);
     setError("");
     setMessage("");
+  }
+
+  async function refreshToolAccess(agentId: string) {
+    setAccessLoadingId(agentId);
+    setAccessError("");
+    try {
+      const response = await request("/api/v1/agents/" + agentId + "/tools");
+      const data = await response.json() as ToolAccessReport & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Tool access could not be loaded.");
+      setAccessReports((current) => ({ ...current, [agentId]: data }));
+    } catch (cause) {
+      setAccessError(cause instanceof Error ? cause.message : "Tool access could not be loaded.");
+    } finally {
+      setAccessLoadingId((current) => current === agentId ? null : current);
+    }
+  }
+
+  async function inspectToolAccess(agentId: string) {
+    if (accessAgentId === agentId) {
+      setAccessAgentId(null);
+      setAccessError("");
+      return;
+    }
+    setAccessAgentId(agentId);
+    if (!accessReports[agentId]) await refreshToolAccess(agentId);
   }
 
   async function saveAgent(event: React.FormEvent<HTMLFormElement>) {
@@ -284,7 +348,7 @@ export default function AgentsPage() {
               </div>
               <fieldset className="space-y-2 rounded-xl border border-border p-3">
                 <legend className="px-1 text-xs text-zinc-400">Allowed tools</legend>
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-zinc-500">Selected tools are the only tools this Agent may call. New Agents start with registered read-only tools; write/device actions always require explicit selection.</p><button type="button" onClick={() => setDraft({ ...draft, allowedTools: tools.filter((tool) => !tool.sideEffect).map((tool) => tool.id) })} className="rounded-lg border border-border px-3 py-1.5 text-xs text-cyan-200">Select safe read-only tools</button></div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-zinc-500">Selected tools are the only tools this Agent may call. New Agents start with registered read-only tools; write/device actions always require explicit selection.</p><button type="button" onClick={() => setDraft({ ...draft, allowedTools: tools.filter((tool) => tool.available && !tool.sideEffect && tool.target !== "device").map((tool) => tool.id) })} className="rounded-lg border border-border px-3 py-1.5 text-xs text-cyan-200">Select safe read-only tools</button></div>
                 <p className="text-xs font-medium text-cyan-200">{draft.allowedTools.length} of {tools.length} tools selected</p>
                 {tools.length === 0 && <p role="status" className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">No registered tools were returned by the backend. Refresh or check the Tools page before creating this Agent.</p>}
                 {tools.length > 0 && draft.allowedTools.length === 0 && <p role="alert" className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">This Agent is tool-free. Assign at least one tool if it needs to perform tool-based work.</p>}
@@ -302,10 +366,29 @@ export default function AgentsPage() {
                         })}
                         className="mt-0.5 h-4 w-4 accent-cyan-400"
                       />
-                      <span><span className="block text-cyan-200">{tool.id}</span><span className="mt-1 block text-zinc-500">{tool.description}</span><span className={tool.sideEffect ? "mt-1 block text-amber-300" : "mt-1 block text-emerald-300"}>{tool.sideEffect ? "Can change data" : "Read-only"}</span></span>
+                      <span className="min-w-0">
+                        <span className="block break-all text-cyan-200">{tool.id}</span>
+                        <span className="mt-1 block text-zinc-500">{tool.description}</span>
+                        <span className="mt-1 block text-[10px] uppercase tracking-wide text-zinc-400">{tool.target === "device" ? "Android device · explicit assignment" : tool.target === "remote_mcp" ? "Remote MCP · connected manifest" : "Backend registry"}</span>
+                        <span className={tool.available ? "mt-1 block text-emerald-300" : "mt-1 block text-amber-300"}>{tool.available ? "Available in current registry" : "Unavailable right now"}</span>
+                        <span className={tool.sideEffect || tool.target === "device" ? "mt-1 block text-amber-300" : "mt-1 block text-emerald-300"}>{tool.target === "device" ? "Device-side consent required" : tool.sideEffect ? "Can change data · explicit approval may apply" : "Read-only capability"}</span>
+                        {tool.availabilityNote && <span className="mt-1 block text-[10px] leading-4 text-zinc-600">{tool.availabilityNote}</span>}
+                      </span>
                     </label>
                   ))}
                 </div>
+                {draft.allowedTools.filter((id) => !tools.some((tool) => tool.id === id)).length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-900/40 bg-amber-950/10 p-3">
+                    <p className="text-xs font-semibold text-amber-200">Assignments no longer in the registry</p>
+                    <p className="mt-1 text-[10px] leading-5 text-zinc-500">These IDs may belong to a disconnected MCP server or removed device capability. Uncheck to remove them from this Agent.</p>
+                    {draft.allowedTools.filter((id) => !tools.some((tool) => tool.id === id)).map((id) => (
+                      <label key={id} className="mt-2 flex items-center gap-2 break-all text-xs text-amber-100">
+                        <input type="checkbox" checked onChange={() => setDraft({ ...draft, allowedTools: draft.allowedTools.filter((item) => item !== id) })} className="h-4 w-4 accent-amber-400" />
+                        {id}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </fieldset>
               <label className="flex items-center gap-2 text-sm text-zinc-300">
                 <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} className="h-4 w-4 accent-cyan-400" />
@@ -344,9 +427,76 @@ export default function AgentsPage() {
                   <p className="mt-2 line-clamp-2 text-xs text-zinc-500">{agent.instructions}</p>
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                     <button type="button" disabled={busy} onClick={() => beginEdit(agent)} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">Edit</button>
+                    <button type="button" disabled={busy} onClick={() => void inspectToolAccess(agent.id)} aria-expanded={accessAgentId === agent.id} className="rounded-lg border border-cyan-900/50 px-3 py-2 text-xs text-cyan-200">{accessAgentId === agent.id ? "Hide tool access" : "Inspect tool access"}</button>
                     <button type="button" disabled={busy} onClick={() => void toggleAgent(agent)} className="rounded-lg border border-border px-3 py-2 text-xs text-zinc-300">{agent.enabled ? "Pause" : "Enable"}</button>
                     <button type="button" disabled={busy} onClick={() => void deleteAgent(agent)} className="rounded-lg border border-red-900/50 px-3 py-2 text-xs text-red-300">Delete</button>
                   </div>
+                  {accessAgentId === agent.id && (
+                    <div className="mt-4 space-y-3 border-t border-border pt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div><p className="text-xs font-semibold text-white">Per-Agent tool access</p><p className="mt-1 text-[10px] text-zinc-500">Registry and heartbeat snapshot · not a permission grant</p></div>
+                        <button type="button" disabled={accessLoadingId === agent.id} onClick={() => void refreshToolAccess(agent.id)} className="rounded-lg border border-border px-3 py-2 text-[10px] text-zinc-300">{accessLoadingId === agent.id ? "Refreshing…" : "Refresh access"}</button>
+                      </div>
+                      {accessLoadingId === agent.id && <p role="status" className="text-xs text-zinc-500">Loading backend, Remote MCP and device capabilities…</p>}
+                      {accessError && <p role="alert" className="rounded-lg border border-red-900/40 bg-red-950/20 p-3 text-xs text-red-300">{accessError}</p>}
+                      {accessReports[agent.id] && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {[
+                              ["Allowlisted", accessReports[agent.id].summary.allowlisted],
+                              ["Assigned", accessReports[agent.id].summary.assigned],
+                              ["Available", accessReports[agent.id].summary.available],
+                              ["Denied", accessReports[agent.id].summary.denied],
+                            ].map(([label, value]) => (
+                              <div key={label} className="rounded-lg border border-border bg-black/20 p-2">
+                                <p className="text-[9px] uppercase tracking-wide text-zinc-500">{label}</p>
+                                <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-[9px] uppercase tracking-wide">
+                            {[
+                              ["Backend", accessReports[agent.id].sources.backend],
+                              ["Remote MCP", accessReports[agent.id].sources.remoteMcp],
+                              ["Devices", accessReports[agent.id].sources.devices],
+                            ].map(([label, value]) => (
+                              <span key={label} className="rounded-md border border-border px-2 py-1 text-zinc-400">{label}: {value}</span>
+                            ))}
+                          </div>
+                          <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
+                            {accessReports[agent.id].tools.map((tool) => (
+                              <div key={tool.id} className="rounded-lg border border-border/80 bg-black/20 p-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="min-w-0 break-all font-mono text-[11px] text-cyan-200">{tool.id}</p>
+                                  <span className={tool.assignmentDecision === "allowlisted" ? "rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-bold text-emerald-300" : "rounded-full bg-red-400/10 px-2 py-1 text-[9px] font-bold text-red-300"}>{tool.assignmentDecision === "allowlisted" ? "ALLOWLISTED" : "DENIED"}</span>
+                                </div>
+                                <p className="mt-1 text-[10px] leading-5 text-zinc-500">{tool.description}</p>
+                                <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] uppercase tracking-wide">
+                                  <span className="rounded border border-border px-2 py-1 text-zinc-300">{tool.assigned ? "Assigned" : "Not assigned"}</span>
+                                  <span className={tool.available ? "rounded border border-emerald-900/50 px-2 py-1 text-emerald-300" : "rounded border border-amber-900/50 px-2 py-1 text-amber-300"}>{tool.available ? "Available" : "Unavailable"}</span>
+                                  <span className="rounded border border-border px-2 py-1 text-zinc-400">{tool.target.replace("_", " ")}</span>
+                                  <span className="rounded border border-border px-2 py-1 text-zinc-500">{tool.permission}</span>
+                                  <span className="rounded border border-border px-2 py-1 text-zinc-500">{tool.risk === "side_effect" ? "Side effect" : "Read only"}</span>
+                                </div>
+                                {tool.denialReasons.length > 0 && <p className="mt-2 text-[10px] text-red-300">Denied: {tool.denialReasons.map((reason) => reason === "not_assigned" ? "not assigned to this Agent" : "capability unavailable").join(" · ")}</p>}
+                                {tool.availabilityNote && <p className="mt-1 text-[10px] leading-5 text-zinc-600">{tool.availabilityNote}</p>}
+                                {tool.sideEffect && <p className="mt-1 text-[10px] text-amber-300">A separate approval may still be required before execution.</p>}
+                                {tool.target === "device" && <p className="mt-1 text-[10px] text-amber-300">Android OS permissions and user consent are enforced on the device.</p>}
+                              </div>
+                            ))}
+                          </div>
+                          {accessReports[agent.id].unavailableAssignments.length > 0 && (
+                            <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3">
+                              <p className="text-xs font-semibold text-amber-200">Assigned IDs not currently registered</p>
+                              <p className="mt-1 break-all text-[10px] leading-5 text-zinc-400">{accessReports[agent.id].unavailableAssignments.join(" · ")}</p>
+                            </div>
+                          )}
+                          <p className="text-[10px] leading-5 text-zinc-500">{accessReports[agent.id].policy}</p>
+                          <p className="text-[10px] leading-5 text-zinc-600">{accessReports[agent.id].availabilityPolicy}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </article>
               ))}
             </section>
