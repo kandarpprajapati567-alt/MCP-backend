@@ -6,6 +6,23 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 type Connection = { id: string; name: string; category: string; connected: boolean; status: string; tools: string[]; setup: string };
 type RemoteServer = { id: string; name: string; endpoint: string; enabled: boolean; tools: Array<{ id: string; description: string }>; createdAt: string };
+type RemoteAuditEvent = {
+  id: string;
+  server_id: string;
+  task_id: string | null;
+  tool_id: string;
+  tool_name: string;
+  source: "agent_task" | "mcp_direct" | "unknown";
+  argument_digest: string;
+  status: "started" | "completed" | "failed" | "audit_pending";
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  response_bytes: number | null;
+  output_bytes: number | null;
+  content_items: number | null;
+  error_code: string | null;
+};
 
 export default function ConnectionsPage() {
   const [token, setToken] = useState("");
@@ -20,9 +37,28 @@ export default function ConnectionsPage() {
   const [remoteToken, setRemoteToken] = useState("");
   const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([]);
   const [testingServerId, setTestingServerId] = useState("");
+  const [auditEvents, setAuditEvents] = useState<RemoteAuditEvent[]>([]);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [auditError, setAuditError] = useState("");
 
   async function request(path: string, init: RequestInit = {}) {
     return ownerFetch(path, init);
+  }
+
+  async function refreshAudit() {
+    setAuditBusy(true);
+    try {
+      const response = await request("/api/v1/connections/remote-mcp/audit?limit=20");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Remote MCP audit history is unavailable.");
+      setAuditEvents(Array.isArray(data.events) ? data.events : []);
+      setAuditError("");
+    } catch (cause) {
+      setAuditError(cause instanceof Error ? cause.message : "Remote MCP audit history is unavailable.");
+      throw cause;
+    } finally {
+      setAuditBusy(false);
+    }
   }
 
   async function refresh() {
@@ -32,6 +68,7 @@ export default function ConnectionsPage() {
     setConnections(data.connections ?? []);
     const remoteResponse = await request("/api/v1/connections/remote-mcp");
     if (remoteResponse.ok) { const remoteData = await remoteResponse.json(); setRemoteServers(remoteData.servers ?? []); } else { setRemoteServers([]); }
+    try { await refreshAudit(); } catch { /* The audit migration may not be applied yet. */ }
   }
 
   async function connectOwner() {
@@ -160,6 +197,22 @@ export default function ConnectionsPage() {
         <div className="flex flex-wrap gap-2">{server.tools.map((tool) => <code key={tool.id} title={tool.description} className="rounded-md bg-black/40 px-2 py-1 text-xs text-cyan-200">{tool.id}</code>)}</div>
       </div>)}
       {remoteServers.length === 0 && <p className="text-xs text-zinc-500">No remote MCP servers connected.</p>}
+      <div className="space-y-3 rounded-xl border border-border/80 bg-black/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="text-xs uppercase tracking-wide text-zinc-500">Invocation trace</p><h3 className="mt-1 text-sm font-semibold text-white">Remote MCP audit history</h3><p className="mt-1 text-[10px] text-zinc-500">Digests and bounded outcomes only. Raw arguments, credentials and response bodies are never shown or stored.</p></div>
+          <button type="button" disabled={auditBusy} onClick={() => void refreshAudit().catch(() => undefined)} className="rounded-lg border border-cyan-800 px-3 py-2 text-xs text-cyan-200 disabled:opacity-40">{auditBusy ? "Loading…" : "Refresh audit"}</button>
+        </div>
+        {auditError && <p role="status" className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">{auditError}</p>}
+        {auditEvents.map((event) => <article key={event.id} className="grid gap-2 rounded-lg border border-border/70 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong className="break-all text-xs text-white">{event.tool_name}</strong><span className="rounded-md border border-border px-2 py-1 text-[9px] uppercase text-zinc-400">{event.source.replaceAll("_", " ")}</span><span className={"rounded-md px-2 py-1 text-[9px] uppercase " + (event.status === "completed" ? "bg-emerald-950/40 text-emerald-300" : event.status === "failed" || event.status === "audit_pending" ? "bg-red-950/40 text-red-300" : "bg-amber-950/40 text-amber-200")}>{event.status.replaceAll("_", " ")}</span></div>
+            <p className="mt-2 break-all font-mono text-[9px] text-zinc-500" title={event.argument_digest}>args sha256 · {event.argument_digest.slice(0, 16)}…</p>
+            <p className="mt-1 text-[9px] text-zinc-500">{new Date(event.started_at).toLocaleString()} · {event.duration_ms ?? "—"} ms · {event.response_bytes ?? 0} response bytes · {event.output_bytes ?? 0} output bytes</p>
+            {event.task_id && <p className="mt-1 break-all text-[9px] text-zinc-600">Task {event.task_id}</p>}
+          </div>
+          <div className="text-left sm:text-right">{event.error_code && <p className="text-[9px] font-semibold text-red-300">{event.error_code}</p>}<p className="mt-1 text-[9px] text-zinc-600">{event.content_items ?? 0} content item(s)</p></div>
+        </article>)}
+        {!auditError && auditEvents.length === 0 && <p className="text-xs text-zinc-500">No Remote MCP invocation records yet.</p>}
+      </div>
     </section>
     </>}
     {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
