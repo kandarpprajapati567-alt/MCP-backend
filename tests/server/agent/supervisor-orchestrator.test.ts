@@ -132,7 +132,7 @@ test("combined specialist work requires every actual tool capability, not just o
   }];
   const task = [{
     id: "combined", title: "Research and analyze", objective: "Research sources and analyze the findings",
-    requiredCapabilities: ["research", "web", "analysis"] as const,
+    requiredCapabilities: ["research", "web", "analysis"],
   }];
   assert.equal(assignSubtasksToAgents(task, researchOnly).ok, false);
   const matched = assignSubtasksToAgents(task, bothTools);
