@@ -26,7 +26,7 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
   if (name === "web.search") return searchWeb(args);
   if (name.startsWith("remote_mcp.")) {
     const { callRemoteMcpTool } = await import("@/server/mcp/remote");
-    return callRemoteMcpTool(name, args);
+    return callRemoteMcpTool(name, args, context);
   }
   if (name === "models.list_providers") {
     if (Object.keys(args).length) throw new Error("models.list_providers does not accept arguments.");
