@@ -506,6 +506,10 @@ export default function AgentControlCenter() {
                 <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-[.18em] text-zinc-500">Build your team</p><h2 className="mt-1 text-base font-semibold text-white">Start with a specialist template</h2></div><button type="button" onClick={() => setActiveTab("agents")} className="text-xs text-cyan-200">Manage Agents →</button></div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{templates.map((template) => <TemplateCard key={template.id} template={template} onChoose={() => startCreate(template.id)} />)}</div>
               </section>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Link href="/dashboard/agent-lab" className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.04] p-5 transition hover:border-cyan-300/40"><p className="text-[10px] uppercase tracking-[.18em] text-cyan-200">Quality & regression</p><h3 className="mt-2 text-sm font-semibold text-white">Agent Test Center ↗</h3><p className="mt-1 text-xs leading-5 text-zinc-400">Run all deterministic checks, verify tool permissions, test task lifecycle and inspect real execution traces.</p></Link>
+                <Link href="/dashboard/agent-map" className="rounded-2xl border border-border bg-zinc-950/70 p-5 transition hover:border-cyan-300/30"><p className="text-[10px] uppercase tracking-[.18em] text-zinc-500">System architecture</p><h3 className="mt-2 text-sm font-semibold text-white">Agent Architecture ↗</h3><p className="mt-1 text-xs leading-5 text-zinc-400">Understand how Supervisor, specialist Agents, tool permissions and the persistent task queue connect.</p></Link>
+              </div>
             </div>
           )}
 
