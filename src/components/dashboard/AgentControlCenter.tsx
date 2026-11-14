@@ -228,7 +228,7 @@ export default function AgentControlCenter() {
   }, []);
 
   function startCreate(templateId = "custom") {
-    const template = templates.find((item) => item.id === templateId) ?? templates[3];
+    const template = templates.find((item) => item.id === templateId) ?? templates[templates.length - 1];
     const selected = template.tools.filter((id) => tools.some((tool) => tool.id === id));
     setEditingId(null);
     setDraft({
