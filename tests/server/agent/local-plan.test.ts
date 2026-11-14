@@ -91,3 +91,12 @@ test("tool failures are not accepted as successful evidence", () => {
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.code, "AGENT_TOOL_EXECUTION_FAILED");
 });
+
+test("does not accept a device job that completed without an evidence payload", () => {
+  const result = inspectExecutionEvidence([{
+    callId: "call-1", toolId: "android.device.read", status: "completed",
+    result: { status: "completed", result: null },
+  }]);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "AGENT_NO_EXECUTION_EVIDENCE");
+});
