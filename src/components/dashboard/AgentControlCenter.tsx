@@ -400,9 +400,10 @@ export default function AgentControlCenter() {
           if (latest.length) {
             setRunInfo((current) => current ? ({
               ...current,
-              status: latest.every((item) => item.status === "completed") ? "completed"
-                : latest.some((item) => item.status === "failed") ? "failed"
-                  : latest.some((item) => item.status === "completed") ? "partial" : "running",
+              status: latest.length === taskIds.length && latest.every((item) => item.status === "completed") ? "completed"
+                : latest.length === taskIds.length && latest.every((item) => ["completed", "failed", "cancelled"].includes(item.status))
+                  ? latest.some((item) => item.status === "completed") ? "partial" : "failed"
+                  : "running",
               assignments: current.assignments?.map((assignment) => {
                 const snapshot = assignment.taskId ? latest.find((item) => item.id === assignment.taskId) : undefined;
                 return snapshot ? { ...assignment, status: snapshot.status } : assignment;
