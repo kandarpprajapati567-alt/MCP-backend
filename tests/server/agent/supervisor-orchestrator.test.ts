@@ -59,6 +59,27 @@ test("disabled agents are excluded and no-enabled-agent state is explicit", () =
   assert.equal(assignSubtasksToAgents([{ id: "one", title: "Work", objective: "Work", requiredCapabilities: ["general"] }], agents.map((agent) => ({ ...agent, enabled: false }))).ok, false);
 });
 
+
+test("planner preserves overflow work instead of silently dropping objectives", () => {
+  const plan = buildFallbackSupervisorPlan("Research sources; Analyze risks; Write report; Verify citations");
+  assert.equal(plan.subtasks.length, 3);
+  assert.match(plan.subtasks[2].objective, /Write report/);
+  assert.match(plan.subtasks[2].objective, /Verify citations/);
+});
+
+test("specialist assignment ignores generic keyword overlap and reuses a qualified Agent", () => {
+  const candidates = [
+    { id: "general", name: "General Helper", description: "Repository support assistant", role: "General assistant", allowedTools: [], enabled: true },
+    { id: "developer", name: "Developer", description: "Software engineering", role: "Developer", allowedTools: ["github.read_file"], enabled: true },
+  ];
+  const result = assignSubtasksToAgents([
+    { id: "one", title: "Fix", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
+    { id: "two", title: "Review", objective: "Review repository implementation", requiredCapabilities: ["coding", "github"] },
+  ], candidates);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.assignments.map((item) => item.agentId), ["developer", "developer"]);
+});
+
 test("Stage 2 self-test reports every diagnostic check as passed", () => {
   const results = runStageTwoDiagnostics();
   assert.equal(results.length, 5);
