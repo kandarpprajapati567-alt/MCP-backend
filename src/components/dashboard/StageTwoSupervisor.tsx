@@ -42,8 +42,14 @@ export function StageTwoSupervisor({ token, agents }: Props) {
         try {
           const response = await request("/api/v1/agent/tasks/" + taskId, "GET");
           if (!response.ok) return null;
-          const payload = await response.json() as { task?: { id?: string; status?: string; result?: unknown; error_code?: string } };
-          return payload.task?.id ? payload.task : null;
+          const payload = await response.json() as {
+            task?: { id?: string; status?: string; result?: unknown; error_code?: string };
+            events?: Array<{ event_type?: string; payload?: { message?: unknown } }>;
+          };
+          if (!payload.task?.id) return null;
+          const failedEvent = payload.events?.find((event) => event.event_type === "tool.failed");
+          const failureMessage = typeof failedEvent?.payload?.message === "string" ? failedEvent.payload.message : undefined;
+          return { ...payload.task, failureMessage };
         } catch { return null; }
       }));
       const latest = new Map(snapshots.filter((item): item is NonNullable<typeof item> => Boolean(item?.id)).map((item) => [item.id as string, item]));
@@ -58,6 +64,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
               status: task.status ?? assignment.status,
               result: typeof task.result === "string" ? task.result : assignment.result,
               errorCode: task.error_code ?? assignment.errorCode,
+              error: task.failureMessage ?? assignment.error,
             };
           }),
         }) : current);
