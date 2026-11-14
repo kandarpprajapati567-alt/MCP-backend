@@ -101,7 +101,11 @@ function inferCapabilities(text: string): string[] {
 
 export function buildFallbackSupervisorPlan(goal: string): SupervisorPlan {
   const clean = goal.trim().replace(/\s+/g, " ");
-  const parts = clean
+  const staged = clean.replace(
+    /\s+and\s+(?=(?:research|analy[sz]e|write|draft|implement|build|create|prepare|compare|review|test|verify|summari[sz]e|find|investigate|evaluate)\b)/gi,
+    "; ",
+  );
+  const parts = staged
     .split(/\s*(?:\band then\b|\bthen\b|;|\n)\s*/i)
     .map((part) => part.trim())
     .filter(Boolean)
