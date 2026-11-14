@@ -190,6 +190,7 @@ export default function AgentsPage() {
       return;
     }
     setAccessAgentId(agentId);
+    setAccessError("");
     if (!accessReports[agentId]) await refreshToolAccess(agentId);
   }
 
