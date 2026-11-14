@@ -80,6 +80,27 @@ export async function executeUserWorkflow(
 }
 
 
+export function selectAgentExecutionRoute(
+  preference: AgentProviderPreference,
+  modelPreference: string | null,
+  basePolicy: ModelRoutePolicy,
+  availableProviders: readonly string[],
+): { providerId: "mock" | "openrouter"; model: string } {
+  const requestedProvider = preference === "auto" ? basePolicy.primaryProvider : preference;
+  const requestedModel = modelPreference?.trim() ||
+    (requestedProvider === basePolicy.primaryProvider
+      ? basePolicy.primaryModel
+      : DEFAULT_MODELS[requestedProvider] ?? DEFAULT_MODELS.mock);
+
+  // The personal deployment is zero-budget: only an explicitly selected
+  // OpenRouter model marked :free may use a remote inference provider.
+  if (requestedProvider === "openrouter" && requestedModel.endsWith(":free") &&
+      availableProviders.includes("openrouter")) {
+    return { providerId: "openrouter", model: requestedModel };
+  }
+  return { providerId: "mock", model: DEFAULT_MODELS.mock };
+}
+
 export async function executeAgentWorkflow(
   userId: string,
   workflow: AIWorkflow,
@@ -89,24 +110,19 @@ export async function executeAgentWorkflow(
 ) {
   const providers = await createRuntimeProviderRegistry(userId);
   const basePolicy = await getUserWorkflowPolicy(userId, workflow, providers);
-  const providerId = preferences.providerPreference === "auto"
-    ? basePolicy.primaryProvider
-    : preferences.providerPreference;
-  if (!providers[providerId]) {
-    throw new Error("The Agent's selected AI provider is not configured.");
-  }
-
-  const fallbackProviders = [...new Set([
-    ...basePolicy.fallbackProviders.filter((id) => id !== providerId),
-    ...(providerId === "mock" ? [] : ["mock"]),
-  ])];
+  const selected = selectAgentExecutionRoute(
+    preferences.providerPreference,
+    preferences.modelPreference,
+    basePolicy,
+    Object.keys(providers),
+  );
+  const providerId = selected.providerId;
   const policy: ModelRoutePolicy = {
     ...basePolicy,
     primaryProvider: providerId,
-    primaryModel: providerId === "mock" ? DEFAULT_MODELS.mock :
-      preferences.modelPreference?.trim() ||
-      (providerId === basePolicy.primaryProvider ? basePolicy.primaryModel : DEFAULT_MODELS[providerId]),
-    fallbackProviders,
+    primaryModel: selected.model,
+    fallbackProviders: providerId === "openrouter" ? ["mock"] : [],
+    ...(providerId === "openrouter" ? { fallbackModel: DEFAULT_MODELS.mock } : {}),
   };
   return executeWorkflow(workflow, policy, providers, request, onAttempt);
 }
