@@ -10,7 +10,7 @@ The Agents area is the primary owner-facing workspace for creating specialist de
 - **Activity:** persisted task history, final output, tool results, event timeline and device-job records.
 - **Test Center:** the existing Agent Lab remains the advanced verification workspace for deterministic task execution, allowlist boundaries, idempotency, cancellation and tool-registry contract checks.
 
-Agent templates are starting configurations, not new permissions. A template can select only tools returned by the current registry. Missing tools are called out; an Agent without assigned tools cannot be launched from the workbench.
+Agent templates are starting configurations, not new permissions. A template can select only tools returned by the current registry. Missing tools are called out. Agents without tools can run only model-only writing/reasoning prompts when a real AI provider is configured; the server rejects source-backed research without source tools.
 
 ## Execution and safety contract
 
@@ -29,7 +29,7 @@ The overview reports observations from the latest 50 persisted tasks:
 - **Tool executions:** number of persisted tool result records.
 - **Evidence coverage:** completed tasks with at least one persisted tool result divided by all completed tasks.
 
-These are operational indicators, not an independent truth score, model-quality benchmark, or production certification. A completed task with no tool result is not evidence of correctness.
+These are operational indicators, not an independent truth score, model-quality benchmark, or production certification. A model-only completion is explicitly labelled in task events and has no tool evidence; it must not be treated as independently verified.
 
 ## Known capability boundary
 
