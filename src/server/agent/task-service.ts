@@ -259,9 +259,13 @@ async function executeAgentTaskRecord(
     await setTask(admin, id, { status: "synthesizing", tool_results: results });
     await assertTaskNotCancelled(admin, id);
     await event(admin, id, "task.synthesizing");
+    const synthesisSystemPrompt = buildSynthesisSystemPrompt(agent?.role, agent?.instructions) +
+      (executionMode === "model_only"
+        ? "\nMODEL-ONLY EXECUTION: No external tools were run. Do not claim browsing, research, file access, code changes, deployment, device actions, citations or independent fact verification. Work only from the user's supplied context and clearly state uncertainty."
+        : "");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
-        { role: "system", content: buildSynthesisSystemPrompt(agent?.role, agent?.instructions) },
+        { role: "system", content: synthesisSystemPrompt },
         { role: "user", content: buildSynthesisUserContent(task, plan, results) },
       ],
       temperature: 0.2,
