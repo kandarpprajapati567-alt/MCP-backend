@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyOwnerRequest } from "@/server/security/owner-auth";
+import { TOOL_CATALOG } from "@/server/tools/registry";
 import { listUnifiedAgentTools } from "@/server/agent/unified-tool-catalog";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
   try {
     const registry = await listUnifiedAgentTools();
     return NextResponse.json({
-      tools: registry.tools,
+      tools: [
+        ...TOOL_CATALOG.filter((tool) => tool.id === "device.dispatch_tool" || tool.id.startsWith("agent.")),
+        ...registry.tools,
+      ],
       sources: registry.sources,
       executionPolicy: "Allowlisted and schema-validated. Device permissions and consent remain enforced by the Android runtime.",
       availabilityPolicy: "Backend tools are code-registered; Remote MCP tools require an enabled connection; device tools require a heartbeat within five minutes. External reachability and credentials are checked at invocation.",
