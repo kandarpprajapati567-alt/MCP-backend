@@ -58,6 +58,7 @@ test("database claim uses row locks and caps the shared worker batch", () => {
 });
 
 test("task writes and events are fenced by the active worker lease", () => {
+  assert.match(leaseMigration, /'task\.claimed'/i);
   assert.match(leaseMigration, /renew_agent_task_lease/i);
   assert.match(leaseMigration, /append_agent_task_event/i);
   assert.match(leaseMigration, /finish_agent_task/i);
