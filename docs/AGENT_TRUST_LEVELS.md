@@ -100,6 +100,17 @@ Never store raw credentials, full authorization headers, passkeys, or unredacted
 6. Add provider fallback, connector and multi-agent controls only after the preceding gates are reliable.
 7. Add adversarial tests, independent review, operational drills, and release evidence.
 
+### Database-backed worker lease candidate
+
+The focused lease slice is built on the existing Agent task/event tables and the safe retry/budget work. It adds:
+- Atomic owner-scoped task claims with `FOR UPDATE SKIP LOCKED`; maximum batch size remains three.
+- A random lease token bound to one worker identity, with a 90-second expiry and 20-second renewal interval.
+- Fenced task-state updates and execution-event appends; a stale worker cannot finalize a task after losing its lease.
+- Transactional expiry recovery that records a terminal failed/cancelled state and an audit event. It does not replay work automatically.
+- Manual retry remains restricted to planning-only failures with no plan or tool/device activity.
+
+The required migration is `supabase/migrations/20261115121500_add_agent_task_worker_leases.sql`. It is not applied by CI or by this branch. Database integration and Render live verification remain pending. This is not a certification claim.
+
 ## Current implementation baseline (not a certification claim)
 
 Repository inspection found existing modules for agent definitions, planner, plan schema, sequential tool execution, task persistence/events, synthesis, device tool jobs, and finalization. These are useful foundations, but the presence of a module is not proof that the end-to-end system is secure or reliable.
@@ -107,7 +118,9 @@ Repository inspection found existing modules for agent definitions, planner, pla
 Known constraints observed in the current code include:
 - Agent definitions currently support bounded plans of up to 16 steps and 8 registered tool calls; tool calls execute sequentially.
 - The local fallback planner recognizes only a small set of text-processing intents; it is not a general-purpose offline planner.
-- Task submission still performs planning, backend tool execution and synthesis inline in the API request. The current PR adds optional idempotency keys and cooperative cancellation checkpoints, but a durable background worker, task lease/claim lifecycle, automatic retry policy and full-plan crash recovery remain unimplemented.
+- Normal task submissions can execute under a request-scoped lease; team/supervisor subtasks are persisted and claimed by the existing Node in-process worker. The lease candidate adds an atomic `FOR UPDATE SKIP LOCKED` claim RPC, a unique worker/token pair, 90-second expiry, 20-second heartbeat, fenced state/event writes, and transactional expired-lease recovery. Its migration is present in a feature branch only and has not been applied to production.
+- Expired work is marked failed or cancelled; it is never automatically replayed. A manual retry is permitted only for a planning-stage interruption with no persisted plan, tool results, tool activity, device job or cancellation request. Full-plan checkpoint resume remains unimplemented.
+- Device-result finalization still uses the existing compare-and-set transition and is not yet covered by worker leases. The free Render web process can be suspended after inactivity, so queue processing is not guaranteed while suspended.
 - Device tools are discovered from recent online device capability records; capability metadata must be treated as untrusted and validated at the execution boundary.
 - Provider mock mode must never be represented as a real model execution.
 

@@ -126,14 +126,16 @@ The model is the reasoning/generation engine; this backend supplies orchestratio
 - Agent configuration snapshots retained with task history, even if a definition is later edited or deleted.
 - Owner-authenticated Agent Manager CRUD APIs and dashboard at `/dashboard/agents`.
 - Parallel specialist delegation endpoint at `POST /api/v1/agent/teams/run`: assign separate objectives to 2–3 enabled Agents; each child task uses its own saved instructions, provider/model preference, tool allowlist, idempotency key and persisted task history. The Agent Lab exposes this at `/dashboard/agent-lab`.
-- Team execution persists each delegated objective as an independent task; a Node-runtime in-process worker claims up to three queued tasks concurrently. The worker heartbeats active tasks and marks tasks with expired heartbeats failed after ten minutes. It does not automatically replay interrupted tasks because side-effecting tool calls cannot be assumed safe to repeat.
-- This worker runs inside the free Render web service rather than a separate paid background-worker instance. Render may suspend a free service after inactivity; continuous execution while the service is suspended is not guaranteed. Android foreground-service keepalive integration remains separate work.
+- Team execution persists each delegated objective as an independent task; a Node-runtime in-process worker claims up to three queued tasks concurrently through an atomic Supabase `FOR UPDATE SKIP LOCKED` lease RPC. Each claim has a worker identity, unique lease token, 90-second expiry and 20-second heartbeat. Task state writes and execution events are fenced by the current lease.
+- Expired leases are transactionally marked failed or cancelled with an audit event. Interrupted tasks are never automatically replayed; the owner may retry only a planning-stage interruption with no plan, tool results, tool activity, device jobs or cancellation request.
+- The worker runs inside the existing free Render web service rather than a separate paid background-worker instance. Render may suspend a free service after inactivity; processing pauses while suspended and resumes when the service wakes. Android foreground-service keepalive integration remains separate work.
+- The lease RPCs require migration `supabase/migrations/20261115121500_add_agent_task_worker_leases.sql`. The migration is included in this feature branch but has not been applied to production. Device-result finalization continues to use its existing status compare-and-set path and is not yet lease-fenced.
 - Shared scratch memory, dependency-aware delegation, parent team-run persistence, resumable checkpoints and safe automatic retries remain planned hardening work.
 - Allow-listed backend tools, task status, event history, and result synthesis.
 - Failure diagnostics in task history: failed execution stage (`planning`, `policy_validation`, `tool_execution`, `synthesis`, or `finalization`) plus a sanitized, user-safe error message. Unexpected internal errors remain generic; credentials and arbitrary exception details are not exposed.
 - Agent task submission accepts an optional `Idempotency-Key` header; repeated keys return the original task only when the normalized task and selected Agent match. Reusing a key for different work is rejected.
 - Owner-authenticated task cancellation is available at `POST /api/v1/agent/tasks/:taskId/cancel`. Queued/device-waiting work can be cancelled immediately; active work observes cancellation at safe checkpoints between tools and before final completion. An already-running external call cannot be forcibly interrupted.
-- These lifecycle changes are in PR #30 and require the new Supabase migrations before deployment. They do not yet provide a durable background worker, automatic task retries, or crash-resume of the full Agent plan.
+- Cooperative cancellation and request idempotency are persisted through Supabase migrations. The current lease candidate adds atomic worker claims and expiry recovery; it still does not provide full-plan checkpoint resume or automatic replay after tool execution.
 - Evidence-aware synthesis guard and nested tool-schema hardening are under [PR #30](https://github.com/kandarpprajapati567-alt/MCP-backend/pull/30). The PR is open and not merged; do not treat these changes as deployed production behavior.
 - Read-only GitHub repository inspection: list branches and commits, browse file paths, and read bounded text files from this repository.
 
@@ -309,7 +311,8 @@ The order is deliberate: **finish a trustworthy Agent Engine first; then connect
 ### Phase 1 — Complete and harden the Agent Engine (current priority)
 - [ ] Independent claim verifier and contradiction/confidence reporting
 - [ ] Evidence provenance, source freshness and cross-source checks beyond the current synthesis guard
-- [ ] Durable worker lifecycle, cancellation, idempotency and recovery for long-running tasks
+- [x] Database-backed worker leases, cancellation, request idempotency and expired-lease recovery (feature branch; migration not yet applied)
+- [ ] Full-plan checkpoint resume and safe replay after verified idempotent tool boundaries
 - [ ] Central risk/permission policy enforced immediately before side effects
 - [ ] Certification registry, versioned suites and evidence-backed trust-level display
 

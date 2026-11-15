@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
@@ -32,30 +33,132 @@ import {
   MAX_AGENT_TASK_RETRIES,
   parseAgentTaskRetryKey,
 } from "@/server/agent/task-retry-policy";
+import {
+  AgentTaskLeaseLostError,
+  AGENT_TASK_LEASE_HEARTBEAT_MS,
+  AGENT_TASK_LEASE_SECONDS,
+  AGENT_TASK_WORKER_BATCH_LIMIT,
+  isAgentTaskLeaseCurrent,
+  type AgentTaskLease,
+} from "@/server/agent/task-lease";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function event(admin: ReturnType<typeof createAdminClient>, taskId: string, eventType: string, payload: Record<string, unknown> = {}) {
-  const { error } = await admin.from("agent_task_events").insert({ task_id: taskId, owner_id: PERSONAL_OWNER_ID, event_type: eventType, payload });
+async function event(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  eventType: string,
+  payload: Record<string, unknown> = {},
+  lease?: AgentTaskLease,
+) {
+  if (lease) {
+    const { data, error } = await admin.rpc("append_agent_task_event", {
+      p_owner_id: PERSONAL_OWNER_ID,
+      p_task_id: taskId,
+      p_worker_id: lease.workerId,
+      p_lease_token: lease.token,
+      p_event_type: eventType,
+      p_payload: payload,
+    });
+    if (error) throw new Error("Unable to persist task event.");
+    if (data !== true) throw new AgentTaskLeaseLostError();
+    return;
+  }
+  const { error } = await admin.from("agent_task_events").insert({
+    task_id: taskId, owner_id: PERSONAL_OWNER_ID, event_type: eventType, payload,
+  });
   if (error) throw new Error("Unable to persist task event.");
 }
 
-async function setTask(admin: ReturnType<typeof createAdminClient>, id: string, patch: Record<string, unknown>) {
-  const { error } = await admin.from("agent_tasks").update({ ...patch, updated_at: new Date().toISOString() })
+async function setTask(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  patch: Record<string, unknown>,
+  lease?: AgentTaskLease,
+) {
+  let query = admin.from("agent_tasks").update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID);
+  if (lease) {
+    query = query.eq("worker_id", lease.workerId)
+      .eq("lease_token", lease.token)
+      .gt("lease_expires_at", new Date().toISOString());
+  }
+  const { data, error } = await query.select("id").maybeSingle();
   if (error) throw new Error("Unable to update task.");
+  if (lease && !data) throw new AgentTaskLeaseLostError();
 }
 
-async function assertTaskNotCancelled(admin: ReturnType<typeof createAdminClient>, id: string) {
+async function assertTaskNotCancelled(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  lease?: AgentTaskLease,
+) {
   const { data, error } = await admin.from("agent_tasks")
-    .select("status,cancellation_requested_at")
+    .select("status,cancellation_requested_at,worker_id,lease_token,lease_expires_at")
     .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
   if (error || !data) throw new Error("Task lifecycle state is unavailable.");
   if (data.status === "cancelled" || isAgentTaskCancellationRequested(data.cancellation_requested_at)) {
     throw new AgentTaskCancelledError();
   }
+  if (lease && !isAgentTaskLeaseCurrent(lease, data)) throw new AgentTaskLeaseLostError();
+}
+
+async function claimAgentTasks(
+  admin: ReturnType<typeof createAdminClient>,
+  workerId: string,
+  limit: number,
+  taskId: string | null = null,
+) {
+  const { data, error } = await admin.rpc("claim_agent_tasks", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_worker_id: workerId,
+    p_limit: limit,
+    p_task_id: taskId,
+    p_lease_seconds: AGENT_TASK_LEASE_SECONDS,
+  });
+  if (error) throw new Error("Agent task leasing is unavailable. Apply the worker lease migration before processing tasks.");
+  return Array.isArray(data) ? data : [];
+}
+
+async function renewAgentTaskLease(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  lease: AgentTaskLease,
+) {
+  const { data, error } = await admin.rpc("renew_agent_task_lease", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_task_id: taskId,
+    p_worker_id: lease.workerId,
+    p_lease_token: lease.token,
+    p_lease_seconds: AGENT_TASK_LEASE_SECONDS,
+  });
+  if (error) throw new Error("Task lease renewal is unavailable.");
+  if (data !== true) throw new AgentTaskLeaseLostError();
+}
+
+async function finishAgentTask(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  lease: AgentTaskLease,
+  status: "completed" | "failed" | "cancelled",
+  result: string | null,
+  errorCode: string | null,
+  payload: Record<string, unknown>,
+) {
+  const { data, error } = await admin.rpc("finish_agent_task", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_task_id: taskId,
+    p_worker_id: lease.workerId,
+    p_lease_token: lease.token,
+    p_status: status,
+    p_result: result,
+    p_error_code: errorCode,
+    p_payload: payload,
+  });
+  if (error) throw new Error("Task finalization could not be saved.");
+  if (data !== true) throw new AgentTaskLeaseLostError();
 }
 
 async function loadAgentDefinition(
@@ -129,48 +232,55 @@ async function executeAgentTaskRecord(
   id: string,
   task: string,
   agent: ({ id: string } & AgentDefinitionInput) | null,
+  lease: AgentTaskLease,
   retryInfo?: { rootTaskId: string; attempt: number },
 ) {
   const budget = resolveAgentTaskBudget(agent ?? undefined);
   const startedAt = Date.now();
   let totalToolResultBytes = 0;
   let toolResultBudgetExceeded = false;
+  let leaseLost = false;
+  const updateTask = (patch: Record<string, unknown>) => setTask(admin, id, patch, lease);
+  const recordEvent = (eventType: string, payload: Record<string, unknown> = {}) =>
+    event(admin, id, eventType, payload, lease);
+  const assertActive = async () => {
+    if (leaseLost) throw new AgentTaskLeaseLostError();
+    await assertTaskNotCancelled(admin, id, lease);
+  };
   const heartbeat = setInterval(() => {
-    void (async () => {
-      try {
-        const { error } = await admin.from("agent_tasks").update({ updated_at: new Date().toISOString() })
-          .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-          .in("status", ["planning", "executing", "synthesizing"]);
-        if (error) console.warn("[agent-worker] Heartbeat update failed for task", id);
-      } catch {
-        console.warn("[agent-worker] Heartbeat request failed for task", id);
-      }
-    })();
-  }, 30_000);
+    void renewAgentTaskLease(admin, id, lease).catch((cause) => {
+      leaseLost = true;
+      console.warn("[agent-worker] Task lease renewal failed:", {
+        taskId: id,
+        code: cause instanceof AgentTaskLeaseLostError ? cause.code : "LEASE_RENEWAL_UNAVAILABLE",
+      });
+    });
+  }, AGENT_TASK_LEASE_HEARTBEAT_MS);
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
-    await event(admin, id, "task.created", retryInfo
+    await recordEvent("task.created", retryInfo
       ? { retryOf: retryInfo.rootTaskId, attempt: retryInfo.attempt, retryPolicy: "planning-only" }
       : {});
-    await assertTaskNotCancelled(admin, id);
-    await setTask(admin, id, { status: "planning" });
-    await assertTaskNotCancelled(admin, id);
-    await event(admin, id, "task.planning");
+    await recordEvent("task.claimed", { workerId: lease.workerId });
+    await assertActive();
+    await updateTask({ status: "planning" });
+    await assertActive();
+    await recordEvent("task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     failedStage = "policy_validation";
     assertAgentTaskPlanWithinBudget(plan, budget);
     if (agent && plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId))) {
       throw new Error("Agent execution policy rejected the generated plan.");
     }
-    await setTask(admin, id, { plan, status: "executing" });
-    await event(admin, id, "task.plan_ready", {
+    await updateTask({ plan, status: "executing" });
+    await recordEvent("task.plan_ready", {
       steps: plan.steps.length,
       toolCalls: plan.toolCalls.length,
       deviceToolsAvailable: deviceTools.length,
@@ -185,7 +295,7 @@ async function executeAgentTaskRecord(
       },
       ...(agent ? { agentId: agent.id, agentName: agent.name, maxSteps: agent.maxSteps, maxToolCalls: agent.maxToolCalls } : {}),
     });
-    await event(admin, id, "task.executing");
+    await recordEvent("task.executing");
 
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
@@ -199,7 +309,7 @@ async function executeAgentTaskRecord(
         }).select("id,device_id,tool_id").single();
         if (error || !job) throw new Error("Device tool job could not be queued.");
         pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
-        await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
+        await recordEvent("tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
         return { queuedForDevice: true };
       }
       return executeBackendTool(call.toolId, call.arguments);
@@ -209,8 +319,8 @@ async function executeAgentTaskRecord(
       if (deviceTools.some((tool) => tool.id === call.toolId)) return;
       if (toolResultBudgetExceeded) {
         results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Task result budget was exhausted before this output could be retained." } });
-        await setTask(admin, id, { tool_results: results });
-        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Task result budget was exhausted." });
+        await updateTask({ tool_results: results });
+        await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: "Task result budget was exhausted." });
         return;
       }
       const value = execution.ok ? execution.result : { ok: false, error: execution.error };
@@ -219,19 +329,19 @@ async function executeAgentTaskRecord(
         assertAgentTaskToolResultWithinBudget(bytes, totalToolResultBytes, budget);
         totalToolResultBytes += bytes;
         results.push({ callId: call.id, toolId: call.toolId, result: value });
-        await setTask(admin, id, { tool_results: results });
-        if (execution.ok) await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-        else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
+        await updateTask({ tool_results: results });
+        if (execution.ok) await recordEvent("tool.completed", { callId: call.id, toolId: call.toolId });
+        else await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
       } catch (cause) {
         if (!(cause instanceof AgentTaskBudgetExceededError)) throw cause;
         toolResultBudgetExceeded = true;
         results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Tool output exceeded the configured task result budget." } });
-        await setTask(admin, id, { tool_results: results });
-        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Tool output exceeded the configured task result budget." });
+        await updateTask({ tool_results: results });
+        await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: "Tool output exceeded the configured task result budget." });
       }
     };
     const beforeEach = async () => {
-      await assertTaskNotCancelled(admin, id);
+      await assertActive();
       if (toolResultBudgetExceeded) throw new AgentTaskBudgetExceededError("tool results");
       assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
     };
@@ -245,10 +355,16 @@ async function executeAgentTaskRecord(
       throw new Error("One or more registered tool calls failed.");
     }
 
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     if (pendingJobs.length) {
-      await assertTaskNotCancelled(admin, id);
-      await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
+      await assertActive();
+      await updateTask({
+        status: "waiting_for_device",
+        tool_results: results,
+        worker_id: null,
+        lease_token: null,
+        lease_expires_at: null,
+      });
       try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
       const { data: latest, error: latestError } = await admin.from("agent_tasks").select("status,result,error_code")
         .eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
@@ -268,12 +384,12 @@ async function executeAgentTaskRecord(
       };
     }
 
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     failedStage = "synthesis";
     assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
-    await setTask(admin, id, { status: "synthesizing", tool_results: results });
-    await assertTaskNotCancelled(admin, id);
-    await event(admin, id, "task.synthesizing");
+    await updateTask({ status: "synthesizing", tool_results: results });
+    await assertActive();
+    await recordEvent("task.synthesizing");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
         { role: "system", content: buildSynthesisSystemPrompt(agent?.role, agent?.instructions) },
@@ -295,15 +411,9 @@ async function executeAgentTaskRecord(
         JSON.stringify(results, null, 2) +
         (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
     failedStage = "finalization";
-    const completedAt = new Date().toISOString();
-    const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
-      .update({ status: "completed", result, completed_at: completedAt, updated_at: completedAt })
-      .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("status", "synthesizing").is("cancellation_requested_at", null)
-      .select("id").maybeSingle();
-    if (completionError) throw new Error("Task completion could not be saved.");
-    if (!completedTask) throw new AgentTaskCancelledError();
-    await event(admin, id, "task.completed");
+    await finishAgentTask(admin, id, lease, "completed", result, null, {
+      toolResults: results.length,
+    });
     return {
       taskId: id,
       status: "completed",
@@ -313,24 +423,46 @@ async function executeAgentTaskRecord(
       result,
     };
   } catch (error) {
+    let lifecycleStatus: string | null = null;
     let cancellationRequested = error instanceof AgentTaskCancelledError;
     if (!cancellationRequested) {
       const { data: lifecycle } = await admin.from("agent_tasks")
         .select("status,cancellation_requested_at")
         .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
-      cancellationRequested = lifecycle?.status === "cancelled" ||
+      lifecycleStatus = typeof lifecycle?.status === "string" ? lifecycle.status : null;
+      cancellationRequested = lifecycleStatus === "cancelled" ||
         isAgentTaskCancellationRequested(lifecycle?.cancellation_requested_at);
     }
-    if (cancellationRequested) {
-      const cancelledAt = new Date().toISOString();
-      const { data: cancelledTask, error: cancelError } = await admin.from("agent_tasks")
-        .update({ status: "cancelled", completed_at: cancelledAt, updated_at: cancelledAt })
-        .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-        .not("status", "in", '("completed","failed","cancelled")')
-        .select("id").maybeSingle();
-      if (cancelError) throw new Error("Task cancellation could not be persisted.");
-      if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
+    if (lifecycleStatus === "cancelled") {
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
+    }
+    if (cancellationRequested) {
+      try {
+        await finishAgentTask(admin, id, lease, "cancelled", null, "AGENT_TASK_CANCELLED", {
+          cooperative: true,
+        });
+        return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
+      } catch (finishError) {
+        console.warn("[agent-worker] Cancellation finalization awaits lease recovery:", {
+          taskId: id,
+          code: finishError instanceof AgentTaskLeaseLostError ? finishError.code : "TASK_FINALIZATION_UNAVAILABLE",
+        });
+        return {
+          taskId: id,
+          status: "recovery_pending",
+          code: "AGENT_TASK_FINALIZATION_PENDING",
+          message: "Cancellation could not be committed by this worker. The lease recovery path will reconcile the task.",
+        };
+      }
+    }
+    if (leaseLost || error instanceof AgentTaskLeaseLostError) {
+      console.warn("[agent-worker] Task execution stopped after lease loss:", { taskId: id });
+      return {
+        taskId: id,
+        status: "recovery_pending",
+        code: "AGENT_WORKER_LEASE_LOST",
+        message: "The worker no longer owns this task. No automatic replay was started; lease recovery will record the outcome.",
+      };
     }
     const code = error instanceof AgentTaskBudgetExceededError
       ? "AGENT_BUDGET_EXCEEDED"
@@ -339,11 +471,23 @@ async function executeAgentTaskRecord(
     const message = safeAgentFailureMessage(error);
     console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
     try {
-      const failedAt = new Date().toISOString();
-      await setTask(admin, id, { status: "failed", error_code: code, completed_at: failedAt });
-      await event(admin, id, "task.failed", { code, stage: failedStage, message });
+      await finishAgentTask(admin, id, lease, "failed", null, code, {
+        code,
+        stage: failedStage,
+        message,
+      });
+    } catch (finishError) {
+      console.error("[agent-worker] Failure state awaits lease recovery:", {
+        taskId: id,
+        code: finishError instanceof AgentTaskLeaseLostError ? finishError.code : "TASK_FINALIZATION_UNAVAILABLE",
+      });
+      return {
+        taskId: id,
+        status: "recovery_pending",
+        code: "AGENT_TASK_FINALIZATION_PENDING",
+        message: "The failure state could not be committed by this worker. The lease recovery path will reconcile the task.",
+      };
     }
-    catch { /* Preserve the original task failure. */ }
     return {
       taskId: id,
       status: "failed",
@@ -431,7 +575,25 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       message: "Task persisted and queued for the Agent worker.",
     };
   }
-  return executeAgentTaskRecord(admin, id, task, agent);
+
+  const workerId = "inline-" + randomUUID();
+  const claimedRows = await claimAgentTasks(admin, workerId, 1, id);
+  const claimed = claimedRows[0];
+  if (!claimed) {
+    const { data: current, error: currentError } = await admin.from("agent_tasks")
+      .select("status").eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
+    if (currentError || !current) throw new Error("Task state could not be loaded after queueing.");
+    return {
+      taskId: id,
+      status: current.status as string,
+      message: "The task is already claimed or queued for the Agent worker.",
+    };
+  }
+  if (typeof claimed.lease_token !== "string") {
+    throw new Error("The Agent worker did not receive a valid task lease.");
+  }
+  const lease: AgentTaskLease = { workerId, token: claimed.lease_token };
+  return executeAgentTaskRecord(admin, id, task, agent, lease);
 }
 
 export async function retryAgentTask(taskId: string) {
@@ -563,32 +725,25 @@ export async function retryAgentTask(taskId: string) {
   };
 }
 
-export async function processQueuedAgentTasks(limit = 3): Promise<number> {
+export async function processQueuedAgentTasks(
+  limit = AGENT_TASK_WORKER_BATCH_LIMIT,
+  workerId = "worker-" + randomUUID(),
+): Promise<number> {
   const admin = createAdminClient();
-  const batchSize = Math.max(1, Math.min(3, Math.floor(limit)));
-  const { data: queued, error: queueError } = await admin.from("agent_tasks")
-    .select("id")
-    .eq("owner_id", PERSONAL_OWNER_ID)
-    .eq("status", "queued")
-    .order("created_at", { ascending: true })
-    .limit(batchSize);
-  if (queueError) throw new Error("Agent task queue is unavailable.");
+  const batchSize = Number.isFinite(limit)
+    ? Math.max(1, Math.min(AGENT_TASK_WORKER_BATCH_LIMIT, Math.floor(limit)))
+    : 1;
+  const claimedRows = await claimAgentTasks(admin, workerId, batchSize, null);
 
   let processed = 0;
-  await Promise.all((queued ?? []).map(async (candidate) => {
-    const claimedAt = new Date().toISOString();
-    const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
-      status: "planning",
-      updated_at: claimedAt,
-    }).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("id", candidate.id)
-      .eq("status", "queued")
-      .is("cancellation_requested_at", null)
-      .select("id,task,agent_definition_id,agent_snapshot,idempotency_key")
-      .maybeSingle();
-    if (claimError) throw new Error("Agent task could not be claimed.");
-    if (!claimed) return;
-
+  await Promise.all(claimedRows.map(async (claimed) => {
+    const taskId = String(claimed.task_id ?? "");
+    const leaseToken = typeof claimed.lease_token === "string" ? claimed.lease_token : "";
+    if (!taskId || !leaseToken) {
+      console.error("[agent-worker] Claim response was missing its task identity or lease token.");
+      return;
+    }
+    const lease: AgentTaskLease = { workerId, token: leaseToken };
     let agent: ({ id: string } & AgentDefinitionInput) | null = null;
     if (typeof claimed.agent_definition_id === "string") {
       const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
@@ -605,12 +760,17 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
         enabled: true,
       });
       if (!parsed.ok) {
-        await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
-        await event(admin, claimed.id, "task.failed", {
-          code: "AGENT_SNAPSHOT_INVALID",
-          stage: "planning",
-          message: "The saved Agent execution snapshot is invalid; no tools were run.",
-        });
+        try {
+          await event(admin, taskId, "task.created", {}, lease);
+          await event(admin, taskId, "task.claimed", { workerId }, lease);
+          await finishAgentTask(admin, taskId, lease, "failed", null, "AGENT_SNAPSHOT_INVALID", {
+            code: "AGENT_SNAPSHOT_INVALID",
+            stage: "planning",
+            message: "The saved Agent execution snapshot is invalid; no tools were run.",
+          });
+        } catch {
+          console.warn("[agent-worker] Invalid Agent snapshot awaits lease recovery:", { taskId });
+        }
         processed += 1;
         return;
       }
@@ -618,56 +778,34 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
     }
 
     const retryKey = parseAgentTaskRetryKey(claimed.idempotency_key);
-    await executeAgentTaskRecord(
-      admin,
-      claimed.id,
-      String(claimed.task),
-      agent,
-      retryKey ? { rootTaskId: retryKey.rootTaskId, attempt: retryKey.attempt } : undefined,
-    );
+    try {
+      await executeAgentTaskRecord(
+        admin,
+        taskId,
+        String(claimed.task),
+        agent,
+        lease,
+        retryKey ? { rootTaskId: retryKey.rootTaskId, attempt: retryKey.attempt } : undefined,
+      );
+    } catch (cause) {
+      console.error("[agent-worker] Claimed task could not be completed by this process:", {
+        taskId,
+        message: safeAgentFailureMessage(cause),
+      });
+    }
     processed += 1;
   }));
   return processed;
 }
 
-export async function recoverStaleAgentTasks(staleAfterMs = 10 * 60 * 1000): Promise<number> {
+export async function recoverStaleAgentTasks(): Promise<number> {
   const admin = createAdminClient();
-  const cutoff = new Date(Date.now() - Math.max(60_000, staleAfterMs)).toISOString();
-  const { data: stale, error } = await admin.from("agent_tasks")
-    .select("id,status")
-    .eq("owner_id", PERSONAL_OWNER_ID)
-    .in("status", ["planning", "executing", "synthesizing"])
-    .lt("updated_at", cutoff)
-    .is("cancellation_requested_at", null)
-    .order("updated_at", { ascending: true })
-    .limit(25);
-  if (error) throw new Error("Stale Agent task recovery is unavailable.");
-
-  let recovered = 0;
-  for (const task of stale ?? []) {
-    const now = new Date().toISOString();
-    const { data: failed, error: updateError } = await admin.from("agent_tasks").update({
-      status: "failed",
-      error_code: "AGENT_WORKER_INTERRUPTED",
-      completed_at: now,
-      updated_at: now,
-    }).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("id", task.id)
-      .eq("status", task.status)
-      .lt("updated_at", cutoff)
-      .is("cancellation_requested_at", null)
-      .select("id")
-      .maybeSingle();
-    if (updateError) throw new Error("Interrupted Agent task state could not be recovered.");
-    if (!failed) continue;
-    await event(admin, task.id, "task.failed", {
-      code: "AGENT_WORKER_INTERRUPTED",
-      stage: task.status,
-      message: "The Agent worker heartbeat expired. The task was not replayed automatically because tool side effects cannot be assumed safe to repeat. Retry it as a new task.",
-    });
-    recovered += 1;
-  }
-  return recovered;
+  const { data, error } = await admin.rpc("recover_expired_agent_task_leases", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_limit: 25,
+  });
+  if (error) throw new Error("Expired Agent task leases could not be recovered. Apply the worker lease migration.");
+  return typeof data === "number" && Number.isInteger(data) ? data : 0;
 }
 
 export async function getAgentTaskStatus(taskId: string) {
@@ -675,7 +813,7 @@ export async function getAgentTaskStatus(taskId: string) {
   try { await finalizeAgentTaskIfReady(taskId); } catch { /* Keep status reads available; finalization state is persisted when possible. */ }
   const admin = createAdminClient();
   const [taskResult, eventResult, jobResult] = await Promise.all([
-    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
+    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,error_code,attempt_count,last_heartbeat_at,lease_expires_at,created_at,updated_at,completed_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle(),
     admin.from("agent_task_events").select("id,event_type,payload,created_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", taskId).order("created_at", { ascending: true }).limit(100),
