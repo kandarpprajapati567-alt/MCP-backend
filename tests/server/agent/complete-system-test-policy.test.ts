@@ -70,6 +70,15 @@ test("rejects missing assignments and stale tool IDs", () => {
   if (!stale.eligible) assert.match(stale.reason, /not present in the current registry/);
 });
 
+test("rejects Agents whose tool-call budget is zero", () => {
+  const decision = selectZeroCostLiveTest(
+    { ...baseAgent, max_tool_calls: 0 },
+    [{ id: "text.word_count", sideEffect: false }],
+  );
+  assert.equal(decision.eligible, false);
+  if (!decision.eligible) assert.match(decision.reason, /zero tool-call budget/);
+});
+
 test("rejects disabled Agents and unsupported local tool names", () => {
   const disabled = selectZeroCostLiveTest(
     { ...baseAgent, enabled: false },
