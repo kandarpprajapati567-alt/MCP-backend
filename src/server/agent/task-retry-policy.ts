@@ -42,7 +42,10 @@ export function evaluateSafeAgentTaskRetry(input: AgentTaskRetryInput): AgentTas
   if (input.status !== "failed") return { allowed: false, reason: "NOT_FAILED" };
   if (input.cancellationRequestedAt !== null && input.cancellationRequestedAt !== undefined &&
       input.cancellationRequestedAt !== "") return { allowed: false, reason: "CANCELLED" };
-  if (input.failedStage !== "planning" || input.errorCode !== "AGENT_EXECUTION_FAILED") {
+  const retryablePlanningFailure =
+    input.errorCode === "AGENT_EXECUTION_FAILED" ||
+    input.errorCode === "AGENT_WORKER_INTERRUPTED";
+  if (input.failedStage !== "planning" || !retryablePlanningFailure) {
     return { allowed: false, reason: "UNSAFE_FAILURE" };
   }
   if (input.plan !== null && input.plan !== undefined) return { allowed: false, reason: "PLAN_ALREADY_CREATED" };
