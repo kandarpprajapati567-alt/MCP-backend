@@ -91,17 +91,6 @@ begin
       and t.cancellation_requested_at is null
     returning t.id, t.task, t.agent_definition_id, t.agent_snapshot,
       t.idempotency_key, t.lease_token, t.lease_expires_at, t.attempt_count
-  ),
-  logged as (
-    insert into public.agent_task_events(task_id, owner_id, event_type, payload)
-    select c.id, p_owner_id, 'task.claimed',
-      pg_catalog.jsonb_build_object(
-        'workerId', p_worker_id,
-        'attempt', c.attempt_count,
-        'leaseExpiresAt', c.lease_expires_at
-      )
-    from claimed as c
-    returning task_id
   )
   select c.id, c.task, c.agent_definition_id, c.agent_snapshot,
     c.idempotency_key, c.lease_token, c.lease_expires_at, c.attempt_count
@@ -199,7 +188,7 @@ declare
   cancellation_requested_at timestamptz;
   finish_event text;
 begin
-  if p_status not in ('completed','failed','cancelled') then
+  if p_status is null or p_status not in ('completed','failed','cancelled') then
     raise exception 'Unsupported terminal task status';
   end if;
 
