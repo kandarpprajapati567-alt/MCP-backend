@@ -26,6 +26,7 @@ Live Test requires a separate browser confirmation and is limited to three Agent
 - Are enabled and explicitly configured with the `mock` provider preference.
 - Have a non-empty allowlist containing only currently registered `text.*` tools.
 - Have every assigned tool explicitly marked read-only.
+- Have a non-zero tool-call budget.
 - Have at least one supported deterministic local text tool (`text.word_count`, `text.extract_keywords` or `text.text_stats`).
 
 The local prompts match the deterministic local planner patterns. OpenAI, OpenRouter, Web Search, GitHub, Remote MCP and Android device tools are never selected by this Live Test. A successful Live result still creates an Agent task and task-history record; it is not a no-write operation. Agents outside the policy are skipped rather than widened automatically.
