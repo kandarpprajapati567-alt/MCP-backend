@@ -574,7 +574,25 @@ export async function submitAgentTask(taskInput: string, agentId?: string, idemp
       message: "Task persisted and queued for the Agent worker.",
     };
   }
-  return executeAgentTaskRecord(admin, id, task, agent);
+
+  const workerId = "inline-" + randomUUID();
+  const claimedRows = await claimAgentTasks(admin, workerId, 1, id);
+  const claimed = claimedRows[0];
+  if (!claimed) {
+    const { data: current, error: currentError } = await admin.from("agent_tasks")
+      .select("status").eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
+    if (currentError || !current) throw new Error("Task state could not be loaded after queueing.");
+    return {
+      taskId: id,
+      status: current.status as string,
+      message: "The task is already claimed or queued for the Agent worker.",
+    };
+  }
+  if (typeof claimed.lease_token !== "string") {
+    throw new Error("The Agent worker did not receive a valid task lease.");
+  }
+  const lease: AgentTaskLease = { workerId, token: claimed.lease_token };
+  return executeAgentTaskRecord(admin, id, task, agent, lease);
 }
 
 export async function retryAgentTask(taskId: string) {
@@ -706,32 +724,25 @@ export async function retryAgentTask(taskId: string) {
   };
 }
 
-export async function processQueuedAgentTasks(limit = 3): Promise<number> {
+export async function processQueuedAgentTasks(
+  limit = AGENT_TASK_WORKER_BATCH_LIMIT,
+  workerId = "worker-" + randomUUID(),
+): Promise<number> {
   const admin = createAdminClient();
-  const batchSize = Math.max(1, Math.min(3, Math.floor(limit)));
-  const { data: queued, error: queueError } = await admin.from("agent_tasks")
-    .select("id")
-    .eq("owner_id", PERSONAL_OWNER_ID)
-    .eq("status", "queued")
-    .order("created_at", { ascending: true })
-    .limit(batchSize);
-  if (queueError) throw new Error("Agent task queue is unavailable.");
+  const batchSize = Number.isFinite(limit)
+    ? Math.max(1, Math.min(AGENT_TASK_WORKER_BATCH_LIMIT, Math.floor(limit)))
+    : 1;
+  const claimedRows = await claimAgentTasks(admin, workerId, batchSize, null);
 
   let processed = 0;
-  await Promise.all((queued ?? []).map(async (candidate) => {
-    const claimedAt = new Date().toISOString();
-    const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
-      status: "planning",
-      updated_at: claimedAt,
-    }).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("id", candidate.id)
-      .eq("status", "queued")
-      .is("cancellation_requested_at", null)
-      .select("id,task,agent_definition_id,agent_snapshot,idempotency_key")
-      .maybeSingle();
-    if (claimError) throw new Error("Agent task could not be claimed.");
-    if (!claimed) return;
-
+  await Promise.all(claimedRows.map(async (claimed) => {
+    const taskId = String(claimed.task_id ?? "");
+    const leaseToken = typeof claimed.lease_token === "string" ? claimed.lease_token : "";
+    if (!taskId || !leaseToken) {
+      console.error("[agent-worker] Claim response was missing its task identity or lease token.");
+      return;
+    }
+    const lease: AgentTaskLease = { workerId, token: leaseToken };
     let agent: ({ id: string } & AgentDefinitionInput) | null = null;
     if (typeof claimed.agent_definition_id === "string") {
       const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
@@ -748,12 +759,15 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
         enabled: true,
       });
       if (!parsed.ok) {
-        await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
-        await event(admin, claimed.id, "task.failed", {
-          code: "AGENT_SNAPSHOT_INVALID",
-          stage: "planning",
-          message: "The saved Agent execution snapshot is invalid; no tools were run.",
-        });
+        try {
+          await finishAgentTask(admin, taskId, lease, "failed", null, "AGENT_SNAPSHOT_INVALID", {
+            code: "AGENT_SNAPSHOT_INVALID",
+            stage: "planning",
+            message: "The saved Agent execution snapshot is invalid; no tools were run.",
+          });
+        } catch {
+          console.warn("[agent-worker] Invalid Agent snapshot awaits lease recovery:", { taskId });
+        }
         processed += 1;
         return;
       }
@@ -761,56 +775,34 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
     }
 
     const retryKey = parseAgentTaskRetryKey(claimed.idempotency_key);
-    await executeAgentTaskRecord(
-      admin,
-      claimed.id,
-      String(claimed.task),
-      agent,
-      retryKey ? { rootTaskId: retryKey.rootTaskId, attempt: retryKey.attempt } : undefined,
-    );
+    try {
+      await executeAgentTaskRecord(
+        admin,
+        taskId,
+        String(claimed.task),
+        agent,
+        lease,
+        retryKey ? { rootTaskId: retryKey.rootTaskId, attempt: retryKey.attempt } : undefined,
+      );
+    } catch (cause) {
+      console.error("[agent-worker] Claimed task could not be completed by this process:", {
+        taskId,
+        message: safeAgentFailureMessage(cause),
+      });
+    }
     processed += 1;
   }));
   return processed;
 }
 
-export async function recoverStaleAgentTasks(staleAfterMs = 10 * 60 * 1000): Promise<number> {
+export async function recoverStaleAgentTasks(): Promise<number> {
   const admin = createAdminClient();
-  const cutoff = new Date(Date.now() - Math.max(60_000, staleAfterMs)).toISOString();
-  const { data: stale, error } = await admin.from("agent_tasks")
-    .select("id,status")
-    .eq("owner_id", PERSONAL_OWNER_ID)
-    .in("status", ["planning", "executing", "synthesizing"])
-    .lt("updated_at", cutoff)
-    .is("cancellation_requested_at", null)
-    .order("updated_at", { ascending: true })
-    .limit(25);
-  if (error) throw new Error("Stale Agent task recovery is unavailable.");
-
-  let recovered = 0;
-  for (const task of stale ?? []) {
-    const now = new Date().toISOString();
-    const { data: failed, error: updateError } = await admin.from("agent_tasks").update({
-      status: "failed",
-      error_code: "AGENT_WORKER_INTERRUPTED",
-      completed_at: now,
-      updated_at: now,
-    }).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("id", task.id)
-      .eq("status", task.status)
-      .lt("updated_at", cutoff)
-      .is("cancellation_requested_at", null)
-      .select("id")
-      .maybeSingle();
-    if (updateError) throw new Error("Interrupted Agent task state could not be recovered.");
-    if (!failed) continue;
-    await event(admin, task.id, "task.failed", {
-      code: "AGENT_WORKER_INTERRUPTED",
-      stage: task.status,
-      message: "The Agent worker heartbeat expired. The task was not replayed automatically because tool side effects cannot be assumed safe to repeat. Retry it as a new task.",
-    });
-    recovered += 1;
-  }
-  return recovered;
+  const { data, error } = await admin.rpc("recover_expired_agent_task_leases", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_limit: 25,
+  });
+  if (error) throw new Error("Expired Agent task leases could not be recovered. Apply the worker lease migration.");
+  return typeof data === "number" && Number.isInteger(data) ? data : 0;
 }
 
 export async function getAgentTaskStatus(taskId: string) {
