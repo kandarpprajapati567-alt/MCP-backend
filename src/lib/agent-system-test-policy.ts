@@ -16,15 +16,15 @@ export type ZeroCostLiveTest = {
 
 const LOCAL_TEXT_TESTS: Record<string, ZeroCostLiveTest> = {
   "text.word_count": {
-    prompt: "Use text.word_count on exactly this text: alpha beta gamma delta. Return only the numeric word count.",
+    prompt: "Count words in: alpha beta gamma delta.",
     expected: "text.word_count",
   },
   "text.extract_keywords": {
-    prompt: "Use text.extract_keywords on exactly this text: solar energy solar panels wind energy. Return only the extracted keywords.",
+    prompt: "Extract keywords from: solar energy solar panels wind energy.",
     expected: "text.extract_keywords",
   },
   "text.text_stats": {
-    prompt: "Use text.text_stats on exactly this text: Futuristic System builds reliable AI agents. Return its character and word counts.",
+    prompt: "Text stats for: Futuristic System builds reliable AI agents.",
     expected: "text.text_stats",
   },
 };
