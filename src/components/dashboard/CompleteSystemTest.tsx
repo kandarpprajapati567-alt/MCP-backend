@@ -87,9 +87,10 @@ export function CompleteSystemTest({ onUnauthorized }: Props) {
         const response = await request("/api/v1/agents/" + encodeURIComponent(agent.id) + "/tools");
         const data = await response.json().catch(() => ({}));
         const summary = data.summary && typeof data.summary === "object" ? data.summary as Record<string, unknown> : null;
-        const summaryValid = Boolean(summary) && ["total", "assigned", "available", "allowlisted", "denied"].every((key) =>
-          typeof summary?.[key] === "number" && Number.isInteger(summary[key]),
-        );
+        const summaryValid = summary !== null && ["total", "assigned", "available", "allowlisted", "denied"].every((key) => {
+          const value = summary[key];
+          return typeof value === "number" && Number.isInteger(value);
+        });
         const toolsValid = Array.isArray(data.tools) && data.tools.every((tool: any) =>
           typeof tool.id === "string" &&
           typeof tool.assigned === "boolean" &&
