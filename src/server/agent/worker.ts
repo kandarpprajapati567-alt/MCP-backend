@@ -1,7 +1,9 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { processQueuedAgentTasks, recoverStaleAgentTasks } from "@/server/agent/task-service";
 
+const workerId = "render-worker-" + randomUUID();
 let started = false;
 let ticking = false;
 let lastRecoveryAt = 0;
@@ -11,7 +13,7 @@ async function tick(): Promise<void> {
   ticking = true;
   let processed = 0;
   try {
-    processed = await processQueuedAgentTasks(3);
+    processed = await processQueuedAgentTasks(3, workerId);
     if (Date.now() - lastRecoveryAt >= 60_000) {
       const recovered = await recoverStaleAgentTasks();
       lastRecoveryAt = Date.now();
@@ -28,6 +30,6 @@ async function tick(): Promise<void> {
 export function startAgentWorker(): void {
   if (started) return;
   started = true;
-  console.info("[agent-worker] Durable task worker started; concurrency=3.");
+  console.info("[agent-worker] Lease-fenced task worker started; concurrency=3.");
   void tick();
 }
