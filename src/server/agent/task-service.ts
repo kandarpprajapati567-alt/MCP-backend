@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { createAgentPlan, type AvailableDeviceTool } from "@/server/agent/planner";
@@ -32,30 +33,132 @@ import {
   MAX_AGENT_TASK_RETRIES,
   parseAgentTaskRetryKey,
 } from "@/server/agent/task-retry-policy";
+import {
+  AgentTaskLeaseLostError,
+  AGENT_TASK_LEASE_HEARTBEAT_MS,
+  AGENT_TASK_LEASE_SECONDS,
+  AGENT_TASK_WORKER_BATCH_LIMIT,
+  isAgentTaskLeaseCurrent,
+  type AgentTaskLease,
+} from "@/server/agent/task-lease";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function event(admin: ReturnType<typeof createAdminClient>, taskId: string, eventType: string, payload: Record<string, unknown> = {}) {
-  const { error } = await admin.from("agent_task_events").insert({ task_id: taskId, owner_id: PERSONAL_OWNER_ID, event_type: eventType, payload });
+async function event(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  eventType: string,
+  payload: Record<string, unknown> = {},
+  lease?: AgentTaskLease,
+) {
+  if (lease) {
+    const { data, error } = await admin.rpc("append_agent_task_event", {
+      p_owner_id: PERSONAL_OWNER_ID,
+      p_task_id: taskId,
+      p_worker_id: lease.workerId,
+      p_lease_token: lease.token,
+      p_event_type: eventType,
+      p_payload: payload,
+    });
+    if (error) throw new Error("Unable to persist task event.");
+    if (data !== true) throw new AgentTaskLeaseLostError();
+    return;
+  }
+  const { error } = await admin.from("agent_task_events").insert({
+    task_id: taskId, owner_id: PERSONAL_OWNER_ID, event_type: eventType, payload,
+  });
   if (error) throw new Error("Unable to persist task event.");
 }
 
-async function setTask(admin: ReturnType<typeof createAdminClient>, id: string, patch: Record<string, unknown>) {
-  const { error } = await admin.from("agent_tasks").update({ ...patch, updated_at: new Date().toISOString() })
+async function setTask(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  patch: Record<string, unknown>,
+  lease?: AgentTaskLease,
+) {
+  let query = admin.from("agent_tasks").update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID);
+  if (lease) {
+    query = query.eq("worker_id", lease.workerId)
+      .eq("lease_token", lease.token)
+      .gt("lease_expires_at", new Date().toISOString());
+  }
+  const { data, error } = await query.select("id").maybeSingle();
   if (error) throw new Error("Unable to update task.");
+  if (lease && !data) throw new AgentTaskLeaseLostError();
 }
 
-async function assertTaskNotCancelled(admin: ReturnType<typeof createAdminClient>, id: string) {
+async function assertTaskNotCancelled(
+  admin: ReturnType<typeof createAdminClient>,
+  id: string,
+  lease?: AgentTaskLease,
+) {
   const { data, error } = await admin.from("agent_tasks")
-    .select("status,cancellation_requested_at")
+    .select("status,cancellation_requested_at,worker_id,lease_token,lease_expires_at")
     .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
   if (error || !data) throw new Error("Task lifecycle state is unavailable.");
   if (data.status === "cancelled" || isAgentTaskCancellationRequested(data.cancellation_requested_at)) {
     throw new AgentTaskCancelledError();
   }
+  if (lease && !isAgentTaskLeaseCurrent(lease, data)) throw new AgentTaskLeaseLostError();
+}
+
+async function claimAgentTasks(
+  admin: ReturnType<typeof createAdminClient>,
+  workerId: string,
+  limit: number,
+  taskId: string | null = null,
+) {
+  const { data, error } = await admin.rpc("claim_agent_tasks", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_worker_id: workerId,
+    p_limit: limit,
+    p_task_id: taskId,
+    p_lease_seconds: AGENT_TASK_LEASE_SECONDS,
+  });
+  if (error) throw new Error("Agent task leasing is unavailable. Apply the worker lease migration before processing tasks.");
+  return Array.isArray(data) ? data : [];
+}
+
+async function renewAgentTaskLease(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  lease: AgentTaskLease,
+) {
+  const { data, error } = await admin.rpc("renew_agent_task_lease", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_task_id: taskId,
+    p_worker_id: lease.workerId,
+    p_lease_token: lease.token,
+    p_lease_seconds: AGENT_TASK_LEASE_SECONDS,
+  });
+  if (error) throw new Error("Task lease renewal is unavailable.");
+  if (data !== true) throw new AgentTaskLeaseLostError();
+}
+
+async function finishAgentTask(
+  admin: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  lease: AgentTaskLease,
+  status: "completed" | "failed" | "cancelled",
+  result: string | null,
+  errorCode: string | null,
+  payload: Record<string, unknown>,
+) {
+  const { data, error } = await admin.rpc("finish_agent_task", {
+    p_owner_id: PERSONAL_OWNER_ID,
+    p_task_id: taskId,
+    p_worker_id: lease.workerId,
+    p_lease_token: lease.token,
+    p_status: status,
+    p_result: result,
+    p_error_code: errorCode,
+    p_payload: payload,
+  });
+  if (error) throw new Error("Task finalization could not be saved.");
+  if (data !== true) throw new AgentTaskLeaseLostError();
 }
 
 async function loadAgentDefinition(
