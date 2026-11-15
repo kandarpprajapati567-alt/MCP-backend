@@ -30,6 +30,19 @@ create index if not exists agent_tasks_owner_active_lease_idx
   on public.agent_tasks(owner_id, lease_expires_at)
   where status in ('planning','executing','synthesizing') and lease_token is not null;
 
+alter table public.agent_task_events
+  drop constraint if exists agent_task_events_event_type_check;
+alter table public.agent_task_events
+  add constraint agent_task_events_event_type_check
+  check (event_type = any (array[
+    'task.created','task.claimed','task.planning','task.plan_ready','task.executing',
+    'tool.requested','tool.claimed','tool.completed','tool.failed',
+    'task.synthesizing','task.completed','task.failed','task.cancelled',
+    'task.cancellation_requested',
+    'device.registered','device.heartbeat',
+    'memory.created','memory.updated','memory.deleted'
+  ]));
+
 create or replace function public.claim_agent_tasks(
   p_owner_id uuid,
   p_worker_id text,
