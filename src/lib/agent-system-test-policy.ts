@@ -2,6 +2,7 @@ export type SystemTestAgent = {
   enabled: boolean;
   provider_preference?: string;
   allowed_tools?: string[];
+  max_tool_calls?: number;
 };
 
 export type SystemTestTool = {
@@ -45,6 +46,9 @@ export function selectZeroCostLiveTest(
   if (!agent.enabled) return { eligible: false, reason: "Agent is disabled." };
   if (agent.provider_preference !== "mock") {
     return { eligible: false, reason: "Zero-cost Live mode requires this Agent to use the Mock provider. No external model provider will be called." };
+  }
+  if (agent.max_tool_calls === 0) {
+    return { eligible: false, reason: "This Agent has a zero tool-call budget." };
   }
 
   const assignedIds = Array.isArray(agent.allowed_tools)
