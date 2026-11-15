@@ -13,7 +13,7 @@ Owner-authenticated endpoint: `POST /api/v1/agent/tasks/{taskId}/retry`.
 - Concurrent duplicate requests return the already queued/running retry.
 - Tool execution, device dispatch, synthesis and all post-planning failures are never replayed automatically.
 
-Retry lineage uses the existing owner-scoped idempotency key and unique index. Database-backed worker claims require `supabase/migrations/20261115121500_add_agent_task_worker_leases.sql`; it has not been applied to production. The worker records retry origin and attempt in its `task.created` event, while the database records each atomic `task.claimed` event.
+Retry lineage uses the existing owner-scoped idempotency key and unique index. Database-backed worker claims require `supabase/migrations/20261115121500_add_agent_task_worker_leases.sql`; it has not been applied to production. The worker records retry origin and attempt in its `task.created` event, followed by a lease-fenced `task.claimed` event.
 
 ## Execution budget
 
