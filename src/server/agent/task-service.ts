@@ -262,6 +262,7 @@ async function executeAgentTaskRecord(
     await recordEvent("task.created", retryInfo
       ? { retryOf: retryInfo.rootTaskId, attempt: retryInfo.attempt, retryPolicy: "planning-only" }
       : {});
+    await recordEvent("task.claimed", { workerId: lease.workerId });
     await assertActive();
     await updateTask({ status: "planning" });
     await assertActive();
@@ -760,6 +761,8 @@ export async function processQueuedAgentTasks(
       });
       if (!parsed.ok) {
         try {
+          await event(admin, taskId, "task.created", {}, lease);
+          await event(admin, taskId, "task.claimed", { workerId }, lease);
           await finishAgentTask(admin, taskId, lease, "failed", null, "AGENT_SNAPSHOT_INVALID", {
             code: "AGENT_SNAPSHOT_INVALID",
             stage: "planning",
