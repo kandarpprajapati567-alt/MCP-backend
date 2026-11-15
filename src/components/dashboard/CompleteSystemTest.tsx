@@ -5,7 +5,7 @@ import { selectZeroCostLiveTest } from "@/lib/agent-system-test-policy";
 
 type Status = "passed" | "failed" | "skipped";
 type Result = { id: string; label: string; status: Status; detail: string; durationMs?: number };
-type Agent = { id: string; name: string; enabled: boolean; provider_preference?: string; allowed_tools?: string[] };
+type Agent = { id: string; name: string; enabled: boolean; provider_preference?: string; allowed_tools?: string[]; max_tool_calls?: number };
 type Tool = { id: string; sideEffect?: boolean; description?: string };
 
 type Props = { onUnauthorized: () => void };
