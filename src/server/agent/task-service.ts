@@ -232,48 +232,54 @@ async function executeAgentTaskRecord(
   id: string,
   task: string,
   agent: ({ id: string } & AgentDefinitionInput) | null,
+  lease: AgentTaskLease,
   retryInfo?: { rootTaskId: string; attempt: number },
 ) {
   const budget = resolveAgentTaskBudget(agent ?? undefined);
   const startedAt = Date.now();
   let totalToolResultBytes = 0;
   let toolResultBudgetExceeded = false;
+  let leaseLost = false;
+  const updateTask = (patch: Record<string, unknown>) => setTask(admin, id, patch, lease);
+  const recordEvent = (eventType: string, payload: Record<string, unknown> = {}) =>
+    event(admin, id, eventType, payload, lease);
+  const assertActive = async () => {
+    if (leaseLost) throw new AgentTaskLeaseLostError();
+    await assertTaskNotCancelled(admin, id, lease);
+  };
   const heartbeat = setInterval(() => {
-    void (async () => {
-      try {
-        const { error } = await admin.from("agent_tasks").update({ updated_at: new Date().toISOString() })
-          .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-          .in("status", ["planning", "executing", "synthesizing"]);
-        if (error) console.warn("[agent-worker] Heartbeat update failed for task", id);
-      } catch {
-        console.warn("[agent-worker] Heartbeat request failed for task", id);
-      }
-    })();
-  }, 30_000);
+    void renewAgentTaskLease(admin, id, lease).catch((cause) => {
+      leaseLost = true;
+      console.warn("[agent-worker] Task lease renewal failed:", {
+        taskId: id,
+        code: cause instanceof AgentTaskLeaseLostError ? cause.code : "LEASE_RENEWAL_UNAVAILABLE",
+      });
+    });
+  }, AGENT_TASK_LEASE_HEARTBEAT_MS);
   let failedStage: "planning" | "policy_validation" | "tool_execution" | "synthesis" | "finalization" = "planning";
 
   try {
-    await event(admin, id, "task.created", retryInfo
+    await recordEvent("task.created", retryInfo
       ? { retryOf: retryInfo.rootTaskId, attempt: retryInfo.attempt, retryPolicy: "planning-only" }
       : {});
-    await assertTaskNotCancelled(admin, id);
-    await setTask(admin, id, { status: "planning" });
-    await assertTaskNotCancelled(admin, id);
-    await event(admin, id, "task.planning");
+    await assertActive();
+    await updateTask({ status: "planning" });
+    await assertActive();
+    await recordEvent("task.planning");
 
     const deviceTools = await getAvailableDeviceTools(admin);
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
     const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     failedStage = "policy_validation";
     assertAgentTaskPlanWithinBudget(plan, budget);
     if (agent && plan.toolCalls.some((call) => !agent.allowedTools.includes(call.toolId))) {
       throw new Error("Agent execution policy rejected the generated plan.");
     }
-    await setTask(admin, id, { plan, status: "executing" });
-    await event(admin, id, "task.plan_ready", {
+    await updateTask({ plan, status: "executing" });
+    await recordEvent("task.plan_ready", {
       steps: plan.steps.length,
       toolCalls: plan.toolCalls.length,
       deviceToolsAvailable: deviceTools.length,
@@ -288,7 +294,7 @@ async function executeAgentTaskRecord(
       },
       ...(agent ? { agentId: agent.id, agentName: agent.name, maxSteps: agent.maxSteps, maxToolCalls: agent.maxToolCalls } : {}),
     });
-    await event(admin, id, "task.executing");
+    await recordEvent("task.executing");
 
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
@@ -302,7 +308,7 @@ async function executeAgentTaskRecord(
         }).select("id,device_id,tool_id").single();
         if (error || !job) throw new Error("Device tool job could not be queued.");
         pendingJobs.push({ id: job.id, deviceId: job.device_id, toolId: job.tool_id });
-        await event(admin, id, "tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
+        await recordEvent("tool.requested", { jobId: job.id, deviceId: job.device_id, toolId: job.tool_id, toolCallId: call.id });
         return { queuedForDevice: true };
       }
       return executeBackendTool(call.toolId, call.arguments);
@@ -312,8 +318,8 @@ async function executeAgentTaskRecord(
       if (deviceTools.some((tool) => tool.id === call.toolId)) return;
       if (toolResultBudgetExceeded) {
         results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Task result budget was exhausted before this output could be retained." } });
-        await setTask(admin, id, { tool_results: results });
-        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Task result budget was exhausted." });
+        await updateTask({ tool_results: results });
+        await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: "Task result budget was exhausted." });
         return;
       }
       const value = execution.ok ? execution.result : { ok: false, error: execution.error };
@@ -322,19 +328,19 @@ async function executeAgentTaskRecord(
         assertAgentTaskToolResultWithinBudget(bytes, totalToolResultBytes, budget);
         totalToolResultBytes += bytes;
         results.push({ callId: call.id, toolId: call.toolId, result: value });
-        await setTask(admin, id, { tool_results: results });
-        if (execution.ok) await event(admin, id, "tool.completed", { callId: call.id, toolId: call.toolId });
-        else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
+        await updateTask({ tool_results: results });
+        if (execution.ok) await recordEvent("tool.completed", { callId: call.id, toolId: call.toolId });
+        else await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
       } catch (cause) {
         if (!(cause instanceof AgentTaskBudgetExceededError)) throw cause;
         toolResultBudgetExceeded = true;
         results.push({ callId: call.id, toolId: call.toolId, result: { ok: false, error: "Tool output exceeded the configured task result budget." } });
-        await setTask(admin, id, { tool_results: results });
-        await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: "Tool output exceeded the configured task result budget." });
+        await updateTask({ tool_results: results });
+        await recordEvent("tool.failed", { callId: call.id, toolId: call.toolId, message: "Tool output exceeded the configured task result budget." });
       }
     };
     const beforeEach = async () => {
-      await assertTaskNotCancelled(admin, id);
+      await assertActive();
       if (toolResultBudgetExceeded) throw new AgentTaskBudgetExceededError("tool results");
       assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
     };
@@ -348,10 +354,16 @@ async function executeAgentTaskRecord(
       throw new Error("One or more registered tool calls failed.");
     }
 
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     if (pendingJobs.length) {
-      await assertTaskNotCancelled(admin, id);
-      await setTask(admin, id, { status: "waiting_for_device", tool_results: results });
+      await assertActive();
+      await updateTask({
+        status: "waiting_for_device",
+        tool_results: results,
+        worker_id: null,
+        lease_token: null,
+        lease_expires_at: null,
+      });
       try { await finalizeAgentTaskIfReady(id); } catch { /* A later device callback can retry finalization. */ }
       const { data: latest, error: latestError } = await admin.from("agent_tasks").select("status,result,error_code")
         .eq("owner_id", PERSONAL_OWNER_ID).eq("id", id).maybeSingle();
@@ -371,12 +383,12 @@ async function executeAgentTaskRecord(
       };
     }
 
-    await assertTaskNotCancelled(admin, id);
+    await assertActive();
     failedStage = "synthesis";
     assertAgentTaskTimeBudget(startedAt, Date.now(), budget);
-    await setTask(admin, id, { status: "synthesizing", tool_results: results });
-    await assertTaskNotCancelled(admin, id);
-    await event(admin, id, "task.synthesizing");
+    await updateTask({ status: "synthesizing", tool_results: results });
+    await assertActive();
+    await recordEvent("task.synthesizing");
     const synthesisRequest: AIGenerationRequest = {
       messages: [
         { role: "system", content: buildSynthesisSystemPrompt(agent?.role, agent?.instructions) },
@@ -398,15 +410,9 @@ async function executeAgentTaskRecord(
         JSON.stringify(results, null, 2) +
         (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
     failedStage = "finalization";
-    const completedAt = new Date().toISOString();
-    const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
-      .update({ status: "completed", result, completed_at: completedAt, updated_at: completedAt })
-      .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("status", "synthesizing").is("cancellation_requested_at", null)
-      .select("id").maybeSingle();
-    if (completionError) throw new Error("Task completion could not be saved.");
-    if (!completedTask) throw new AgentTaskCancelledError();
-    await event(admin, id, "task.completed");
+    await finishAgentTask(admin, id, lease, "completed", result, null, {
+      toolResults: results.length,
+    });
     return {
       taskId: id,
       status: "completed",
@@ -416,24 +422,46 @@ async function executeAgentTaskRecord(
       result,
     };
   } catch (error) {
+    let lifecycleStatus: string | null = null;
     let cancellationRequested = error instanceof AgentTaskCancelledError;
     if (!cancellationRequested) {
       const { data: lifecycle } = await admin.from("agent_tasks")
         .select("status,cancellation_requested_at")
         .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID).maybeSingle();
-      cancellationRequested = lifecycle?.status === "cancelled" ||
+      lifecycleStatus = typeof lifecycle?.status === "string" ? lifecycle.status : null;
+      cancellationRequested = lifecycleStatus === "cancelled" ||
         isAgentTaskCancellationRequested(lifecycle?.cancellation_requested_at);
     }
-    if (cancellationRequested) {
-      const cancelledAt = new Date().toISOString();
-      const { data: cancelledTask, error: cancelError } = await admin.from("agent_tasks")
-        .update({ status: "cancelled", completed_at: cancelledAt, updated_at: cancelledAt })
-        .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
-        .not("status", "in", '("completed","failed","cancelled")')
-        .select("id").maybeSingle();
-      if (cancelError) throw new Error("Task cancellation could not be persisted.");
-      if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
+    if (lifecycleStatus === "cancelled") {
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
+    }
+    if (cancellationRequested) {
+      try {
+        await finishAgentTask(admin, id, lease, "cancelled", null, "AGENT_TASK_CANCELLED", {
+          cooperative: true,
+        });
+        return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
+      } catch (finishError) {
+        console.warn("[agent-worker] Cancellation finalization awaits lease recovery:", {
+          taskId: id,
+          code: finishError instanceof AgentTaskLeaseLostError ? finishError.code : "TASK_FINALIZATION_UNAVAILABLE",
+        });
+        return {
+          taskId: id,
+          status: "recovery_pending",
+          code: "AGENT_TASK_FINALIZATION_PENDING",
+          message: "Cancellation could not be committed by this worker. The lease recovery path will reconcile the task.",
+        };
+      }
+    }
+    if (leaseLost || error instanceof AgentTaskLeaseLostError) {
+      console.warn("[agent-worker] Task execution stopped after lease loss:", { taskId: id });
+      return {
+        taskId: id,
+        status: "recovery_pending",
+        code: "AGENT_WORKER_LEASE_LOST",
+        message: "The worker no longer owns this task. No automatic replay was started; lease recovery will record the outcome.",
+      };
     }
     const code = error instanceof AgentTaskBudgetExceededError
       ? "AGENT_BUDGET_EXCEEDED"
@@ -442,11 +470,23 @@ async function executeAgentTaskRecord(
     const message = safeAgentFailureMessage(error);
     console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
     try {
-      const failedAt = new Date().toISOString();
-      await setTask(admin, id, { status: "failed", error_code: code, completed_at: failedAt });
-      await event(admin, id, "task.failed", { code, stage: failedStage, message });
+      await finishAgentTask(admin, id, lease, "failed", null, code, {
+        code,
+        stage: failedStage,
+        message,
+      });
+    } catch (finishError) {
+      console.error("[agent-worker] Failure state awaits lease recovery:", {
+        taskId: id,
+        code: finishError instanceof AgentTaskLeaseLostError ? finishError.code : "TASK_FINALIZATION_UNAVAILABLE",
+      });
+      return {
+        taskId: id,
+        status: "recovery_pending",
+        code: "AGENT_TASK_FINALIZATION_PENDING",
+        message: "The failure state could not be committed by this worker. The lease recovery path will reconcile the task.",
+      };
     }
-    catch { /* Preserve the original task failure. */ }
     return {
       taskId: id,
       status: "failed",
