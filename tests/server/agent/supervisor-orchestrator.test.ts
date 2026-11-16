@@ -42,14 +42,21 @@ test("supervisor schema rejects unsupported capability labels", () => {
   assert.equal(result.ok, false);
 });
 
-test("capability assignment routes research and coding to matching specialists", () => {
-  const plan = buildFallbackSupervisorPlan("Research sources; Implement code in repository");
-  const result = assignSubtasksToAgents(plan.subtasks, agents);
+test("read-only GitHub access cannot qualify a specialist for coding work", () => {
+  const result = assignSubtasksToAgents([
+    { id: "coding", title: "Implement", objective: "Implement code changes in the repository", requiredCapabilities: ["coding", "github"] },
+  ], agents);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /No enabled Agent matches/);
+});
+
+test("coding work routes only to an Agent with a registered write-capable tool", () => {
+  const writeCapable = [{ ...agents[1], allowedTools: ["github.apply_patch"] }];
+  const result = assignSubtasksToAgents([
+    { id: "coding", title: "Implement", objective: "Implement code changes in the repository", requiredCapabilities: ["coding", "github"] },
+  ], writeCapable);
   assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.assignments[0].agentId, "research");
-    assert.equal(result.assignments[1].agentId, "developer");
-  }
+  if (result.ok) assert.equal(result.assignments[0].agentId, "developer");
 });
 
 test("specialized tasks are not dispatched to an unrelated Agent", () => {
@@ -90,7 +97,7 @@ test("specialist assignment ignores generic keyword overlap and reuses a qualifi
 
 test("Stage 2 self-test reports every diagnostic check as passed", () => {
   const results = runStageTwoDiagnostics();
-  assert.equal(results.length, 10);
+  assert.equal(results.length, 11);
   assert.ok(results.every((item) => item.status === "passed"));
   assert.ok(results.some((item) => item.id === "completion_evaluator_success"));
   assert.ok(results.some((item) => item.id === "completion_evaluator_missing_output"));
