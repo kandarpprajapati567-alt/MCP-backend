@@ -59,10 +59,10 @@ export async function POST(request: Request) {
   const passed = results.filter((item) => item.status === "passed").length;
   const failed = results.filter((item) => item.status === "failed").length;
   return NextResponse.json({
-    suite: "stage-2-supervisor-planner-assignment",
+    suite: "stage-2-and-stage-3-supervisor-goal-verification",
     status: failed === 0 ? "passed" : "failed",
     summary: { total: results.length, passed, failed },
     results,
-    note: "Deterministic production-module and read-only live database checks; no AI credits consumed and no task records created.",
+    note: "Stage 2 orchestration plus Stage 3 deterministic goal-criteria diagnostics and read-only live database checks; semantic goal verification is not performed. No AI credits consumed and no task records created.",
   }, { status: failed === 0 ? 200 : 500, headers: { "Cache-Control": "private, no-store" } });
 }
