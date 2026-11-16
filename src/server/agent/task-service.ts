@@ -20,12 +20,13 @@ import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
 import { canAttemptAgentRecovery, fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "@/server/agent/recovery-policy";
+import type { AgentTaskEventType } from "@/server/agent/task-event-types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function event(admin: ReturnType<typeof createAdminClient>, taskId: string, eventType: string, payload: Record<string, unknown> = {}) {
+async function event(admin: ReturnType<typeof createAdminClient>, taskId: string, eventType: AgentTaskEventType, payload: Record<string, unknown> = {}) {
   const { error } = await admin.from("agent_task_events").insert({ task_id: taskId, owner_id: PERSONAL_OWNER_ID, event_type: eventType, payload });
   if (error) throw new Error("Unable to persist task event.");
 }
@@ -212,7 +213,8 @@ async function executeAgentTaskRecord(
     while (callsToExecute.length > 0) {
       await executeBatch(callsToExecute);
       const failedResults = results.filter((item) => isRecord(item.result) && item.result.ok === false);
-      await event(admin, id, "task.execution_observed", {
+      await event(admin, id, "task.executing", {
+        phase: "execution_observed",
         toolCallsAttempted: executedCalls.length,
         completedToolCalls: results.length - failedResults.length,
         failedToolCalls: failedResults.length,
@@ -264,7 +266,8 @@ async function executeAgentTaskRecord(
         toolCalls: [...executedCalls, ...recoveryCalls],
       };
       await setTask(admin, id, { plan, status: "executing" });
-      await event(admin, id, "task.replanned", {
+      await event(admin, id, "task.plan_ready", {
+        phase: "replanned",
         attempt: recoveryAttempts + 1,
         addedSteps: recoverySteps.length,
         addedToolCalls: recoveryCalls.length,
@@ -329,8 +332,8 @@ async function executeAgentTaskRecord(
     const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
     const goalEvaluation = evaluateAgentGoalCriteria(plan, results, result);
     const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
-    await event(admin, id, "task.evaluated", { completion: evaluation, goal: goalEvaluation });
     failedStage = "finalization";
+    await event(admin, id, "task.synthesizing", { phase: "evaluated", completion: evaluation, goal: goalEvaluation });
     const completedAt = new Date().toISOString();
     const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
       .update({ status: "completed", result: finalResult, completed_at: completedAt, updated_at: completedAt })

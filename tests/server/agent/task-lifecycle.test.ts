@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { AGENT_TASK_EVENT_TYPES } from "../../../src/server/agent/task-event-types";
 import {
   AgentTaskCancelledError,
   getCancellationDisposition,
@@ -33,4 +35,15 @@ test("cancellation timestamps and errors have explicit semantics", () => {
   assert.equal(isAgentTaskCancellationRequested(""), false);
   assert.equal(isAgentTaskCancellationRequested("2026-11-12T10:00:00.000Z"), true);
   assert.ok(new AgentTaskCancelledError() instanceof Error);
+});
+
+
+test("runtime task event vocabulary matches the persisted database constraint", () => {
+  const migration = readFileSync(
+    "supabase/migrations/20261112161000_add_agent_task_cancellation.sql",
+    "utf8",
+  );
+  for (const eventType of AGENT_TASK_EVENT_TYPES) {
+    assert.ok(migration.includes("'" + eventType + "'"), "Missing persisted event type: " + eventType);
+  }
 });
