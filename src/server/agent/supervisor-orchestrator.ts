@@ -1,4 +1,5 @@
 import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import type { AgentPlan } from "@/shared/agent/contracts";
 export type SupervisorSubtask = {
   id: string;
@@ -227,6 +228,9 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     "The word count is 2 [ev-diag-call].",
   );
   const completionMissing = evaluateAgentCompletion(completionPlan, [], "No tool output was returned.");
+  const goalPlan: AgentPlan = { version: 1, goal: "Count four words", steps: [{ id: "goal-step", objective: "Count words in the text", expectedOutcome: "The word count result is 4" }], toolCalls: [{ id: "goal-call", toolId: "text.word_count", arguments: { text: "alpha beta gamma delta" } }] };
+  const goalCovered = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 4 } }], "The word count result is 4 [ev-goal-call].");
+  const goalMissing = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 2 [ev-goal-call].");
   const checks = [
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
@@ -235,6 +239,8 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     { id: "disabled_agent_exclusion", pass: assigned.ok && assigned.assignments.every((item) => item.agentId !== "disabled"), detail: "Disabled Agents are never selected." },
     { id: "completion_evaluator_success", pass: completionPassed.verdict === "execution_complete" && completionPassed.independentGoalVerification === "not_performed", detail: "Completion evaluator accepts observed tool output with valid evidence IDs and makes no false truth-verification claim." },
     { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },
+    { id: "goal_criteria_covered", pass: goalCovered.verdict === "criteria_covered" && goalCovered.semanticGoalVerification === "not_performed", detail: "Goal evaluator detects planned outcome terms in successful observed evidence without claiming semantic verification." },
+    { id: "goal_criteria_missing", pass: goalMissing.verdict === "partial" && goalMissing.criteria[0]?.missingTerms.includes("4"), detail: "Goal evaluator detects a planned outcome whose expected value is absent from observed evidence." },
   ];
   return checks.map((check) => ({ id: check.id, status: check.pass ? "passed" : "failed", detail: check.detail }));
 }
