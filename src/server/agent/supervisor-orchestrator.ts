@@ -209,7 +209,7 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   const invalid = parseSupervisorPlan({ goal: "x", summary: "x", subtasks: [{ id: "bad id", title: "Bad", objective: "x", requiredCapabilities: ["root"] }] }, "x");
   const agents: AssignableAgent[] = [
     { id: "research", name: "Research Agent", description: "Web research and source review", role: "Research analyst", allowedTools: ["web.search"], enabled: true },
-    { id: "developer", name: "Developer Agent", description: "Repository implementation", role: "Software engineer", allowedTools: ["github.read_file"], enabled: true },
+    { id: "developer", name: "Developer Agent", description: "Repository implementation", role: "Software engineer", allowedTools: ["github.apply_patch"], enabled: true },
     { id: "disabled", name: "Disabled Agent", description: "Research", role: "Research", allowedTools: ["web.search"], enabled: false },
   ];
   const assigned = assignSubtasksToAgents([
@@ -232,12 +232,16 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   const goalCovered = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 4 } }], "The word count result is 4 [ev-goal-call].");
   const goalMissing = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { message: "two" } }], "The word count result is two [ev-goal-call].");
   const goalContradiction = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 4 [ev-goal-call].");
+  const readOnlyCoder = assignSubtasksToAgents([
+    { id: "coding", title: "Code", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
+  ], [{ id: "reader", name: "Repository Reader", description: "Read repository files", role: "Developer", allowedTools: ["github.read_file", "github.list_files"], enabled: true }]);
   const checks = [
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
     { id: "local_task_planner", pass: fixture.subtasks.length === 3 && fixture.subtasks[1].objective.includes("Analyze"), detail: "Local fallback splits explicit independent objectives into bounded workstreams." },
     { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and coding objectives route to matching enabled specialists." },
     { id: "disabled_agent_exclusion", pass: assigned.ok && assigned.assignments.every((item) => item.agentId !== "disabled"), detail: "Disabled Agents are never selected." },
+    { id: "coding_requires_write_tools", pass: !readOnlyCoder.ok, detail: "Read-only GitHub repository tools cannot qualify an Agent for coding or implementation work." },
     { id: "completion_evaluator_success", pass: completionPassed.verdict === "execution_complete" && completionPassed.independentGoalVerification === "not_performed", detail: "Completion evaluator accepts observed tool output with valid evidence IDs and makes no false truth-verification claim." },
     { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },
     { id: "goal_criteria_covered", pass: goalCovered.verdict === "criteria_covered" && goalCovered.semanticGoalVerification === "not_performed", detail: "Goal evaluator detects planned outcome terms in successful observed evidence without claiming semantic verification." },
