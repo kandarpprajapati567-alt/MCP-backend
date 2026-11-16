@@ -17,7 +17,7 @@ test("covers planned outcome terms present in observed evidence", () => {
 });
 
 test("marks outcome partial when an expected value is absent", () => {
-  const report = evaluateAgentGoalCriteria(plan, [{ callId: "call-count", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 2 [ev-call-count].");
+  const report = evaluateAgentGoalCriteria(plan, [{ callId: "call-count", toolId: "text.word_count", result: { message: "two" } }], "The word count result is two [ev-call-count].");
   assert.equal(report.verdict, "partial");
   assert.ok(report.criteria[0].missingTerms.includes("4"));
 });
