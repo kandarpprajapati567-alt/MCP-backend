@@ -373,10 +373,16 @@ async function executeAgentTaskRecord(
       if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
     }
-    const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
+    const code = error instanceof Error && /invalid|registered|validation|planner|cannot use|not allowed|disabled/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);
-    console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
+    console.warn("[agent-worker] Task execution failed:", {
+      taskId: id,
+      stage: failedStage,
+      code,
+      errorName: error instanceof Error ? error.name : "NonError",
+      message,
+    });
     try {
       const failedAt = new Date().toISOString();
       await setTask(admin, id, { status: "failed", error_code: code, completed_at: failedAt });
@@ -483,49 +489,57 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
 
   let processed = 0;
   await Promise.all((queued ?? []).map(async (candidate) => {
-    const claimedAt = new Date().toISOString();
-    const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
-      status: "planning",
-      updated_at: claimedAt,
-    }).eq("owner_id", PERSONAL_OWNER_ID)
-      .eq("id", candidate.id)
-      .eq("status", "queued")
-      .is("cancellation_requested_at", null)
-      .select("id,task,agent_definition_id,agent_snapshot")
-      .maybeSingle();
-    if (claimError) throw new Error("Agent task could not be claimed.");
-    if (!claimed) return;
+    try {
+      const claimedAt = new Date().toISOString();
+      const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
+        status: "planning",
+        updated_at: claimedAt,
+      }).eq("owner_id", PERSONAL_OWNER_ID)
+        .eq("id", candidate.id)
+        .eq("status", "queued")
+        .is("cancellation_requested_at", null)
+        .select("id,task,agent_definition_id,agent_snapshot")
+        .maybeSingle();
+      if (claimError) throw new Error("Agent task could not be claimed.");
+      if (!claimed) return;
 
-    let agent: ({ id: string } & AgentDefinitionInput) | null = null;
-    if (typeof claimed.agent_definition_id === "string") {
-      const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
-      const parsed = parseAgentDefinition({
-        name: snapshot.name,
-        description: typeof snapshot.description === "string" ? snapshot.description : "",
-        role: snapshot.role,
-        instructions: snapshot.instructions,
-        providerPreference: snapshot.providerPreference,
-        modelPreference: snapshot.modelPreference,
-        allowedTools: snapshot.allowedTools,
-        maxSteps: snapshot.maxSteps,
-        maxToolCalls: snapshot.maxToolCalls,
-        enabled: true,
-      });
-      if (!parsed.ok) {
-        await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
-        await event(admin, claimed.id, "task.failed", {
-          code: "AGENT_SNAPSHOT_INVALID",
-          stage: "planning",
-          message: "The saved Agent execution snapshot is invalid; no tools were run.",
+      let agent: ({ id: string } & AgentDefinitionInput) | null = null;
+      if (typeof claimed.agent_definition_id === "string") {
+        const snapshot = isRecord(claimed.agent_snapshot) ? claimed.agent_snapshot : {};
+        const parsed = parseAgentDefinition({
+          name: snapshot.name,
+          description: typeof snapshot.description === "string" ? snapshot.description : "",
+          role: snapshot.role,
+          instructions: snapshot.instructions,
+          providerPreference: snapshot.providerPreference,
+          modelPreference: snapshot.modelPreference,
+          allowedTools: snapshot.allowedTools,
+          maxSteps: snapshot.maxSteps,
+          maxToolCalls: snapshot.maxToolCalls,
+          enabled: true,
         });
-        processed += 1;
-        return;
+        if (!parsed.ok) {
+          await setTask(admin, claimed.id, { status: "failed", error_code: "AGENT_SNAPSHOT_INVALID", completed_at: new Date().toISOString() });
+          await event(admin, claimed.id, "task.failed", {
+            code: "AGENT_SNAPSHOT_INVALID",
+            stage: "planning",
+            message: "The saved Agent execution snapshot is invalid; no tools were run.",
+          });
+          processed += 1;
+          return;
+        }
+        agent = { id: claimed.agent_definition_id, ...parsed.value };
       }
-      agent = { id: claimed.agent_definition_id, ...parsed.value };
-    }
 
-    await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
-    processed += 1;
+      await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
+      processed += 1;
+    } catch (error) {
+      console.error("[agent-worker] Queue item failed:", {
+        taskId: candidate.id,
+        errorName: error instanceof Error ? error.name : "NonError",
+        message: safeAgentFailureMessage(error),
+      });
+    }
   }));
   return processed;
 }

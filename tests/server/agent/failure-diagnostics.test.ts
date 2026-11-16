@@ -23,6 +23,17 @@ test("hides arbitrary exception details", () => {
   assert.equal(safeAgentFailureMessage("unexpected"), "Unexpected internal error. Check server logs using the task ID.");
 });
 
+test("shows safe local planner policy and input diagnostics", () => {
+  assert.equal(
+    safeAgentFailureMessage(new Error("This Agent cannot use web.search. Assign the approved web.search tool in Agent Manager, then retry.")),
+    "This Agent cannot use web.search. Assign the approved web.search tool in Agent Manager, then retry.",
+  );
+  assert.equal(
+    safeAgentFailureMessage(new Error("Add the text to process after a colon, for example: Count words in: apple banana.")),
+    "Add the text to process after a colon, for example: Count words in: apple banana.",
+  );
+});
+
 test("shows curated GitHub connectivity diagnostics", () => {
   assert.equal(
     safeAgentFailureMessage(new Error("GitHub read request timed out after 15 seconds.")),
