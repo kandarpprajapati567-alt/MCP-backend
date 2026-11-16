@@ -34,3 +34,17 @@ test("failed tool output cannot count as goal evidence", () => {
   assert.equal(report.verdict, "partial");
   assert.ok(report.criteria[0].missingTerms.includes("4"));
 });
+
+test("flags contradictory structured tool values even when synthesis repeats the expected value", () => {
+  const report = evaluateAgentGoalCriteria(plan, [{ callId: "call-count", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 4 [ev-call-count].");
+  assert.equal(report.verdict, "needs_review");
+  assert.equal(report.contradictoryCriteria, 1);
+  assert.equal(report.criteria[0].status, "contradictory");
+  assert.match(report.criteria[0].contradictions[0], /count=2/);
+});
+
+test("does not treat unrelated numeric fields as a contradiction", () => {
+  const report = evaluateAgentGoalCriteria(plan, [{ callId: "call-count", toolId: "text.word_count", result: { count: 4, durationMs: 18 } }], "The word count result is 4 [ev-call-count].");
+  assert.equal(report.verdict, "criteria_covered");
+  assert.equal(report.contradictoryCriteria, 0);
+});
