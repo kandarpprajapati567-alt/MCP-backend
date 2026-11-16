@@ -36,7 +36,7 @@ export function safeAgentFailureMessage(error: unknown): string {
     "Stored Web Search credential could not be decrypted.",
   ]);
   if (knownMessages.has(message) || /^GitHub read request failed with HTTP [0-9]{3}\.$/.test(message)) return message;
-  const localToolPolicyMessage = /^This Agent cannot use ([a-zA-Z0-9._-]{1,160})\. Assign (?:the approved )?\\1 tool in Agent Manager, then retry\.$/;
+  const localToolPolicyMessage = /^This Agent cannot use ([a-zA-Z0-9._-]{1,160})\. Assign (?:the approved )?\1 tool in Agent Manager, then retry\.$/;
   if (localToolPolicyMessage.test(message)) return message;
   if (/^Add the text to process after a colon, for example: Count words in: apple banana\.$/.test(message)) return message;
 
