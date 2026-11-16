@@ -145,19 +145,19 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
       if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
-      if (/research|web|search|analyst/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("research role"); }
+      if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding" || capability === "github") {
       if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
-      if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("engineering role"); }
+      if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
     } else if (capability === "analysis") {
       if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
-      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("analysis role"); }
+      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
     } else if (capability === "writing") {
       if (hasTool(/text\.|document|notes/)) { score += 3; capabilityMatch = true; reasons.push("writing tools"); }
-      if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; capabilityMatch = true; reasons.push("writing role"); }
+      if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
     } else if (capability === "android") {
       if (hasTool(/device\.|android\.|mobile/)) { score += 6; capabilityMatch = true; reasons.push("Android/device tools"); }
-      if (/android|mobile|device/.test(profile)) { score += 4; capabilityMatch = true; reasons.push("Android/device role"); }
+      if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
     } else if (capability === "general") {
       score += 1;
     }
