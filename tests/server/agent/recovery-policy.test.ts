@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "../../../src/server/agent/recovery-policy";
+import { canAttemptAgentRecovery, fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "../../../src/server/agent/recovery-policy";
 
 test("fingerprints tool arguments independently of object key order", () => {
   assert.equal(
@@ -34,4 +34,32 @@ test("recovery obeys the remaining global tool-call budget and eight-call ceilin
   assert.equal(selected.length, 2);
   assert.deepEqual(selected.map((call) => call.id), ["call-7", "call-8"]);
   assert.deepEqual(selectSafeRecoveryToolCalls(candidates, new Set(), new Set(["web.search"]), 0, 0), []);
+});
+
+test("allows at most two recovery cycles while failures and execution budgets remain", () => {
+  const base = {
+    maxRecoveryAttempts: 2,
+    failedOperations: 1,
+    pendingDeviceJobs: 0,
+    remainingToolBudget: 2,
+    remainingStepBudget: 3,
+  };
+  assert.equal(canAttemptAgentRecovery({ ...base, recoveryAttempts: 0 }), true);
+  assert.equal(canAttemptAgentRecovery({ ...base, recoveryAttempts: 1 }), true);
+  assert.equal(canAttemptAgentRecovery({ ...base, recoveryAttempts: 2 }), false);
+});
+
+test("blocks recovery without failures, with pending device jobs, or without budgets", () => {
+  const base = {
+    recoveryAttempts: 0,
+    maxRecoveryAttempts: 2,
+    failedOperations: 1,
+    pendingDeviceJobs: 0,
+    remainingToolBudget: 2,
+    remainingStepBudget: 3,
+  };
+  assert.equal(canAttemptAgentRecovery({ ...base, failedOperations: 0 }), false);
+  assert.equal(canAttemptAgentRecovery({ ...base, pendingDeviceJobs: 1 }), false);
+  assert.equal(canAttemptAgentRecovery({ ...base, remainingToolBudget: 0 }), false);
+  assert.equal(canAttemptAgentRecovery({ ...base, remainingStepBudget: 0 }), false);
 });
