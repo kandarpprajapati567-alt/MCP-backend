@@ -3,13 +3,15 @@ import test from "node:test";
 import { verifySynthesisIntegrity } from "../../../src/server/agent/synthesis-integrity";
 
 test("reports structural consistency while explicitly not claiming truth verification", () => {
-  const report = verifySynthesisIntegrity("Source: https://example.org/a", [
+  const report = verifySynthesisIntegrity("Source: https://example.org/a [ev-call-1]", [
     { callId: "call-1", toolId: "web.search", result: { url: "https://example.org/a", title: "Observed" } },
   ]);
   assert.equal(report.status, "structurally_consistent");
   assert.equal(report.toolOperations, 1);
   assert.equal(report.failedOperations, 0);
   assert.equal(report.unsupportedAnswerUrls, 0);
+  assert.equal(report.unsupportedEvidenceIds, 0);
+  assert.equal(report.uncitedEvidence, false);
   assert.equal(report.independentTruthVerification, "not_performed");
 });
 
@@ -41,4 +43,18 @@ test("reports missing evidence and partial execution without upgrading the statu
   ]);
   assert.equal(partial.status, "warning");
   assert.equal(partial.failedOperations, 1);
+});
+
+test("warns when evidence is not cited or an unknown evidence ID is cited", () => {
+  const uncited = verifySynthesisIntegrity("A factual conclusion.", [
+    { callId: "call-1", toolId: "web.search", result: { title: "Observed" } },
+  ]);
+  assert.equal(uncited.uncitedEvidence, true);
+  assert.match(uncited.warnings.join(" "), /No supplied evidence ID was cited/);
+
+  const unsupported = verifySynthesisIntegrity("Claim [ev-call-99]", [
+    { callId: "call-1", toolId: "web.search", result: { title: "Observed" } },
+  ]);
+  assert.equal(unsupported.unsupportedEvidenceIds, 1);
+  assert.equal(unsupported.status, "warning");
 });
