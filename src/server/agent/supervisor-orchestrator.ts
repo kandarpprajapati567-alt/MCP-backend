@@ -1,3 +1,5 @@
+import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import type { AgentPlan } from "@/shared/agent/contracts";
 export type SupervisorSubtask = {
   id: string;
   title: string;
@@ -213,12 +215,26 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     { id: "research", title: "Research", objective: "Research official documentation and sources", requiredCapabilities: ["research", "web"] },
     { id: "coding", title: "Code", objective: "Implement code changes in the repository", requiredCapabilities: ["coding", "github"] },
   ], agents);
+  const completionPlan: AgentPlan = {
+    version: 1,
+    goal: "Verify deterministic tool completion",
+    steps: [{ id: "step-1", objective: "Count words", expectedOutcome: "One tool result is observed" }],
+    toolCalls: [{ id: "diag-call", toolId: "text.word_count", arguments: { text: "alpha beta" } }],
+  };
+  const completionPassed = evaluateAgentCompletion(
+    completionPlan,
+    [{ callId: "diag-call", toolId: "text.word_count", result: { count: 2 } }],
+    "The word count is 2 [ev-diag-call].",
+  );
+  const completionMissing = evaluateAgentCompletion(completionPlan, [], "No tool output was returned.");
   const checks = [
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
     { id: "local_task_planner", pass: fixture.subtasks.length === 3 && fixture.subtasks[1].objective.includes("Analyze"), detail: "Local fallback splits explicit independent objectives into bounded workstreams." },
     { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and coding objectives route to matching enabled specialists." },
     { id: "disabled_agent_exclusion", pass: assigned.ok && assigned.assignments.every((item) => item.agentId !== "disabled"), detail: "Disabled Agents are never selected." },
+    { id: "completion_evaluator_success", pass: completionPassed.verdict === "execution_complete" && completionPassed.independentGoalVerification === "not_performed", detail: "Completion evaluator accepts observed tool output with valid evidence IDs and makes no false truth-verification claim." },
+    { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },
   ];
   return checks.map((check) => ({ id: check.id, status: check.pass ? "passed" : "failed", detail: check.detail }));
 }
