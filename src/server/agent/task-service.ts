@@ -15,6 +15,7 @@ import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
+import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
 import { canAttemptAgentRecovery, fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "@/server/agent/recovery-policy";
@@ -323,10 +324,13 @@ async function executeAgentTaskRecord(
       : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
         JSON.stringify(results, null, 2) +
         (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
+    const evaluation = evaluateAgentCompletion(plan, results, result);
+    const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
+    await event(admin, id, "task.evaluated", evaluation);
     failedStage = "finalization";
     const completedAt = new Date().toISOString();
     const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
-      .update({ status: "completed", result, completed_at: completedAt, updated_at: completedAt })
+      .update({ status: "completed", result: evaluatedResult, completed_at: completedAt, updated_at: completedAt })
       .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
       .eq("status", "synthesizing").is("cancellation_requested_at", null)
       .select("id").maybeSingle();
@@ -339,7 +343,8 @@ async function executeAgentTaskRecord(
       ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
       plan,
       toolResults: results,
-      result,
+      result: evaluatedResult,
+      evaluation,
     };
   } catch (error) {
     let cancellationRequested = error instanceof AgentTaskCancelledError;
