@@ -96,7 +96,6 @@ export async function POST(request: Request) {
     }));
 
     const storedPlan = { ...planned.value, teamRun: { version: 1, mode: "parallel_independent_specialists", members } };
-    const failed = members.filter((member) => member.status === "failed" || member.status === "cancelled").length;
     const parentStatus = members.every((member) => member.status === "completed") ? "completed" : "executing";
     const now = new Date().toISOString();
     const { error: updateError } = await admin.from("agent_tasks").update({
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
     }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", parent.id);
     if (updateError) return json({ error: "Team tasks were queued, but their parent run record could not be updated. Check Agent Task History." }, 503);
     await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: "task.plan_ready", payload: { teamRunId: parent.id, assignments: members.length } });
-    await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: parentStatus === "failed" ? "task.failed" : "task.executing", payload: { status: parentStatus } });
+    await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: "task.executing", payload: { status: parentStatus } });
 
     const completed = members.filter((member) => member.status === "completed").length;
     return json({
