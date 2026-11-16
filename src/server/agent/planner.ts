@@ -20,6 +20,7 @@ export async function createAgentPlan(
   task: string,
   deviceTools: readonly AvailableDeviceTool[] = [],
   agent?: AgentDefinitionInput,
+  executionFeedback?: string,
 ): Promise<AgentPlan | null> {
   if (typeof task !== "string" || task.trim().length < 1 || task.length > 4000) {
     throw new Error("Task must be between 1 and 4000 characters.");
@@ -45,7 +46,7 @@ export async function createAgentPlan(
   for (let attempt = 0; attempt < MAX_PLANNING_ATTEMPTS; attempt += 1) {
     const request: AIGenerationRequest = {
       messages: [
-        { role: "system", content: buildPlannerSystemPrompt(availableTools, agent, repairFeedback) },
+        { role: "system", content: buildPlannerSystemPrompt(availableTools, agent, repairFeedback, executionFeedback) },
         { role: "user", content: task.trim() },
       ],
       temperature: 0.1,
