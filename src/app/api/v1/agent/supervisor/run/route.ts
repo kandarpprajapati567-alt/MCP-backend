@@ -5,7 +5,7 @@ import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-a
 import { assignSubtasksToAgents, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
 import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
-import { isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
+import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest, isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { readJsonBody } from "@/server/http/read-json";
 
@@ -26,13 +26,27 @@ export async function POST(request: Request) {
 
   try {
     const admin = createAdminClient();
+    const teamKey = idempotencyKey ? "team:" + createHash("sha256").update(idempotencyKey).digest("hex") : undefined;
+    const fingerprint = createAgentTaskRequestFingerprint(goal.trim(), null);
+    if (teamKey) {
+      const { data: existing, error: existingError } = await admin.from("agent_tasks")
+        .select("id,status,request_fingerprint,plan")
+        .eq("owner_id", PERSONAL_OWNER_ID).eq("idempotency_key", teamKey).maybeSingle();
+      if (existingError) return json({ error: "Team run idempotency is unavailable." }, 503);
+      if (existing) {
+        if (!isSameAgentTaskRequest(existing.request_fingerprint, fingerprint)) return json({ error: "IDEMPOTENCY_KEY_REUSED" }, 409);
+        const existingPlan = existing.plan && typeof existing.plan === "object" ? existing.plan as Record<string, unknown> : {};
+        const teamRun = existingPlan.teamRun && typeof existingPlan.teamRun === "object" ? existingPlan.teamRun : null;
+        return json({ teamRunId: existing.id, status: existing.status, replayed: true, teamRun, executionMode: "persistent_parallel_team" }, 202);
+      }
+    }
+
     const { data, error } = await admin.from("agent_definitions")
       .select("id,name,description,role,allowed_tools,enabled")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true).limit(100);
     if (error) return json({ error: "Agent registry is unavailable." }, 503);
     const agents: AssignableAgent[] = (data ?? []).map((agent) => ({
-      id: agent.id,
-      name: agent.name,
+      id: agent.id, name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
       allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string") : [],
@@ -43,9 +57,33 @@ export async function POST(request: Request) {
     const routed = assignSubtasksToAgents(planned.value.subtasks, agents);
     if (!routed.ok) return json({ error: routed.error, plan: planned.value }, 409);
 
+    const initialPlan = {
+      ...planned.value,
+      teamRun: {
+        version: 1,
+        mode: "parallel_independent_specialists",
+        members: routed.assignments.map((assignment) => {
+          const subtask = planned.value.subtasks.find((item) => item.id === assignment.subtaskId);
+          return { ...assignment, objective: subtask?.objective ?? "", status: "planning" };
+        }),
+      },
+    };
+    const { data: parent, error: parentError } = await admin.from("agent_tasks").insert({
+      owner_id: PERSONAL_OWNER_ID,
+      status: "planning",
+      task: goal.trim(),
+      plan: initialPlan,
+      ...(teamKey ? { idempotency_key: teamKey, request_fingerprint: fingerprint } : {}),
+    }).select("id").single();
+    if (parentError || !parent) {
+      if (teamKey && parentError?.code === "23505") return json({ error: "A team run with this idempotency key is already being created. Retry the same request shortly." }, 409);
+      return json({ error: "Persistent team run could not be created." }, 503);
+    }
+    await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: "task.created", payload: { kind: "supervisor_team", subtasks: planned.value.subtasks.length } });
+
     const members = await Promise.all(routed.assignments.map(async (assignment) => {
       const subtask = planned.value.subtasks.find((item) => item.id === assignment.subtaskId);
-      if (!subtask) return { ...assignment, status: "failed", error: "Planned subtask was not found." };
+      if (!subtask) return { ...assignment, objective: "", status: "failed", error: "Planned subtask was not found." };
       const childKey = idempotencyKey
         ? createHash("sha256").update(idempotencyKey + ":" + assignment.subtaskId + ":" + assignment.agentId).digest("hex")
         : undefined;
@@ -56,27 +94,31 @@ export async function POST(request: Request) {
         return { ...assignment, objective: subtask.objective, status: "failed", error: safeAgentFailureMessage(cause) };
       }
     }));
+
+    const storedPlan = { ...planned.value, teamRun: { version: 1, mode: "parallel_independent_specialists", members } };
     const failed = members.filter((member) => member.status === "failed" || member.status === "cancelled").length;
-    const active = members.some((member) => ["queued", "planning", "executing", "waiting_for_device", "synthesizing"].includes(member.status));
-    const completed = members.every((member) => member.status === "completed");
-    const status = failed === members.length ? "failed" : failed ? "partial" : active ? "queued" : completed ? "completed" : "partial";
+    const parentStatus = members.every((member) => member.status === "completed") ? "completed" : "executing";
+    const now = new Date().toISOString();
+    const { error: updateError } = await admin.from("agent_tasks").update({
+      plan: storedPlan, status: parentStatus, updated_at: now,
+      ...(parentStatus === "completed" || parentStatus === "failed" ? { completed_at: now } : {}),
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", parent.id);
+    if (updateError) return json({ error: "Team tasks were queued, but their parent run record could not be updated. Check Agent Task History." }, 503);
+    await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: "task.plan_ready", payload: { teamRunId: parent.id, assignments: members.length } });
+    await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: parentStatus === "failed" ? "task.failed" : "task.executing", payload: { status: parentStatus } });
+
+    const completed = members.filter((member) => member.status === "completed").length;
     return json({
-      status,
-      goal: planned.value.goal,
-      summary: planned.value.summary,
-      planner: planned.planner,
-      plan: planned.value,
-      assignments: members,
+      teamRunId: parent.id,
+      status: parentStatus === "failed" ? "failed" : completed === members.length ? "completed" : "queued",
+      goal: planned.value.goal, summary: planned.value.summary, planner: planned.planner,
+      plan: planned.value, assignments: members,
       executionMode: "supervisor_planned_capability_routed_parallel_queue",
       limits: { maxSubtasks: 3, workerConcurrency: 3 },
-    }, status === "completed" ? 200 : status === "queued" ? 202 : 207);
+    }, parentStatus === "completed" ? 200 : parentStatus === "failed" ? 207 : 202);
   } catch (cause) {
     const diagnostic = safeAgentFailureMessage(cause);
     console.error("[supervisor] Dispatch failed:", diagnostic);
-    return json({
-      error: diagnostic,
-      code: "SUPERVISOR_DISPATCH_FAILED",
-      message: "No unverified assignment was reported as successful. Review the Agent registry and server diagnostics, then retry.",
-    }, 503);
+    return json({ error: diagnostic, code: "SUPERVISOR_DISPATCH_FAILED", message: "No unverified assignment was reported as successful. Review the Agent registry and server diagnostics, then retry." }, 503);
   }
 }
