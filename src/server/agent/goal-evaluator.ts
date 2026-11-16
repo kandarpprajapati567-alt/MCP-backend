@@ -29,7 +29,7 @@ export function evaluateAgentGoalCriteria(plan: AgentPlan, toolResults: Synthesi
   try { observed += "\n" + JSON.stringify(successfulResults); } catch { /* Answer-only evidence remains available. */ }
   const observedTerms = new Set(meaningfulTerms(observed));
   const criteria = plan.steps.map((step) => {
-    const expected = meaningfulTerms(step.expectedOutcome + " " + step.objective);
+    const expected = meaningfulTerms(step.expectedOutcome);
     if (!expected.length) return { stepId: step.id, expectedOutcome: step.expectedOutcome, status: "unverifiable" as const, matchedTerms: [], missingTerms: [] };
     const matchedTerms = expected.filter((term) => observedTerms.has(term));
     const missingTerms = expected.filter((term) => !observedTerms.has(term));
