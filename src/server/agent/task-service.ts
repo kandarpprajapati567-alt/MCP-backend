@@ -17,7 +17,7 @@ import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
-import { fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "@/server/agent/recovery-policy";
+import { canAttemptAgentRecovery, fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "@/server/agent/recovery-policy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -206,6 +206,7 @@ async function executeAgentTaskRecord(
 
     let callsToExecute = plan.toolCalls;
     let recoveryAttempts = 0;
+    const maxRecoveryAttempts = 2;
     while (callsToExecute.length > 0) {
       await executeBatch(callsToExecute);
       const failedResults = results.filter((item) => isRecord(item.result) && item.result.ok === false);
@@ -216,11 +217,16 @@ async function executeAgentTaskRecord(
         pendingDeviceJobs: pendingJobs.length,
         remainingToolBudget: Math.max(0, maxTotalToolCalls - executedCalls.length),
       });
-      if (failedResults.length === 0 || pendingJobs.length > 0 || recoveryAttempts >= 1) break;
-
       const remainingCallBudget = maxTotalToolCalls - executedCalls.length;
       const remainingStepBudget = maxTotalSteps - plan.steps.length;
-      if (remainingCallBudget <= 0 || remainingStepBudget <= 0) break;
+      if (!canAttemptAgentRecovery({
+        recoveryAttempts,
+        maxRecoveryAttempts,
+        failedOperations: failedResults.length,
+        pendingDeviceJobs: pendingJobs.length,
+        remainingToolBudget: remainingCallBudget,
+        remainingStepBudget,
+      })) break;
 
       const executionFeedback = JSON.stringify({
         completedToolIds: results.filter((item) => !(isRecord(item.result) && item.result.ok === false)).map((item) => item.toolId),
@@ -260,7 +266,7 @@ async function executeAgentTaskRecord(
         attempt: recoveryAttempts + 1,
         addedSteps: recoverySteps.length,
         addedToolCalls: recoveryCalls.length,
-        reason: "A tool operation failed; only new read-only, idempotent registered tools may be added during recovery.",
+        reason: "A tool operation failed; only new read-only, idempotent registered tools may be added during bounded recovery.",
       });
       recoveryAttempts += 1;
       callsToExecute = recoveryCalls;
