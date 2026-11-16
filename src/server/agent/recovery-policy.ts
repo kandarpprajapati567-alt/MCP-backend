@@ -46,3 +46,23 @@ export function selectSafeRecoveryToolCalls(
   }
   return selected;
 }
+
+/** Permit bounded recovery only when failures exist, no device job is pending, and budget remains. */
+export function canAttemptAgentRecovery(input: {
+  recoveryAttempts: number;
+  maxRecoveryAttempts: number;
+  failedOperations: number;
+  pendingDeviceJobs: number;
+  remainingToolBudget: number;
+  remainingStepBudget: number;
+}): boolean {
+  return Number.isInteger(input.recoveryAttempts) &&
+    Number.isInteger(input.maxRecoveryAttempts) &&
+    input.recoveryAttempts >= 0 &&
+    input.maxRecoveryAttempts > 0 &&
+    input.recoveryAttempts < input.maxRecoveryAttempts &&
+    input.failedOperations > 0 &&
+    input.pendingDeviceJobs === 0 &&
+    input.remainingToolBudget > 0 &&
+    input.remainingStepBudget > 0;
+}
