@@ -32,6 +32,8 @@ export type SynthesisIntegrityReport = {
   toolOperations: number;
   failedOperations: number;
   unsupportedAnswerUrls: number;
+  unsupportedEvidenceIds: number;
+  uncitedEvidence: boolean;
   independentTruthVerification: "not_performed";
   warnings: string[];
 };
@@ -48,18 +50,26 @@ export function verifySynthesisIntegrity(
   const allowedUrls = new Set(successfulResults.flatMap((item) => urlsIn(item.result)));
   const answerUrls = [...new Set((answer.match(URL_PATTERN) ?? []).map(normalizeUrl))];
   const unsupportedAnswerUrls = answerUrls.filter((url) => !allowedUrls.has(url)).length;
+  const knownEvidenceIds = new Set(toolResults.map((item) => "ev-" + item.callId));
+  const citedEvidenceIds = [...new Set((answer.match(/\\[ev-[a-zA-Z0-9_-]+\\]/g) ?? []).map((value) => value.slice(1, -1)))];
+  const unsupportedEvidenceIds = citedEvidenceIds.filter((id) => !knownEvidenceIds.has(id)).length;
+  const uncitedEvidence = toolResults.length > 0 && citedEvidenceIds.length === 0;
   const failedOperations = toolResults.length - successfulResults.length;
   const warnings: string[] = [];
 
   if (toolResults.length === 0) warnings.push("No tool execution evidence was supplied.");
   if (failedOperations > 0) warnings.push(failedOperations + " tool operation(s) reported failure.");
   if (unsupportedAnswerUrls > 0) warnings.push(unsupportedAnswerUrls + " answer URL(s) were not present in successful tool output.");
+  if (unsupportedEvidenceIds > 0) warnings.push(unsupportedEvidenceIds + " evidence reference(s) were not supplied to synthesis.");
+  if (uncitedEvidence) warnings.push("No supplied evidence ID was cited in the synthesis answer.");
 
   return {
     status: warnings.length ? "warning" : "structurally_consistent",
     toolOperations: toolResults.length,
     failedOperations,
     unsupportedAnswerUrls,
+    unsupportedEvidenceIds,
+    uncitedEvidence,
     independentTruthVerification: "not_performed",
     warnings,
   };
