@@ -76,6 +76,6 @@ test("preserves supplied evidence IDs and removes fabricated evidence references
     [{ callId: "call-1", toolId: "web.search", result: { title: "Observed" } }],
   );
   assert.match(result, /Observed \[ev-call-1\]/);
-  assert.match(result, /\\[unsupported evidence reference omitted\]/);
+  assert.match(result, /\[unsupported evidence reference omitted\]/);
   assert.match(result, /Unsupported evidence IDs: 1/);
 });
