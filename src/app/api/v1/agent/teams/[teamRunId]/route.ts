@@ -5,7 +5,7 @@ import { summarizeAgentTeamMembers } from "@/server/agent/team-run";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request, context: { params: Promise<{ teamRunId: string }> }) {
+export async function POST(request: Request, context: { params: Promise<{ teamRunId: string }> }) {
   if (!verifyOwnerRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   const { teamRunId } = await context.params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(teamRunId)) {
