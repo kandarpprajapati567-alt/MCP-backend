@@ -16,8 +16,8 @@ test("covers planned outcome terms present in observed evidence", () => {
   assert.equal(report.semanticGoalVerification, "not_performed");
 });
 
-test("marks outcome partial when an expected value is absent", () => {
-  const report = evaluateAgentGoalCriteria(plan, [{ callId: "call-count", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 2 [ev-call-count].");
+test("marks outcome partial when expected evidence is absent", () => {
+  const report = evaluateAgentGoalCriteria(plan, [], "No tool result was produced.");
   assert.equal(report.verdict, "partial");
   assert.ok(report.criteria[0].missingTerms.includes("4"));
 });
