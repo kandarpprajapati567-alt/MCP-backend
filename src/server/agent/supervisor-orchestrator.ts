@@ -231,6 +231,7 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   const goalPlan: AgentPlan = { version: 1, goal: "Count four words", steps: [{ id: "goal-step", objective: "Count words in the text", expectedOutcome: "The word count result is 4" }], toolCalls: [{ id: "goal-call", toolId: "text.word_count", arguments: { text: "alpha beta gamma delta" } }] };
   const goalCovered = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 4 } }], "The word count result is 4 [ev-goal-call].");
   const goalMissing = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 2 [ev-goal-call].");
+  const goalContradiction = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 4 [ev-goal-call].");
   const checks = [
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
@@ -241,6 +242,7 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },
     { id: "goal_criteria_covered", pass: goalCovered.verdict === "criteria_covered" && goalCovered.semanticGoalVerification === "not_performed", detail: "Goal evaluator detects planned outcome terms in successful observed evidence without claiming semantic verification." },
     { id: "goal_criteria_missing", pass: goalMissing.verdict === "partial" && goalMissing.criteria[0]?.missingTerms.includes("4"), detail: "Goal evaluator detects a planned outcome whose expected value is absent from observed evidence." },
+    { id: "goal_criteria_contradiction", pass: goalContradiction.verdict === "needs_review" && goalContradiction.contradictoryCriteria === 1, detail: "Goal evaluator flags when a successful structured tool result conflicts with the final answer and expected numeric outcome." },
   ];
   return checks.map((check) => ({ id: check.id, status: check.pass ? "passed" : "failed", detail: check.detail }));
 }
