@@ -183,7 +183,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       </div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
-      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. Test Stage 2 & 3 runs deterministic orchestration and goal-criteria coverage checks plus live read-only Agent registry and queue checks. Goal criteria matching is a deterministic evidence heuristic, not semantic or real-world truth verification. Run Live Execution Test creates one deterministic word-count task, routes it through the Supervisor and persistent worker, and uses the Mock provider with no AI credits.</p>
+      <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. Test Stage 2 & 3 runs deterministic orchestration and goal-criteria coverage checks plus live read-only Agent registry and queue checks. Goal criteria checks include deterministic term coverage and structured numeric contradiction detection; they are not semantic or real-world truth verification. Run Live Execution Test creates one deterministic word-count task, routes it through the Supervisor and persistent worker, and uses the Mock provider with no AI credits.</p>
     </section>
   );
 }
