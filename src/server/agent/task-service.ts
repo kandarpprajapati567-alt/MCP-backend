@@ -17,6 +17,7 @@ import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
+import { fingerprintAgentToolCall, selectSafeRecoveryToolCalls } from "@/server/agent/recovery-policy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -140,7 +141,7 @@ async function executeAgentTaskRecord(
     const planned = agent
       ? await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools, agent)
       : await createAgentPlan(PERSONAL_OWNER_ID, task, deviceTools);
-    const plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
+    let plan = planned ?? buildLocalAgentPlan(task, agent ?? undefined);
     await assertTaskNotCancelled(admin, id);
     failedStage = "policy_validation";
     if (agent && (plan.steps.length > agent.maxSteps || plan.toolCalls.length > agent.maxToolCalls ||
@@ -159,6 +160,13 @@ async function executeAgentTaskRecord(
 
     const results: Array<{ callId: string; toolId: string; result: unknown }> = [];
     const pendingJobs: Array<{ id: string; deviceId: string; toolId: string }> = [];
+    const attemptedFingerprints = new Set<string>();
+    const executedCalls: typeof plan.toolCalls = [];
+    const maxTotalToolCalls = agent?.maxToolCalls ?? 8;
+    const maxTotalSteps = agent?.maxSteps ?? 16;
+    const safeRecoveryToolIds = new Set(TOOL_CATALOG
+      .filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect)
+      .map((tool) => tool.id));
     failedStage = "tool_execution";
     const executeCall = async (call: typeof plan.toolCalls[number]) => {
       const deviceTool = deviceTools.find((tool) => tool.id === call.toolId);
@@ -183,13 +191,76 @@ async function executeAgentTaskRecord(
       else await event(admin, id, "tool.failed", { callId: call.id, toolId: call.toolId, message: execution.error });
     };
     const beforeEach = async () => assertTaskNotCancelled(admin, id);
-    const parallelSafeIds = new Set<string>(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
-    const canRunInParallel = plan.toolCalls.length > 1 && plan.toolCalls.every((call) => parallelSafeIds.has(call.toolId) && !deviceTools.some((tool) => tool.id === call.toolId));
-    if (canRunInParallel) await executeToolCallsWithConcurrency(plan.toolCalls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
-    else await executeToolCallsSequentially(plan.toolCalls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
+    const executeBatch = async (calls: typeof plan.toolCalls) => {
+      for (const call of calls) attemptedFingerprints.add(fingerprintAgentToolCall(call));
+      executedCalls.push(...calls);
+      const parallelSafeIds = new Set<string>(TOOL_CATALOG.filter((tool) => tool.annotations.readOnlyHint && tool.annotations.idempotentHint && !tool.sideEffect).map((tool) => tool.id));
+      const canRunInParallel = calls.length > 1 && calls.every((call) =>
+        parallelSafeIds.has(call.toolId) && !deviceTools.some((tool) => tool.id === call.toolId));
+      if (canRunInParallel) {
+        await executeToolCallsWithConcurrency(calls, executeCall, 3, shouldCaptureFailure, persistOutcome, beforeEach);
+      } else {
+        await executeToolCallsSequentially(calls, executeCall, shouldCaptureFailure, persistOutcome, beforeEach);
+      }
+    };
+
+    let callsToExecute = plan.toolCalls;
+    let recoveryAttempts = 0;
+    while (callsToExecute.length > 0) {
+      await executeBatch(callsToExecute);
+      const failedResults = results.filter((item) => isRecord(item.result) && item.result.ok === false);
+      if (failedResults.length === 0 || pendingJobs.length > 0 || recoveryAttempts >= 1) break;
+
+      const remainingCallBudget = maxTotalToolCalls - executedCalls.length;
+      const remainingStepBudget = maxTotalSteps - plan.steps.length;
+      if (remainingCallBudget <= 0 || remainingStepBudget <= 0) break;
+
+      const executionFeedback = JSON.stringify({
+        completedToolIds: results.filter((item) => !(isRecord(item.result) && item.result.ok === false)).map((item) => item.toolId),
+        failed: failedResults.map((item) => ({
+          toolId: item.toolId,
+          error: isRecord(item.result) && typeof item.result.error === "string"
+            ? item.result.error.slice(0, 240)
+            : "Tool execution failed.",
+        })),
+      });
+      const recoveryPlan = await createAgentPlan(
+        PERSONAL_OWNER_ID, task, deviceTools, agent ?? undefined, executionFeedback,
+      );
+      if (!recoveryPlan) break;
+
+      const recoveryCalls = selectSafeRecoveryToolCalls(
+        recoveryPlan.toolCalls,
+        attemptedFingerprints,
+        safeRecoveryToolIds,
+        remainingCallBudget,
+        executedCalls.length,
+      );
+      const recoverySteps = recoveryPlan.steps.slice(0, remainingStepBudget).map((step, index) => ({
+        ...step,
+        id: "step-" + (plan.steps.length + index + 1),
+      }));
+      if (recoveryCalls.length === 0 || recoverySteps.length === 0) break;
+
+      plan = {
+        version: 1,
+        goal: recoveryPlan.goal,
+        steps: [...plan.steps, ...recoverySteps],
+        toolCalls: [...executedCalls, ...recoveryCalls],
+      };
+      await setTask(admin, id, { plan, status: "executing" });
+      await event(admin, id, "task.replanned", {
+        attempt: recoveryAttempts + 1,
+        addedSteps: recoverySteps.length,
+        addedToolCalls: recoveryCalls.length,
+        reason: "A tool operation failed; only new read-only, idempotent registered tools may be added during recovery.",
+      });
+      recoveryAttempts += 1;
+      callsToExecute = recoveryCalls;
+    }
 
     if (results.some((item) => isRecord(item.result) && item.result.ok === false)) {
-      throw new Error("One or more registered tool calls failed.");
+      throw new Error("One or more registered tool calls failed after bounded safe recovery.");
     }
 
     await assertTaskNotCancelled(admin, id);
