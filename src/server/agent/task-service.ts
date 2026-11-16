@@ -373,10 +373,16 @@ async function executeAgentTaskRecord(
       if (cancelledTask) await event(admin, id, "task.cancelled", { cooperative: true });
       return { taskId: id, status: "cancelled", code: "AGENT_TASK_CANCELLED" };
     }
-    const code = error instanceof Error && /invalid|registered|validation|planner/i.test(error.message)
+    const code = error instanceof Error && /invalid|registered|validation|planner|cannot use|not allowed|disabled/i.test(error.message)
       ? "AGENT_EXECUTION_REJECTED" : "AGENT_EXECUTION_FAILED";
     const message = safeAgentFailureMessage(error);
-    console.warn("[agent-worker] Task execution failed:", { taskId: id, stage: failedStage, code, message });
+    console.warn("[agent-worker] Task execution failed:", {
+      taskId: id,
+      stage: failedStage,
+      code,
+      errorName: error instanceof Error ? error.name : "NonError",
+      message,
+    });
     try {
       const failedAt = new Date().toISOString();
       await setTask(admin, id, { status: "failed", error_code: code, completed_at: failedAt });
@@ -483,6 +489,7 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
 
   let processed = 0;
   await Promise.all((queued ?? []).map(async (candidate) => {
+    try {
     const claimedAt = new Date().toISOString();
     const { data: claimed, error: claimError } = await admin.from("agent_tasks").update({
       status: "planning",
@@ -524,8 +531,15 @@ export async function processQueuedAgentTasks(limit = 3): Promise<number> {
       agent = { id: claimed.agent_definition_id, ...parsed.value };
     }
 
-    await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
-    processed += 1;
+      await executeAgentTaskRecord(admin, claimed.id, String(claimed.task), agent);
+      processed += 1;
+    } catch (error) {
+      console.error("[agent-worker] Queue item failed:", {
+        taskId: candidate.id,
+        errorName: error instanceof Error ? error.name : "NonError",
+        message: safeAgentFailureMessage(error),
+      });
+    }
   }));
   return processed;
 }
