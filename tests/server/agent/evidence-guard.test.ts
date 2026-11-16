@@ -75,7 +75,7 @@ test("preserves supplied evidence IDs and removes fabricated evidence references
     "Observed [ev-call-1], but this is invented [ev-call-9].",
     [{ callId: "call-1", toolId: "web.search", result: { title: "Observed" } }],
   );
-  assert.match(result, /Observed \\[ev-call-1\\]/);
-  assert.match(result, /\\[unsupported evidence reference omitted\\]/);
+  assert.match(result, /Observed \[ev-call-1\]/);
+  assert.match(result, /\\[unsupported evidence reference omitted\]/);
   assert.match(result, /Unsupported evidence IDs: 1/);
 });
