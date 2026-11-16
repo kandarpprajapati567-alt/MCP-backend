@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       plan: planned.value, assignments: members,
       executionMode: "supervisor_planned_capability_routed_parallel_queue",
       limits: { maxSubtasks: 3, workerConcurrency: 3 },
-    }, parentStatus === "completed" ? 200 : parentStatus === "failed" ? 207 : 202);
+    }, completed === members.length ? 200 : 202);
   } catch (cause) {
     const diagnostic = safeAgentFailureMessage(cause);
     console.error("[supervisor] Dispatch failed:", diagnostic);
