@@ -4,7 +4,7 @@ const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
 const FAILED_STATUSES = new Set(["failed", "cancelled", "expired", "error"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeUrl(value: string): string {
