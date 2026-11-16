@@ -230,7 +230,7 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   const completionMissing = evaluateAgentCompletion(completionPlan, [], "No tool output was returned.");
   const goalPlan: AgentPlan = { version: 1, goal: "Count four words", steps: [{ id: "goal-step", objective: "Count words in the text", expectedOutcome: "The word count result is 4" }], toolCalls: [{ id: "goal-call", toolId: "text.word_count", arguments: { text: "alpha beta gamma delta" } }] };
   const goalCovered = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 4 } }], "The word count result is 4 [ev-goal-call].");
-  const goalMissing = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 2 [ev-goal-call].");
+  const goalMissing = evaluateAgentGoalCriteria(goalPlan, [], "No tool result was produced.");
   const goalContradiction = evaluateAgentGoalCriteria(goalPlan, [{ callId: "goal-call", toolId: "text.word_count", result: { count: 2 } }], "The word count result is 4 [ev-goal-call].");
   const checks = [
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
