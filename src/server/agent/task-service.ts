@@ -209,6 +209,13 @@ async function executeAgentTaskRecord(
     while (callsToExecute.length > 0) {
       await executeBatch(callsToExecute);
       const failedResults = results.filter((item) => isRecord(item.result) && item.result.ok === false);
+      await event(admin, id, "task.execution_observed", {
+        toolCallsAttempted: executedCalls.length,
+        completedToolCalls: results.length - failedResults.length,
+        failedToolCalls: failedResults.length,
+        pendingDeviceJobs: pendingJobs.length,
+        remainingToolBudget: Math.max(0, maxTotalToolCalls - executedCalls.length),
+      });
       if (failedResults.length === 0 || pendingJobs.length > 0 || recoveryAttempts >= 1) break;
 
       const remainingCallBudget = maxTotalToolCalls - executedCalls.length;
