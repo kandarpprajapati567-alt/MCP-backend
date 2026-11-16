@@ -1,6 +1,6 @@
 import type { SynthesisToolResult } from "./synthesis-context";
 
-const URL_PATTERN = /https?:\/\/[^\s"'<>\]+/g;
+const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
 const FAILED_STATUSES = new Set(["failed", "cancelled", "expired", "error"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
