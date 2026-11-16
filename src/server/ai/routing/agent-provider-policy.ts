@@ -4,9 +4,19 @@ import type { ModelRoutePolicy } from "./types";
 const MOCK_MODEL = "mock-v1";
 
 /**
- * This deployment is zero-budget: remote inference is permitted only for an
- * explicitly selected OpenRouter model marked :free. Every other preference
- * resolves to the deterministic Mock provider.
+ * A currently published $0 OpenRouter reasoning model. Keep this as a
+ * replaceable default: free model availability and rate limits can change.
+ */
+export const DEFAULT_FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+
+function isFreeOpenRouterModel(model: string): boolean {
+  return model.includes("/") && model.endsWith(":free") && !/\\s/.test(model);
+}
+
+/**
+ * This deployment is zero-budget: automatic Agent routing prefers an
+ * available OpenRouter free model. Explicit paid model preferences fail
+ * closed to Mock; no paid provider is selected by this function.
  */
 export function selectAgentExecutionRoute(
   preference: AgentProviderPreference,
@@ -14,14 +24,20 @@ export function selectAgentExecutionRoute(
   basePolicy: ModelRoutePolicy,
   availableProviders: readonly string[],
 ): { providerId: "mock" | "openrouter"; model: string } {
-  const requestedProvider = preference === "auto" ? basePolicy.primaryProvider : preference;
+  const autoFreeAvailable = preference === "auto" && availableProviders.includes("openrouter");
+  const requestedProvider = autoFreeAvailable
+    ? "openrouter"
+    : preference === "auto" ? basePolicy.primaryProvider : preference;
+  const configuredBaseIsFree = basePolicy.primaryProvider === "openrouter" &&
+    isFreeOpenRouterModel(basePolicy.primaryModel);
   const requestedModel = modelPreference?.trim() ||
-    (requestedProvider === basePolicy.primaryProvider
-      ? basePolicy.primaryModel
-      : requestedProvider === "openrouter" ? "openai/gpt-4o-mini" : MOCK_MODEL);
+    (requestedProvider === "openrouter"
+      ? configuredBaseIsFree ? basePolicy.primaryModel : DEFAULT_FREE_OPENROUTER_MODEL
+      : requestedProvider === basePolicy.primaryProvider
+        ? basePolicy.primaryModel
+        : MOCK_MODEL);
 
-  if (requestedProvider === "openrouter" && requestedModel.includes("/") &&
-      requestedModel.endsWith(":free") && !/\s/.test(requestedModel) &&
+  if (requestedProvider === "openrouter" && isFreeOpenRouterModel(requestedModel) &&
       availableProviders.includes("openrouter")) {
     return { providerId: "openrouter", model: requestedModel };
   }
