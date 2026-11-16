@@ -15,7 +15,7 @@ export type AgentGoalEvaluation = {
 const STOP_WORDS = new Set(["about","after","also","and","any","are","because","before","been","being","between","but","can","could","does","each","for","from","has","have","into","its","may","might","must","not","one","our","out","per","should","some","such","than","that","the","their","then","there","these","they","this","those","through","tool","tools","was","were","will","with","would","your","step","task","expected","outcome","result","results","output","outputs","success","successful","complete","completed","observed","returned","provided"]);
 
 function meaningfulTerms(value: string): string[] {
-  return [...new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((term) => !STOP_WORDS.has(term)))].slice(0, 20);
+  return [...new Set((value.toLowerCase().match(/[a-z]{3,}|[0-9]+/g) ?? []).filter((term) => !STOP_WORDS.has(term)))].slice(0, 20);
 }
 
 /** Deterministic evidence coverage only; this is not semantic or real-world truth verification. */
