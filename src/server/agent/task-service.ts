@@ -326,9 +326,9 @@ async function executeAgentTaskRecord(
         JSON.stringify(results, null, 2) +
         (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
     const evaluation = evaluateAgentCompletion(plan, results, result);
+    const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
     const goalEvaluation = evaluateAgentGoalCriteria(plan, results, result);
     const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
-    const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
     await event(admin, id, "task.evaluated", { completion: evaluation, goal: goalEvaluation });
     failedStage = "finalization";
     const completedAt = new Date().toISOString();
