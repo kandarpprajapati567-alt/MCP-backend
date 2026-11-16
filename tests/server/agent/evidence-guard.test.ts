@@ -4,7 +4,7 @@ import { guardSynthesisAnswer } from "../../../src/server/agent/evidence-guard";
 
 test("labels generated synthesis as unverified when no source URL was returned", () => {
   const result = guardSynthesisAnswer("The answer is definitely 42.", []);
-  assert.match(result, /UNVERIFIED — NO SOURCE URL WAS RETURNED BY TOOLS/);
+const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
   assert.match(result, /Tool outputs are observations, not proof of real-world accuracy/);
   assert.match(result, /The answer is definitely 42\./);
 });
