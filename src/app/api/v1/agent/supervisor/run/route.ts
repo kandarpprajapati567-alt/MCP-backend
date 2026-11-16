@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
     const storedPlan = { ...planned.value, teamRun: { version: 1, mode: "parallel_independent_specialists", members } };
     const failed = members.filter((member) => member.status === "failed" || member.status === "cancelled").length;
-    const parentStatus = failed === members.length ? "failed" : members.every((member) => member.status === "completed") ? "completed" : "executing";
+    const parentStatus = members.every((member) => member.status === "completed") ? "completed" : "executing";
     const now = new Date().toISOString();
     const { error: updateError } = await admin.from("agent_tasks").update({
       plan: storedPlan, status: parentStatus, updated_at: now,
