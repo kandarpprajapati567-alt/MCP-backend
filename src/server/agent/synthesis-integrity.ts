@@ -1,6 +1,6 @@
 import type { SynthesisToolResult } from "./synthesis-context";
 
-const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
+const URL_PATTERN = /https?:\/\/[^\s"'<>\]+/g;
 const FAILED_STATUSES = new Set(["failed", "cancelled", "expired", "error"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,7 +51,7 @@ export function verifySynthesisIntegrity(
   const answerUrls = [...new Set((answer.match(URL_PATTERN) ?? []).map(normalizeUrl))];
   const unsupportedAnswerUrls = answerUrls.filter((url) => !allowedUrls.has(url)).length;
   const knownEvidenceIds = new Set(toolResults.map((item) => "ev-" + item.callId));
-  const citedEvidenceIds = [...new Set((answer.match(/\\[ev-[a-zA-Z0-9_-]+\\]/g) ?? []).map((value) => value.slice(1, -1)))];
+  const citedEvidenceIds = [...new Set((answer.match(/\[ev-[a-zA-Z0-9_-]+\]/g) ?? []).map((value) => value.slice(1, -1)))];
   const unsupportedEvidenceIds = citedEvidenceIds.filter((id) => !knownEvidenceIds.has(id)).length;
   const uncitedEvidence = toolResults.length > 0 && citedEvidenceIds.length === 0;
   const failedOperations = toolResults.length - successfulResults.length;
