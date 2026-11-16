@@ -4,7 +4,7 @@ import {
 } from "./synthesis-context";
 import { verifySynthesisIntegrity } from "./synthesis-integrity";
 
-const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
+const URL_PATTERN = /https?:\/\/[^\s"'<>\]+/g;
 
 function normalizeUrl(value: string): string {
   return value.replace(/[),.;\]}]+$/, "");
@@ -59,7 +59,7 @@ export function guardSynthesisAnswer(
       removedUrls += 1;
       return "[unverified URL omitted]";
     })
-    .replace(/\\[ev-[a-zA-Z0-9_-]+\\]/g, (candidate) => {
+    .replace(/\[ev-[a-zA-Z0-9_-]+\]/g, (candidate) => {
       const evidenceId = candidate.slice(1, -1);
       if (toolResults.some((item) => "ev-" + item.callId === evidenceId)) return candidate;
       return "[unsupported evidence reference omitted]";
