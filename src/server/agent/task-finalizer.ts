@@ -7,6 +7,7 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import type { AgentPlan } from "@/shared/agent/contracts";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import type { AIGenerationRequest } from "@/server/ai/providers/types";
@@ -189,12 +190,14 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   }
 
   const evaluation = evaluateAgentCompletion(task.plan as AgentPlan, toolResults, result);
+  const goalEvaluation = evaluateAgentGoalCriteria(task.plan as AgentPlan, toolResults, result);
+  const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
   const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
   const now = new Date().toISOString();
   const { data: completedTask, error: updateError } = await admin.from("agent_tasks").update({
     status: "completed",
     tool_results: toolResults,
-    result: evaluatedResult,
+    result: finalResult,
     completed_at: now,
     updated_at: now,
   }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
@@ -226,7 +229,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     task_id: taskId,
     owner_id: PERSONAL_OWNER_ID,
     event_type: "task.completed",
-    payload: { toolResults: toolResults.length, evaluation },
+    payload: { toolResults: toolResults.length, evaluation, goalEvaluation },
   });
   if (completedEventError) {
     await admin.from("agent_tasks").update({
