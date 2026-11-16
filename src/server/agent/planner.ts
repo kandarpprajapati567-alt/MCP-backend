@@ -13,6 +13,8 @@ export type AvailableDeviceTool = AgentAvailableTool & {
   sideEffect: boolean;
 };
 
+const MAX_PLANNING_ATTEMPTS = 2;
+
 export async function createAgentPlan(
   userId: string,
   task: string,
@@ -36,35 +38,47 @@ export async function createAgentPlan(
     ? deviceTools.filter((tool) => agent.allowedTools.includes(tool.id))
     : deviceTools;
   const availableTools = [...backendTools, ...permittedDeviceTools.slice(0, 8)];
-  const prompt = buildPlannerSystemPrompt(availableTools, agent);
 
-  const request: AIGenerationRequest = {
-    messages: [
-      { role: "system", content: prompt },
-      { role: "user", content: task.trim() },
-    ],
-    temperature: 0.1,
-    maxOutputTokens: 2400,
-  };
-  const execution = agent
-    ? await executeAgentWorkflow(userId, "planner", request, {
-        providerPreference: agent.providerPreference,
-        modelPreference: agent.modelPreference,
-      })
-    : await executeUserWorkflow(userId, "planner", request);
+  let repairFeedback: string | undefined;
+  let lastValidationError = "Planner did not return a valid plan.";
 
-  if (execution.route.providerId === "mock") return null;
+  for (let attempt = 0; attempt < MAX_PLANNING_ATTEMPTS; attempt += 1) {
+    const request: AIGenerationRequest = {
+      messages: [
+        { role: "system", content: buildPlannerSystemPrompt(availableTools, agent, repairFeedback) },
+        { role: "user", content: task.trim() },
+      ],
+      temperature: 0.1,
+      maxOutputTokens: 2400,
+    };
+    const execution = agent
+      ? await executeAgentWorkflow(userId, "planner", request, {
+          providerPreference: agent.providerPreference,
+          modelPreference: agent.modelPreference,
+        })
+      : await executeUserWorkflow(userId, "planner", request);
 
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(execution.result.text);
-  } catch {
-    throw new Error("Planner returned invalid JSON.");
+    if (execution.route.providerId === "mock") return null;
+
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(execution.result.text);
+    } catch {
+      lastValidationError = "Planner response was not valid JSON.";
+      repairFeedback = lastValidationError;
+      continue;
+    }
+
+    const parsed = parseAgentPlan(decoded, availableTools, {
+      maxSteps: agent?.maxSteps,
+      maxToolCalls: agent?.maxToolCalls,
+    });
+    if (parsed.ok) return parsed.value;
+
+    lastValidationError = parsed.error;
+    repairFeedback = parsed.error;
   }
-  const parsed = parseAgentPlan(decoded, availableTools, {
-    maxSteps: agent?.maxSteps,
-    maxToolCalls: agent?.maxToolCalls,
-  });
-  if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.value;
+
+  throw new Error("Planner could not produce a schema-valid plan after " +
+    MAX_PLANNING_ATTEMPTS + " attempts: " + lastValidationError);
 }
