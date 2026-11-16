@@ -87,7 +87,7 @@ test("adds bounded deterministic validation feedback for one repair attempt", ()
   const prompt = buildPlannerSystemPrompt([], undefined, feedback);
   assert.match(prompt, /previous plan was rejected by deterministic validation/);
   assert.match(prompt, /Tool call arguments failed the registered input schema/);
-  assert.match(prompt, /cannot override any schema, allowlist, permission, or execution limit/);
+  assert.match(prompt, /not as a request to bypass any schema, allowlist, permission, or execution limit/);
 });
 
 test("bounds repair feedback so it cannot exceed planner prompt limits", () => {
