@@ -93,3 +93,27 @@ test("Stage 2 self-test reports every diagnostic check as passed", () => {
   assert.equal(results.length, 5);
   assert.ok(results.every((item) => item.status === "passed"));
 });
+
+test("specialist role labels cannot substitute for missing registered tool capabilities", () => {
+  const roleOnly = [
+    { id: "research", name: "Research Specialist", description: "Expert web researcher", role: "Research analyst", allowedTools: [], enabled: true },
+    { id: "developer", name: "Developer Specialist", description: "Expert software engineer", role: "Developer", allowedTools: [], enabled: true },
+  ];
+  const result = assignSubtasksToAgents([
+    { id: "research-task", title: "Research", objective: "Research current sources", requiredCapabilities: ["research", "web"] },
+    { id: "coding-task", title: "Implement", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
+  ], roleOnly);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /No enabled Agent matches/);
+});
+
+test("a specialist with a real matching tool manifest remains eligible even when its profile is generic", () => {
+  const manifestOnly = [
+    { id: "agent-a", name: "Agent A", description: "General purpose", role: "Assistant", allowedTools: ["web.search"], enabled: true },
+  ];
+  const result = assignSubtasksToAgents([
+    { id: "research-task", title: "Research", objective: "Find sources", requiredCapabilities: ["research", "web"] },
+  ], manifestOnly);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.assignments[0].agentId, "agent-a");
+});
