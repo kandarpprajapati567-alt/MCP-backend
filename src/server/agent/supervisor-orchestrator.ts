@@ -150,7 +150,7 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
       if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding" || capability === "github") {
-      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
+      if (hasTool(/^(?:github\.(?:create_branch|apply_patch|create_pull_request|update_file)|code\.(?:write_file|apply_patch)|repo\.(?:write_file|apply_patch)|git\.(?:commit|push))$/)) { score += 5; capabilityMatch = true; reasons.push("repository write/patch tools"); }
       if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
     } else if (capability === "analysis") {
       if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
