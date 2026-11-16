@@ -190,9 +190,9 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   }
 
   const evaluation = evaluateAgentCompletion(task.plan as AgentPlan, toolResults, result);
+  const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
   const goalEvaluation = evaluateAgentGoalCriteria(task.plan as AgentPlan, toolResults, result);
   const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
-  const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
   const now = new Date().toISOString();
   const { data: completedTask, error: updateError } = await admin.from("agent_tasks").update({
     status: "completed",
