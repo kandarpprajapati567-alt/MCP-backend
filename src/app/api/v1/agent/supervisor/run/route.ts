@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     const completed = members.filter((member) => member.status === "completed").length;
     return json({
       teamRunId: parent.id,
-      status: parentStatus === "failed" ? "failed" : completed === members.length ? "completed" : "queued",
+      status: completed === members.length ? "completed" : "queued",
       goal: planned.value.goal, summary: planned.value.summary, planner: planned.planner,
       plan: planned.value, assignments: members,
       executionMode: "supervisor_planned_capability_routed_parallel_queue",
