@@ -4,6 +4,7 @@ import type { AIGenerationRequest } from "@/server/ai/providers/types";
 import { createRuntimeProviderRegistry } from "@/server/ai/providers/runtime-registry";
 import { executeWorkflow } from "@/server/ai/routing/executor";
 import { getUserWorkflowPolicy } from "@/server/ai/routing/runtime-executor";
+import { DEFAULT_FREE_OPENROUTER_MODEL } from "@/server/ai/routing/agent-provider-policy";
 import {
   buildFallbackSupervisorPlan,
   isExplicitFreePlannerModel,
@@ -12,9 +13,10 @@ import {
 } from "@/server/agent/supervisor-orchestrator";
 
 /**
- * The Supervisor may use only an explicitly configured OpenRouter :free model.
- * Its fallback route is forced to mock, never to a billable provider.
- * If no verified free model is configured, use deterministic local planning.
+ * The Supervisor uses OpenRouter only when the owner has connected it.
+ * Automatic planning chooses a published :free model; it never falls back to
+ * a billable provider. Missing credentials, rate limits or invalid output
+ * use the deterministic local planner instead.
  */
 export async function createSupervisorPlan(userId: string, goal: string): Promise<SupervisorPlanResult> {
   if (typeof goal !== "string" || !goal.trim() || goal.trim().length > 4000) {
@@ -24,7 +26,10 @@ export async function createSupervisorPlan(userId: string, goal: string): Promis
   try {
     const providers = await createRuntimeProviderRegistry(userId);
     const configuredPolicy = await getUserWorkflowPolicy(userId, "planner", providers);
-    if (isExplicitFreePlannerModel(configuredPolicy.primaryProvider, configuredPolicy.primaryModel) && providers.openrouter) {
+    if (providers.openrouter) {
+      const freeModel = isExplicitFreePlannerModel(configuredPolicy.primaryProvider, configuredPolicy.primaryModel)
+        ? configuredPolicy.primaryModel
+        : DEFAULT_FREE_OPENROUTER_MODEL;
       const request: AIGenerationRequest = {
         messages: [
           {
@@ -44,7 +49,7 @@ export async function createSupervisorPlan(userId: string, goal: string): Promis
       };
       const execution = await executeWorkflow("planner", {
         primaryProvider: "openrouter",
-        primaryModel: configuredPolicy.primaryModel,
+        primaryModel: freeModel,
         fallbackProviders: ["mock"],
         fallbackModel: "mock-v1",
         requiredCapabilities: ["text-generation"],
