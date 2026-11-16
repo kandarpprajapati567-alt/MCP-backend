@@ -90,8 +90,10 @@ test("specialist assignment ignores generic keyword overlap and reuses a qualifi
 
 test("Stage 2 self-test reports every diagnostic check as passed", () => {
   const results = runStageTwoDiagnostics();
-  assert.equal(results.length, 5);
+  assert.equal(results.length, 7);
   assert.ok(results.every((item) => item.status === "passed"));
+  assert.ok(results.some((item) => item.id === "completion_evaluator_success"));
+  assert.ok(results.some((item) => item.id === "completion_evaluator_missing_output"));
 });
 
 test("specialist role labels cannot substitute for missing registered tool capabilities", () => {
