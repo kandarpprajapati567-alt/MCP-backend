@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const { error: updateError } = await admin.from("agent_tasks").update({
       plan: storedPlan, status: parentStatus, updated_at: now,
-      ...(parentStatus === "completed" || parentStatus === "failed" ? { completed_at: now } : {}),
+      ...(parentStatus === "completed" ? { completed_at: now } : {}),
     }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", parent.id);
     if (updateError) return json({ error: "Team tasks were queued, but their parent run record could not be updated. Check Agent Task History." }, 503);
     await admin.from("agent_task_events").insert({ task_id: parent.id, owner_id: PERSONAL_OWNER_ID, event_type: "task.plan_ready", payload: { teamRunId: parent.id, assignments: members.length } });
