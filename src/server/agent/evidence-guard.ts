@@ -4,7 +4,7 @@ import {
 } from "./synthesis-context";
 import { verifySynthesisIntegrity } from "./synthesis-integrity";
 
-const URL_PATTERN = /https?:\/\/[^\s"'<>\]+/g;
+const URL_PATTERN = /https?:\/\/[^\s"'<>\\]+/g;
 
 function normalizeUrl(value: string): string {
   return value.replace(/[),.;\]}]+$/, "");
