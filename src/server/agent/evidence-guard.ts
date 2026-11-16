@@ -53,11 +53,18 @@ export function guardSynthesisAnswer(
     executionFailureStatus(item.result) ? [] : extractSourceReferenceCandidates(item.result),
   ));
   let removedUrls = 0;
-  const safeAnswer = answer.replace(URL_PATTERN, (candidate) => {
-    if (allowedUrls.has(normalizeUrl(candidate))) return candidate;
-    removedUrls += 1;
-    return "[unverified URL omitted]";
-  }).trim();
+  const safeAnswer = answer
+    .replace(URL_PATTERN, (candidate) => {
+      if (allowedUrls.has(normalizeUrl(candidate))) return candidate;
+      removedUrls += 1;
+      return "[unverified URL omitted]";
+    })
+    .replace(/\\[ev-[a-zA-Z0-9_-]+\\]/g, (candidate) => {
+      const evidenceId = candidate.slice(1, -1);
+      if (toolResults.some((item) => "ev-" + item.callId === evidenceId)) return candidate;
+      return "[unsupported evidence reference omitted]";
+    })
+    .trim();
 
   const status = allowedUrls.size > 0
     ? "SOURCE REFERENCES PRESENT — NOT INDEPENDENTLY VERIFIED"
@@ -73,7 +80,8 @@ export function guardSynthesisAnswer(
     "DETERMINISTIC INTEGRITY CHECK: " + integrity.status.toUpperCase().replaceAll("_", " "),
     "Tool operations: " + integrity.toolOperations +
       " · Failed: " + integrity.failedOperations +
-      " · Unsupported answer URLs: " + integrity.unsupportedAnswerUrls,
+      " · Unsupported answer URLs: " + integrity.unsupportedAnswerUrls +
+      " · Unsupported evidence IDs: " + integrity.unsupportedEvidenceIds,
     "Independent truth verification: NOT PERFORMED. This check validates execution/citation consistency only.",
     ...integrity.warnings.map((warning) => "Integrity warning: " + warning),
   ];
