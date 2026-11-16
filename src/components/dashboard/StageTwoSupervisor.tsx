@@ -6,6 +6,9 @@ type Props = { token: string; agents: Array<{ id: string; name: string; enabled:
 type TestResult = { id: string; status: "passed" | "failed"; detail: string };
 type DispatchResult = {
   status: string;
+  teamRunId?: string;
+  teamResult?: string;
+  teamStatus?: string;
   summary?: string;
   planner?: string;
   plan?: { subtasks: Array<{ id: string; title: string; objective: string; requiredCapabilities: string[] }> };
@@ -33,6 +36,29 @@ export function StageTwoSupervisor({ token, agents }: Props) {
   }
 
   async function monitorExecution(initial: DispatchResult) {
+    if (initial.teamRunId) {
+      const terminalTeam = new Set(["completed", "partial", "failed"]);
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+          const response = await request("/api/v1/agent/teams/" + initial.teamRunId, "GET");
+          if (!response.ok) continue;
+          const team = await response.json() as { status?: string; result?: string; members?: Array<{ subtaskId?: string; status?: string; result?: string; error?: string; errorCode?: string }> };
+          setResult((current) => current ? ({
+            ...current,
+            teamStatus: team.status,
+            teamResult: typeof team.result === "string" ? team.result : current.teamResult,
+            assignments: current.assignments?.map((assignment) => {
+              const member = team.members?.find((item) => item.subtaskId === assignment.subtaskId);
+              return member ? { ...assignment, status: member.status ?? assignment.status, result: member.result ?? assignment.result, error: member.error ?? assignment.error, errorCode: member.errorCode ?? assignment.errorCode } : assignment;
+            }),
+          }) : current);
+          if (terminalTeam.has(team.status ?? "")) return;
+        } catch { /* Retry the next bounded poll. */ }
+      }
+      setError((current) => current || "Team tasks are still running. Their individual task records remain available in Task History.");
+      return;
+    }
     const taskIds = (initial.assignments ?? []).flatMap((item) => item.taskId ? [item.taskId] : []);
     if (!taskIds.length) return;
     const terminal = new Set(["completed", "failed", "cancelled"]);
@@ -167,7 +193,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
 
       {testSummary && <div className="rounded-xl border border-border bg-black/25 p-3"><p className="text-xs font-semibold text-white">Stage 2 + Stage 3 diagnostics · {testSummary}</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{tests.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg bg-black/25 p-2"><div><p className="text-xs text-zinc-200">{item.id.replace(/_/g, " ")}</p><p className="mt-1 text-[10px] text-zinc-500">{item.detail}</p></div><span className={item.status === "passed" ? "text-[10px] font-bold text-emerald-300" : "text-[10px] font-bold text-red-300"}>{item.status.toUpperCase()}</span></div>)}</div></div>}
 
-      {result?.plan && <div className="space-y-3 rounded-xl border border-border bg-black/25 p-4">
+      {result?.plan && <div className="space-y-3 rounded-xl border border-border bg-black/25 p-4">\n        {result.teamRunId && <p className="text-[10px] text-cyan-200">Persistent team run · {result.teamRunId} · {result.teamStatus ?? result.status}</p>}
         <div><p className="text-xs font-semibold text-white">Supervisor plan</p><p className="mt-1 text-xs text-zinc-400">{result.summary} · planner: {result.planner ?? "unknown"}</p></div>
         {result.plan.subtasks.map((task) => {
           const assignment = result.assignments?.find((item) => item.subtaskId === task.id);
@@ -182,7 +208,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
         })}
       </div>}
 
-      {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
+      {result?.teamResult && <section className="rounded-xl border border-emerald-900/50 bg-emerald-950/15 p-4"><h3 className="text-xs font-semibold text-emerald-200">Team result aggregation · {result.teamStatus ?? "finished"}</h3><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-[11px] text-zinc-200">{result.teamResult}</pre></section>}\n      {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-200">{error}</p>}
       <p className="text-[10px] text-zinc-500">Stage 2 is bounded to three subtasks and the existing three-worker limit. Supervisor uses an explicitly configured OpenRouter :free model only; it never falls back to a paid provider. Without one, it uses zero-cost deterministic local decomposition. Test Stage 2 & 3 runs deterministic orchestration and goal-criteria coverage checks plus live read-only Agent registry and queue checks. Goal criteria checks include deterministic term coverage and structured numeric contradiction detection; they are not semantic or real-world truth verification. Run Live Execution Test creates one deterministic word-count task, routes it through the Supervisor and persistent worker, and uses the Mock provider with no AI credits.</p>
     </section>
   );
