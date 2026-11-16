@@ -28,3 +28,9 @@ test("team terminal states are explicit", () => {
   assert.equal(isAgentTeamTerminal("partial"), true);
   assert.equal(isAgentTeamTerminal("running"), false);
 });
+
+test("marks a team failed when every specialist task fails", () => {
+  assert.deepEqual(summarizeAgentTeamMembers([{ status: "failed" }, { status: "cancelled" }]), {
+    status: "failed", total: 2, completed: 0, failed: 2, pending: 0,
+  });
+});
