@@ -41,7 +41,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         try {
-          const response = await request("/api/v1/agent/teams/" + initial.teamRunId, "GET");
+          const response = await request("/api/v1/agent/teams/" + initial.teamRunId, "POST");
           if (!response.ok) continue;
           const team = await response.json() as { status?: string; result?: string; members?: Array<{ subtaskId?: string; status?: string; result?: string; error?: string; errorCode?: string }> };
           setResult((current) => current ? ({
