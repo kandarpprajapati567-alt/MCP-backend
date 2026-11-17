@@ -22,7 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
   const rawMembers = teamRun && Array.isArray(teamRun.members) ? teamRun.members as Array<Record<string, unknown>> : [];
   const taskIds = rawMembers.flatMap((member) => typeof member.taskId === "string" ? [member.taskId] : []);
   const { data: children, error: childError } = taskIds.length
-    ? await admin.from("agent_tasks").select("id,status,result,error_code,updated_at,completed_at").eq("owner_id", PERSONAL_OWNER_ID).in("id", taskIds)
+    ? await admin.from("agent_tasks").select("id,status,result,error_code,completion_evaluation,goal_evaluation,updated_at,completed_at").eq("owner_id", PERSONAL_OWNER_ID).in("id", taskIds)
     : { data: [], error: null };
   if (childError) return NextResponse.json({ error: "Team member task status is unavailable." }, { status: 503 });
   const childById = new Map((children ?? []).map((child) => [child.id, child]));
@@ -33,6 +33,12 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       objective: member.objective, taskId: member.taskId,
       status: child?.status ?? (typeof member.status === "string" ? member.status : "failed"),
       ...(typeof child?.result === "string" ? { result: child.result } : {}),
+      completionEvaluation: child?.completion_evaluation && typeof child.completion_evaluation === "object" &&
+        typeof (child.completion_evaluation as Record<string, unknown>).verdict === "string"
+        ? { verdict: (child.completion_evaluation as Record<string, unknown>).verdict as string } : null,
+      goalEvaluation: child?.goal_evaluation && typeof child.goal_evaluation === "object" &&
+        typeof (child.goal_evaluation as Record<string, unknown>).verdict === "string"
+        ? { verdict: (child.goal_evaluation as Record<string, unknown>).verdict as string } : null,
       ...(typeof child?.error_code === "string" ? { errorCode: child.error_code } : {}),
       ...(typeof member.error === "string" ? { error: member.error } : {}),
       ...(typeof child?.updated_at === "string" ? { updatedAt: child.updated_at } : {}),
@@ -41,21 +47,21 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
   const summary = summarizeAgentTeamMembers(members);
   let persistedResult = parent.result;
   let persistedStatus = parent.status;
-  if (summary.pending === 0 && !parent.result && ["planning", "executing", "completed", "failed"].includes(parent.status)) {
+  if (summary.pending === 0 && !parent.result && ["planning", "executing", "completed", "partial", "failed"].includes(parent.status)) {
     const now = new Date().toISOString();
-    const terminalDbStatus = summary.status === "completed" ? "completed" : "failed";
+    const terminalDbStatus = summary.status === "completed" ? "completed" : summary.status === "failed" ? "failed" : "partial";
     persistedResult = JSON.stringify({
       kind: "supervisor_team_rollup",
       method: "deterministic_member_result_aggregation",
       goal: parent.task,
       status: summary.status,
       summary,
-      members: members.map((member) => ({ agentId: member.agentId, agentName: member.agentName, subtaskId: member.subtaskId, status: member.status, result: member.result ?? null, error: member.error ?? member.errorCode ?? null })),
+      members: members.map((member) => ({ agentId: member.agentId, agentName: member.agentName, subtaskId: member.subtaskId, status: member.status, completionEvaluation: member.completionEvaluation ?? null, goalEvaluation: member.goalEvaluation ?? null, result: member.result ?? null, error: member.error ?? member.errorCode ?? null })),
       semanticTeamGoalVerification: "not_performed",
     }, null, 2);
     const { data: updated, error: updateError } = await admin.from("agent_tasks").update({
       status: terminalDbStatus, result: persistedResult, completed_at: now, updated_at: now,
-    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", teamRunId).in("status", ["planning", "executing", "completed", "failed"]).is("result", null)
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", teamRunId).in("status", ["planning", "executing", "completed", "partial", "failed"]).is("result", null)
       .select("status,result").maybeSingle();
     if (updateError) return NextResponse.json({ error: "Team run finalization could not be saved." }, { status: 503 });
     if (updated) {
@@ -63,7 +69,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       persistedResult = updated.result;
       await admin.from("agent_task_events").insert({
         task_id: teamRunId, owner_id: PERSONAL_OWNER_ID,
-        event_type: terminalDbStatus === "completed" ? "task.completed" : "task.failed",
+        event_type: terminalDbStatus === "completed" ? "task.completed" : terminalDbStatus === "partial" ? "task.partial" : "task.failed",
         payload: { teamStatus: summary.status, ...summary, method: "deterministic_member_result_aggregation" },
       });
     } else {

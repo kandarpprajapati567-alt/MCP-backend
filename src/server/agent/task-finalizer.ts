@@ -6,7 +6,7 @@ import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/de
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
-import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import { deriveAgentTaskOutcomeStatus, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import type { AgentPlan } from "@/shared/agent/contracts";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
@@ -193,11 +193,14 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
   const goalEvaluation = evaluateAgentGoalCriteria(task.plan as AgentPlan, toolResults, result);
   const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
+  const outcomeStatus = deriveAgentTaskOutcomeStatus(evaluation, goalEvaluation);
   const now = new Date().toISOString();
   const { data: completedTask, error: updateError } = await admin.from("agent_tasks").update({
-    status: "completed",
+    status: outcomeStatus,
     tool_results: toolResults,
     result: finalResult,
+    completion_evaluation: evaluation,
+    goal_evaluation: goalEvaluation,
     completed_at: now,
     updated_at: now,
   }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
@@ -228,14 +231,14 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   const { error: completedEventError } = await admin.from("agent_task_events").insert({
     task_id: taskId,
     owner_id: PERSONAL_OWNER_ID,
-    event_type: "task.completed",
-    payload: { toolResults: toolResults.length, evaluation, goalEvaluation },
+    event_type: outcomeStatus === "completed" ? "task.completed" : outcomeStatus === "partial" ? "task.partial" : "task.needs_review",
+    payload: { outcomeStatus, toolResults: toolResults.length, evaluation, goalEvaluation },
   });
   if (completedEventError) {
     await admin.from("agent_tasks").update({
       error_code: "TASK_EVENT_PERSISTENCE_FAILED",
       updated_at: new Date().toISOString(),
-    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "completed");
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", outcomeStatus);
   }
   return true;
 }

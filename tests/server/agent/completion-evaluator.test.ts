@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateAgentCompletion } from "../../../src/server/agent/completion-evaluator";
+import { deriveAgentTaskOutcomeStatus, evaluateAgentCompletion } from "../../../src/server/agent/completion-evaluator";
 
 const plan = {
   version: 1 as const,
@@ -46,4 +46,25 @@ test("requires evidence citations before declaring execution complete", () => {
   ], "A factual answer without a citation.");
   assert.equal(report.verdict, "needs_review");
   assert.ok(report.reasons.some((reason) => reason.includes("No supplied evidence ID was cited")));
+});
+
+test("maps successful execution and covered goal criteria to completed", () => {
+  const completion = evaluateAgentCompletion(plan, [
+    { callId: "call-1", toolId: "web.search", result: { title: "Observed", url: "https://example.org" } },
+  ], "Observed source [ev-call-1]: https://example.org");
+  const goal = { verdict: "criteria_covered" } as const;
+  assert.equal(deriveAgentTaskOutcomeStatus(completion, goal), "completed");
+});
+
+test("maps missing tool evidence to partial rather than completed", () => {
+  const completion = evaluateAgentCompletion(plan, [], "No evidence");
+  const goal = { verdict: "partial" } as const;
+  assert.equal(deriveAgentTaskOutcomeStatus(completion, goal), "partial");
+});
+
+test("maps zero-tool execution to needs_review rather than completed", () => {
+  const noTools = { ...plan, toolCalls: [] };
+  const completion = evaluateAgentCompletion(noTools, [], "General answer");
+  const goal = { verdict: "criteria_covered" } as const;
+  assert.equal(deriveAgentTaskOutcomeStatus(completion, goal), "needs_review");
 });

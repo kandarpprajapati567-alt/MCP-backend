@@ -83,7 +83,12 @@ export function parseSupervisorPlan(value: unknown, originalGoal: string): { ok:
       id: raw.id,
       title: raw.title.trim(),
       objective: raw.objective.trim(),
-      requiredCapabilities: [...new Set(raw.requiredCapabilities as string[])],
+      requiredCapabilities: (() => {
+        const declared = (raw.requiredCapabilities as string[]).filter((item) => item !== "general");
+        const inferred = inferCapabilities(raw.objective).filter((item) => item !== "general");
+        const required = [...new Set([...declared, ...inferred])];
+        return required.length ? required : ["general"];
+      })(),
     });
   }
   return {
@@ -100,7 +105,8 @@ function inferCapabilities(text: string): string[] {
   const value = text.toLowerCase();
   const found: string[] = [];
   if (/research|search|source|reference|latest|news|investigat|compare|competitor/.test(value)) found.push("research", "web");
-  if (/code|coding|program|debug|bug|fix|repair|patch|refactor|implement|repository|github|software|api/.test(value)) found.push("coding", "github");
+  if (/\b(coding|program|debug|bug|fix|repair|patch|refactor|implement|commit|push)\b|\b(?:modify|edit|build|create|write)\s+(?:the\s+)?(?:code|software|repository|app|application|api)\b/.test(value)) found.push("coding");
+  if (/repository|repo|github|git/.test(value)) found.push("github");
   if (/analy[sz]|data|metric|evaluate|audit|review|risk|test|verify/.test(value)) found.push("analysis");
   if (/write|draft|document|report|summari[sz]|content|note|explain/.test(value)) found.push("writing");
   if (/android|phone|device|mobile|permission|app/.test(value)) found.push("android");
@@ -138,54 +144,61 @@ function profileText(agent: AssignableAgent): string {
   return [agent.name, agent.description, agent.role].join(" ").toLowerCase();
 }
 
-function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score: number; reasons: string[]; capabilityMatch: boolean } {
+function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask, executableToolIds: ReadonlySet<string>): { score: number; reasons: string[]; matchedCapabilities: Set<string> } {
   const profile = profileText(agent);
-  const tools = agent.allowedTools.map((tool) => tool.toLowerCase());
+  const allowed = new Set(agent.allowedTools.map((tool) => tool.toLowerCase()));
+  const executable = new Set([...allowed].filter((tool) => executableToolIds.has(tool)));
   let score = 1;
-  let capabilityMatch = false;
+  const matchedCapabilities = new Set<string>();
   const reasons: string[] = [];
-  const hasTool = (pattern: RegExp) => tools.some((tool) => pattern.test(tool));
+  const hasAny = (pattern: RegExp) => [...executable].some((tool) => pattern.test(tool));
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
-      if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
-    } else if (capability === "coding" || capability === "github") {
-      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
-      if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
+      if (executable.has("web.search")) { score += 5; matchedCapabilities.add(capability); reasons.push("connected web.search tool"); }
+      if (/research|web|search|analyst/.test(profile)) score += 2;
+    } else if (capability === "coding") {
+      if (hasAny(/^(?:github|code|repo|git)\.(?:write|create|update|commit|push|apply_patch)(?:_|$)/)) {
+        score += 6; matchedCapabilities.add(capability); reasons.push("repository write/patch tool");
+      }
+      if (/developer|coding|engineer|software|programmer/.test(profile)) score += 2;
+    } else if (capability === "github") {
+      if (hasAny(/^github\.(?:list_|read_file$)/)) { score += 4; matchedCapabilities.add(capability); reasons.push("registered GitHub read tools"); }
     } else if (capability === "analysis") {
-      if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
-      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
+      if (hasAny(/^(?:text\.|analytics\.|data\.|metrics\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("registered analysis tools"); }
+      if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) score += 2;
     } else if (capability === "writing") {
-      if (hasTool(/text\.|document|notes/)) { score += 3; capabilityMatch = true; reasons.push("writing tools"); }
-      if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
+      if (hasAny(/^(?:document\.|notes\.|text\.generate)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("registered writing tools"); }
+      if (/writer|writing|content|documentation|editor/.test(profile)) score += 2;
     } else if (capability === "android") {
-      if (hasTool(/device\.|android\.|mobile/)) { score += 6; capabilityMatch = true; reasons.push("Android/device tools"); }
-      if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
-    } else if (capability === "general") {
-      score += 1;
-    }
+      if (hasAny(/^(?:device\.|android\.)/)) { score += 6; matchedCapabilities.add(capability); reasons.push("registered device tools"); }
+      if (/android|mobile|device/.test(profile)) score += 2;
+    } else if (capability === "general") score += 1;
   }
   const words = subtask.objective.toLowerCase().match(/[a-z]{4,}/g) ?? [];
   const profileWords = new Set(profile.match(/[a-z]{4,}/g) ?? []);
   const overlap = [...new Set(words)].filter((word) => profileWords.has(word)).length;
   if (overlap) { score += Math.min(3, overlap); reasons.push("objective/profile match"); }
-  return { score, reasons, capabilityMatch };
+  return { score, reasons, matchedCapabilities };
 }
 
 export function assignSubtasksToAgents(
   subtasks: readonly SupervisorSubtask[],
   agents: readonly AssignableAgent[],
+  registeredExecutableToolIds: readonly string[],
 ): { ok: true; assignments: AgentAssignment[] } | { ok: false; error: string } {
   const enabled = agents.filter((agent) => agent.enabled);
+  const executableToolIds = new Set(registeredExecutableToolIds.map((tool) => tool.toLowerCase()));
   if (!enabled.length) return { ok: false, error: "No enabled specialist Agents are available. Create or enable an Agent in Agent Manager." };
   if (!subtasks.length || subtasks.length > 3) return { ok: false, error: "Assignment requires between 1 and 3 subtasks." };
   const used = new Set<string>();
   const assignments: AgentAssignment[] = [];
   for (const subtask of subtasks) {
-    const ranked = enabled.map((agent) => ({ agent, ...scoreAgent(agent, subtask) }))
+    const ranked = enabled.map((agent) => ({ agent, ...scoreAgent(agent, subtask, executableToolIds) }))
       .sort((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name));
-    const specialized = subtask.requiredCapabilities.some((capability) => capability !== "general");
-    const eligible = specialized ? ranked.filter((candidate) => candidate.capabilityMatch) : ranked;
+    const required = subtask.requiredCapabilities.filter((capability) => capability !== "general");
+    const eligible = required.length
+      ? ranked.filter((candidate) => required.every((capability) => candidate.matchedCapabilities.has(capability)))
+      : ranked;
     if (!eligible.length) {
       return { ok: false, error: "No enabled Agent matches the required capabilities for subtask: " + subtask.title };
     }
@@ -197,7 +210,7 @@ export function assignSubtasksToAgents(
       agentId: chosen.agent.id,
       agentName: chosen.agent.name,
       score: chosen.score,
-      reason: chosen.reasons.length ? chosen.reasons.join(", ") : "best available enabled Agent; no exact capability match was registered",
+      reason: chosen.reasons.length ? chosen.reasons.join(", ") : "best available enabled Agent with registered executable tools",
     });
   }
   return { ok: true, assignments };
@@ -214,8 +227,11 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   ];
   const assigned = assignSubtasksToAgents([
     { id: "research", title: "Research", objective: "Research official documentation and sources", requiredCapabilities: ["research", "web"] },
+    { id: "repository-read", title: "Inspect repository", objective: "Read repository files", requiredCapabilities: ["github"] },
+  ], agents, ["web.search", "github.read_file"]);
+  const codingRejected = assignSubtasksToAgents([
     { id: "coding", title: "Code", objective: "Implement code changes in the repository", requiredCapabilities: ["coding", "github"] },
-  ], agents);
+  ], agents, ["github.read_file", "web.search"]);
   const completionPlan: AgentPlan = {
     version: 1,
     goal: "Verify deterministic tool completion",
@@ -236,7 +252,8 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
     { id: "local_task_planner", pass: fixture.subtasks.length === 3 && fixture.subtasks[1].objective.includes("Analyze"), detail: "Local fallback splits explicit independent objectives into bounded workstreams." },
-    { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and coding objectives route to matching enabled specialists." },
+    { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and GitHub read objectives route only to agents with matching executable tools." },
+    { id: "coding_requires_write_tool", pass: !codingRejected.ok, detail: "Read-only GitHub tools cannot satisfy a coding/write capability requirement." },
     { id: "disabled_agent_exclusion", pass: assigned.ok && assigned.assignments.every((item) => item.agentId !== "disabled"), detail: "Disabled Agents are never selected." },
     { id: "completion_evaluator_success", pass: completionPassed.verdict === "execution_complete" && completionPassed.independentGoalVerification === "not_performed", detail: "Completion evaluator accepts observed tool output with valid evidence IDs and makes no false truth-verification claim." },
     { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },

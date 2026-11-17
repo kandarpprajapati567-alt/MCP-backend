@@ -5,6 +5,7 @@ import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-a
 import { assignSubtasksToAgents, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
 import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
+import { TOOL_CATALOG } from "@/server/tools/registry";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest, isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { readJsonBody } from "@/server/http/read-json";
@@ -52,9 +53,14 @@ export async function POST(request: Request) {
       allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string") : [],
       enabled: agent.enabled === true,
     }));
+    const { data: tavilyConnection } = await admin.from("integration_connections")
+      .select("enabled").eq("owner_id", PERSONAL_OWNER_ID).eq("provider", "tavily").eq("enabled", true).maybeSingle();
+    const executableToolIds = TOOL_CATALOG
+      .filter((tool) => tool.id !== "web.search" || tavilyConnection?.enabled === true)
+      .map((tool) => tool.id);
     const planned = await createSupervisorPlan(PERSONAL_OWNER_ID, goal);
     if (!planned.ok) return json({ error: planned.error }, 422);
-    const routed = assignSubtasksToAgents(planned.value.subtasks, agents);
+    const routed = assignSubtasksToAgents(planned.value.subtasks, agents, executableToolIds);
     if (!routed.ok) return json({ error: routed.error, plan: planned.value }, 409);
 
     const initialPlan = {

@@ -15,7 +15,7 @@ import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
-import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import { deriveAgentTaskOutcomeStatus, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest } from "@/server/agent/task-idempotency";
 import { AgentTaskCancelledError, isAgentTaskCancellationRequested } from "@/server/agent/task-lifecycle";
@@ -332,20 +332,21 @@ async function executeAgentTaskRecord(
     const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
     const goalEvaluation = evaluateAgentGoalCriteria(plan, results, result);
     const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
+    const outcomeStatus = deriveAgentTaskOutcomeStatus(evaluation, goalEvaluation);
     failedStage = "finalization";
     await event(admin, id, "task.synthesizing", { phase: "evaluated", completion: evaluation, goal: goalEvaluation });
     const completedAt = new Date().toISOString();
     const { data: completedTask, error: completionError } = await admin.from("agent_tasks")
-      .update({ status: "completed", result: finalResult, completed_at: completedAt, updated_at: completedAt })
+      .update({ status: outcomeStatus, result: finalResult, completion_evaluation: evaluation, goal_evaluation: goalEvaluation, completed_at: completedAt, updated_at: completedAt })
       .eq("id", id).eq("owner_id", PERSONAL_OWNER_ID)
       .eq("status", "synthesizing").is("cancellation_requested_at", null)
       .select("id").maybeSingle();
     if (completionError) throw new Error("Task completion could not be saved.");
     if (!completedTask) throw new AgentTaskCancelledError();
-    await event(admin, id, "task.completed");
+    await event(admin, id, outcomeStatus === "completed" ? "task.completed" : outcomeStatus === "partial" ? "task.partial" : "task.needs_review", { outcomeStatus, completion: evaluation, goal: goalEvaluation });
     return {
       taskId: id,
-      status: "completed",
+      status: outcomeStatus,
       ...(agent ? { agent: { id: agent.id, name: agent.name } } : {}),
       plan,
       toolResults: results,
@@ -589,7 +590,7 @@ export async function getAgentTaskStatus(taskId: string) {
   try { await finalizeAgentTaskIfReady(taskId); } catch { /* Keep status reads available; finalization state is persisted when possible. */ }
   const admin = createAdminClient();
   const [taskResult, eventResult, jobResult] = await Promise.all([
-    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
+    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,completion_evaluation,goal_evaluation,error_code,created_at,updated_at,completed_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle(),
     admin.from("agent_task_events").select("id,event_type,payload,created_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", taskId).order("created_at", { ascending: true }).limit(100),
