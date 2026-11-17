@@ -78,7 +78,7 @@ test("disabled agents are excluded and no-enabled-agent state is explicit", () =
   const result = assignSubtasksToAgents([{ id: "one", title: "Research", objective: "Research", requiredCapabilities: ["research"] }], agents, ["web.search", "github.write_file"]);
   assert.equal(result.ok, true);
   if (result.ok) assert.ok(result.assignments.every((item) => item.agentId !== "disabled"));
-  assert.equal(assignSubtasksToAgents([{ id: "one", title: "Work", objective: "Work", requiredCapabilities: ["general"] }], agents.map((agent) => ({ ...agent, enabled: false }))).ok, false);
+  assert.equal(assignSubtasksToAgents([{ id: "one", title: "Work", objective: "Work", requiredCapabilities: ["general"] }], agents.map((agent) => ({ ...agent, enabled: false })), ["web.search", "github.write_file"]).ok, false);
 });
 
 
