@@ -4,13 +4,13 @@ import { isAgentTeamTerminal, summarizeAgentTeamMembers } from "../../../src/ser
 
 test("summarizes a queued parallel team", () => {
   assert.deepEqual(summarizeAgentTeamMembers([{ status: "queued" }, { status: "queued" }]), {
-    status: "queued", total: 2, completed: 0, failed: 0, pending: 2,
+    status: "queued", total: 2, completed: 0, partial: 0, needsReview: 0, failed: 0, pending: 2,
   });
 });
 
 test("summarizes active mixed worker states", () => {
   assert.deepEqual(summarizeAgentTeamMembers([{ status: "executing" }, { status: "completed" }]), {
-    status: "running", total: 2, completed: 1, failed: 0, pending: 1,
+    status: "running", total: 2, completed: 0, partial: 0, needsReview: 0, failed: 0, pending: 1,
   });
 });
 
