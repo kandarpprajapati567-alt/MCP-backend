@@ -505,10 +505,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .agent-lab-page .page-heading{margin-bottom:0;padding:22px 24px;border:1px solid var(--fs-border);border-radius:18px;background:linear-gradient(115deg,rgba(194,166,107,.09),rgba(255,255,255,.012) 58%,rgba(138,167,139,.045))}
 .agent-lab-page>section{border:1px solid var(--fs-border)!important;border-radius:18px!important;background:linear-gradient(145deg,#20211c,#171814)!important;padding:clamp(16px,2.4vw,26px)!important}
 .agent-lab-page>section:first-of-type{background:transparent!important;border:0!important;padding:0!important}
-.agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div{position:relative;overflow:hidden;min-height:116px;padding:20px!important;border:1px solid var(--fs-border)!important;border-radius:16px!important;background:linear-gradient(145deg,#25261f,#191a16)!important}
-.agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div:after{content:"";position:absolute;right:-22px;top:-35px;width:110px;height:110px;border:1px solid rgba(194,166,107,.12);border-radius:50%;box-shadow:0 0 0 14px rgba(194,166,107,.025),0 0 0 30px rgba(194,166,107,.018)}
-.agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div p{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fs-muted)}
-.agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div p+ p{font-size:30px;letter-spacing:-.06em;color:var(--fs-text)}
+.agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div{position:relative;overflow:hidden;min-height:116px;padding:20px!important;border:1px solid var(--fs-border)!important;border-radius:16px!important;background:linear-gradient(145deg,#25261f,#191a16)!important}
+.agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div:after{content:"";position:absolute;right:-22px;top:-35px;width:110px;height:110px;border:1px solid rgba(194,166,107,.12);border-radius:50%;box-shadow:0 0 0 14px rgba(194,166,107,.025),0 0 0 30px rgba(194,166,107,.018)}
+.agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div p{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fs-muted)}
+.agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div p+ p{font-size:30px;letter-spacing:-.06em;color:var(--fs-text)}
 .agent-command-console{position:relative;overflow:hidden;border:1px solid rgba(194,166,107,.28)!important;border-radius:22px!important;background:radial-gradient(ellipse at 92% 0%,rgba(194,166,107,.13),transparent 38%),linear-gradient(145deg,#24241e 0%,#171814 64%,#1c211b 100%)!important;padding:clamp(16px,2.8vw,30px)!important;box-shadow:0 24px 65px rgba(0,0,0,.2)}
 .agent-command-console>div:first-child{padding-bottom:14px;border-bottom:1px solid var(--fs-border)}
 .agent-command-console>div:first-child h2{font-size:clamp(21px,2.5vw,28px);letter-spacing:-.04em}
@@ -538,6 +538,6 @@ button:disabled { cursor: not-allowed; opacity: .48; }
  .agent-command-console form{padding:12px!important}
  .agent-command-console form textarea{min-height:118px!important}
  .agent-command-console form button[type=submit]{font-size:12px}
- .agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div{min-height:94px;padding:14px!important}
- .agent-lab-page .grid.gap-3.sm\\:grid-cols-3>div p+p{font-size:25px}
+ .agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div{min-height:94px;padding:14px!important}
+ .agent-lab-page .grid.gap-3[class*="sm:grid-cols-3"]>div p+p{font-size:25px}
 }
