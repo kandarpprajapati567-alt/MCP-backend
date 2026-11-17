@@ -590,7 +590,7 @@ export async function getAgentTaskStatus(taskId: string) {
   try { await finalizeAgentTaskIfReady(taskId); } catch { /* Keep status reads available; finalization state is persisted when possible. */ }
   const admin = createAdminClient();
   const [taskResult, eventResult, jobResult] = await Promise.all([
-    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,error_code,created_at,updated_at,completed_at")
+    admin.from("agent_tasks").select("id,status,task,plan,tool_results,result,completion_evaluation,goal_evaluation,error_code,created_at,updated_at,completed_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).maybeSingle(),
     admin.from("agent_task_events").select("id,event_type,payload,created_at")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("task_id", taskId).order("created_at", { ascending: true }).limit(100),
