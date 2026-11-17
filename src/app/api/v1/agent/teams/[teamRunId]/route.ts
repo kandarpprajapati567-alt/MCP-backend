@@ -32,9 +32,18 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
   const childById = new Map((children ?? []).map((child) => [child.id, child]));
   const members = rawMembers.map((member) => {
     const child = typeof member.taskId === "string" ? childById.get(member.taskId) : undefined;
-    const toolResults = Array.isArray(child?.tool_results) ? child.tool_results as SynthesisToolResult[] : [];
-    const childPlan = child?.plan && typeof child.plan === "object" && !Array.isArray(child.plan)
-      ? child.plan as AgentPlan : null;
+    const toolResults = Array.isArray(child?.tool_results)
+      ? child.tool_results.filter((item): item is SynthesisToolResult =>
+          Boolean(item && typeof item === "object" && !Array.isArray(item) &&
+            typeof (item as Record<string, unknown>).callId === "string" &&
+            typeof (item as Record<string, unknown>).toolId === "string" &&
+            "result" in (item as Record<string, unknown>)))
+      : [];
+    const rawChildPlan = child?.plan && typeof child.plan === "object" && !Array.isArray(child.plan)
+      ? child.plan as Record<string, unknown> : null;
+    const childPlan = rawChildPlan && typeof rawChildPlan.goal === "string" &&
+      Array.isArray(rawChildPlan.steps) && Array.isArray(rawChildPlan.toolCalls)
+      ? rawChildPlan as unknown as AgentPlan : null;
     const childResult = typeof child?.result === "string" ? child.result : "";
     const answer = childResult.split("\\n\\nCOMPLETION EVALUATION\\n")[0];
     const completionEvaluation = childPlan
