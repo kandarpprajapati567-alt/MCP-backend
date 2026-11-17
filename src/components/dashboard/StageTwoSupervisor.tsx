@@ -48,7 +48,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
 
   async function monitorExecution(initial: DispatchResult) {
     if (initial.teamRunId) {
-      const terminalTeam = new Set(["completed", "partial", "failed"]);
+      const terminalTeam = new Set(["completed", "partial", "needs_review", "failed"]);
       for (let attempt = 0; attempt < 60; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         try {
@@ -142,7 +142,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
         setError(data.error ?? "Live execution acceptance test could not be queued.");
         return;
       }
-      if (data.status === "failed" || data.status === "partial") setError(data.error ?? "The live acceptance test was only partially queued.");
+      if (data.status === "failed" || data.status === "partial" || data.status === "needs_review") setError(data.error ?? "The live acceptance test needs review before it can be treated as successful.");
       void monitorExecution(data);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Live execution acceptance test failed.");
@@ -160,7 +160,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
         setError(data.error ?? "Supervisor dispatch failed. The server rejected the run.");
         return;
       }
-      if (data.status === "failed" || data.status === "partial") setError(data.error ?? "Some planned subtasks could not be queued. Review each assignment below.");
+      if (data.status === "failed" || data.status === "partial" || data.status === "needs_review") setError(data.error ?? "Some subtasks failed or need evidence review. Inspect each assignment below.");
       void monitorExecution(data);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Supervisor could not process the goal.");
