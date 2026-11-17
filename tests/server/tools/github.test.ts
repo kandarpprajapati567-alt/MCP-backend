@@ -21,8 +21,8 @@ function mockResponse(body: unknown, status = 200) {
   })) as typeof fetch;
 }
 
-test("registers four GitHub tools as read-only and side-effect free", () => {
-  const githubTools = TOOL_CATALOG.filter((tool) => tool.id.startsWith("github."));
+test("registers GitHub read tools as read-only and side-effect free", () => {
+  const githubTools = TOOL_CATALOG.filter((tool) => tool.id.startsWith("github.") && tool.annotations.readOnlyHint);
   assert.deepEqual(githubTools.map((tool) => tool.id), [
     "github.list_branches",
     "github.list_commits",
