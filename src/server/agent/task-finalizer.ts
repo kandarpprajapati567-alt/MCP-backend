@@ -6,7 +6,7 @@ import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/de
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
-import { evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
+import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
 import type { AgentPlan } from "@/shared/agent/contracts";
 import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
@@ -193,9 +193,13 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
   const goalEvaluation = evaluateAgentGoalCriteria(task.plan as AgentPlan, toolResults, result);
   const finalResult = evaluatedResult + "\\n\\nGOAL CRITERIA EVALUATION (deterministic; semantic verification not performed)\\n" + JSON.stringify(goalEvaluation, null, 2);
+  const verifiedCompletion = canMarkAgentTaskCompleted(evaluation.verdict, goalEvaluation.verdict, toolResults.length);
+  const finalStatus = verifiedCompletion ? "completed" : "failed";
+  const completionErrorCode = verifiedCompletion ? null : "AGENT_COMPLETION_UNVERIFIED";
   const now = new Date().toISOString();
   const { data: completedTask, error: updateError } = await admin.from("agent_tasks").update({
-    status: "completed",
+    status: finalStatus,
+    error_code: completionErrorCode,
     tool_results: toolResults,
     result: finalResult,
     completed_at: now,
@@ -203,7 +207,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
   }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId)
     .eq("status", "synthesizing").is("cancellation_requested_at", null)
     .select("id").maybeSingle();
-  if (updateError) throw new Error("Task completion could not be saved.");
+  if (updateError) throw new Error("Task completion state could not be saved.");
   if (!completedTask) {
     const cancelledAt = new Date().toISOString();
     const { data: cancelledTask, error: cancelUpdateError } = await admin.from("agent_tasks").update({
@@ -225,17 +229,18 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     return true;
   }
 
+  const terminalEvent = verifiedCompletion ? "task.completed" : "task.failed";
   const { error: completedEventError } = await admin.from("agent_task_events").insert({
     task_id: taskId,
     owner_id: PERSONAL_OWNER_ID,
-    event_type: "task.completed",
-    payload: { toolResults: toolResults.length, evaluation, goalEvaluation },
+    event_type: terminalEvent,
+    payload: { toolResults: toolResults.length, evaluation, goalEvaluation, verifiedCompletion, code: completionErrorCode },
   });
   if (completedEventError) {
     await admin.from("agent_tasks").update({
       error_code: "TASK_EVENT_PERSISTENCE_FAILED",
       updated_at: new Date().toISOString(),
-    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "completed");
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", finalStatus);
   }
   return true;
 }
