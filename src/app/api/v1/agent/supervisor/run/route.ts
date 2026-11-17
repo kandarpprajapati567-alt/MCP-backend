@@ -7,6 +7,8 @@ import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest, isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
+import { TOOL_CATALOG } from "@/server/tools/registry";
+import { decryptProviderSecret } from "@/server/ai/secrets/encryption";
 import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
@@ -45,11 +47,26 @@ export async function POST(request: Request) {
       .select("id,name,description,role,allowed_tools,enabled")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true).limit(100);
     if (error) return json({ error: "Agent registry is unavailable." }, 503);
+    const { data: tavilyConnection, error: tavilyError } = await admin.from("integration_connections")
+      .select("encrypted_secret,iv,auth_tag,key_version")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("provider", "tavily").eq("enabled", true).maybeSingle();
+    if (tavilyError) return json({ error: "Research tool availability could not be verified." }, 503);
+    let tavilyAvailable = false;
+    if (tavilyConnection) {
+      try { tavilyAvailable = decryptProviderSecret(tavilyConnection).length >= 8; }
+      catch { tavilyAvailable = false; }
+    }
+    const githubAvailable = Boolean(process.env.GITHUB_READ_TOKEN);
+    const registeredToolIds = new Set(TOOL_CATALOG.map((tool) => tool.id));
     const agents: AssignableAgent[] = (data ?? []).map((agent) => ({
       id: agent.id, name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
-      allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string") : [],
+      allowedTools: Array.isArray(agent.allowed_tools)
+        ? agent.allowed_tools.filter((item): item is string => typeof item === "string" &&
+            registeredToolIds.has(item as (typeof TOOL_CATALOG)[number]["id"]) &&
+            (item === "web.search" ? tavilyAvailable : item.startsWith("github.") ? githubAvailable : true))
+        : [],
       enabled: agent.enabled === true,
     }));
     const planned = await createSupervisorPlan(PERSONAL_OWNER_ID, goal);
