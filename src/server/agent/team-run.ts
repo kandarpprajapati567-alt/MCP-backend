@@ -3,6 +3,7 @@ export type AgentTeamMemberState = {
   completionVerdict?: string;
   goalVerdict?: string;
   evidenceCount?: number;
+  errorCode?: string;
 };
 
 export type AgentTeamSummary = {
@@ -27,10 +28,15 @@ function isVerifiedMember(member: AgentTeamMemberState): boolean {
 
 export function summarizeAgentTeamMembers(members: readonly AgentTeamMemberState[]): AgentTeamSummary {
   const completed = members.filter(isVerifiedMember).length;
-  const failed = members.filter((member) => member.status === "failed" || member.status === "cancelled").length;
-  const partial = members.filter((member) => member.status === "completed" &&
+  const completionRejected = (member: AgentTeamMemberState) =>
+    member.status === "failed" && member.errorCode === "AGENT_COMPLETION_UNVERIFIED";
+  const failed = members.filter((member) =>
+    (member.status === "failed" && !completionRejected(member)) || member.status === "cancelled").length;
+  const partial = members.filter((member) =>
+    (member.status === "completed" || completionRejected(member)) &&
     (member.completionVerdict === "partial" || member.goalVerdict === "partial")).length;
-  const needsReview = members.filter((member) => member.status === "completed" &&
+  const needsReview = members.filter((member) =>
+    (member.status === "completed" || completionRejected(member)) &&
     !isVerifiedMember(member) &&
     member.completionVerdict !== "partial" &&
     member.goalVerdict !== "partial").length;
