@@ -105,7 +105,8 @@ function inferCapabilities(text: string): string[] {
   const value = text.toLowerCase();
   const found: string[] = [];
   if (/research|search|source|reference|latest|news|investigat|compare|competitor/.test(value)) found.push("research", "web");
-  if (/code|coding|program|debug|bug|fix|repair|patch|refactor|implement|repository|github|software|api/.test(value)) found.push("coding", "github");
+  if (/\b(coding|program|debug|bug|fix|repair|patch|refactor|implement|commit|push)\b|\b(?:modify|edit|build|create|write)\s+(?:the\s+)?(?:code|software|repository|app|application|api)\b/.test(value)) found.push("coding");
+  if (/repository|repo|github|git/.test(value)) found.push("github");
   if (/analy[sz]|data|metric|evaluate|audit|review|risk|test|verify/.test(value)) found.push("analysis");
   if (/write|draft|document|report|summari[sz]|content|note|explain/.test(value)) found.push("writing");
   if (/android|phone|device|mobile|permission|app/.test(value)) found.push("android");
