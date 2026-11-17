@@ -247,7 +247,7 @@ export async function createGitHubAgentBranch(args: JsonRecord) {
   const baseRef = validateRef(args.baseRef);
   const base = await githubWriteRequest("POST", "/git/refs", { ref: "refs/heads/" + branch, sha: await (async () => {
     const token = getWriteToken();
-    const response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + "/git/ref/heads/" + encodeURIComponent(baseRef), {
+    const response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + "/git/ref/heads/" + baseRef.split("/").map(encodeURIComponent).join("/"), {
       headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Futuristic-System-MCP-Backend" },
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
@@ -257,7 +257,7 @@ export async function createGitHubAgentBranch(args: JsonRecord) {
     if (!isRecord(data) || !isRecord(data.object) || typeof data.object.sha !== "string") throw new Error("GitHub returned an invalid base branch reference.");
     return data.object.sha;
   })() });
-  if (!isRecord(base) || !isRecord(base.ref) || typeof base.ref !== "string") {
+  if (!isRecord(base) || typeof base.ref !== "string") {
     throw new Error("GitHub created the branch but returned an unexpected reference.");
   }
   return { repository: REPOSITORY, branch, baseRef, created: true, ref: base.ref };
