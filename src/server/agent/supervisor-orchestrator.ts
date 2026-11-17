@@ -178,7 +178,7 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask, executab
 export function assignSubtasksToAgents(
   subtasks: readonly SupervisorSubtask[],
   agents: readonly AssignableAgent[],
-  registeredExecutableToolIds: readonly string[] = agents.flatMap((agent) => agent.allowedTools),
+  registeredExecutableToolIds: readonly string[],
 ): { ok: true; assignments: AgentAssignment[] } | { ok: false; error: string } {
   const enabled = agents.filter((agent) => agent.enabled);
   const executableToolIds = new Set(registeredExecutableToolIds.map((tool) => tool.toLowerCase()));
