@@ -142,29 +142,38 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
   const profile = profileText(agent);
   const tools = agent.allowedTools.map((tool) => tool.toLowerCase());
   let score = 1;
-  let capabilityMatch = false;
   const reasons: string[] = [];
+  const matchedCapabilities = new Set<string>();
   const hasTool = (pattern: RegExp) => tools.some((tool) => pattern.test(tool));
+
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/web\.search|search|browser|remote\.search/)) { score += 5; capabilityMatch = true; reasons.push("research/search tools"); }
+      if (hasTool(/^web\\.search$/)) { score += 5; matchedCapabilities.add(capability); reasons.push("connected web search tool"); }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
-    } else if (capability === "coding" || capability === "github") {
-      if (hasTool(/github\.|code\.|repo|git/)) { score += 5; capabilityMatch = true; reasons.push("development/repository tools"); }
+    } else if (capability === "coding") {
+      if (hasTool(/^(github\\.(write_file|create_file|update_file|push_changes)|code\\.(write_file|apply_patch|edit)|repo\\.(write_file|apply_patch|edit))$/)) {
+        score += 7; matchedCapabilities.add(capability); reasons.push("repository write/patch tool");
+      }
       if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
+    } else if (capability === "github") {
+      if (hasTool(/^github\\.(list_branches|list_commits|list_files|read_file|write_file|create_file|update_file)$/)) {
+        score += 5; matchedCapabilities.add(capability); reasons.push("registered GitHub repository tool");
+      }
     } else if (capability === "analysis") {
-      if (hasTool(/text\.|analytics|data|metrics/)) { score += 3; capabilityMatch = true; reasons.push("analysis tools"); }
+      if (hasTool(/^(text\\.|analytics\\.|data\\.|metrics\\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("analysis tools"); }
       if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
     } else if (capability === "writing") {
-      if (hasTool(/text\.|document|notes/)) { score += 3; capabilityMatch = true; reasons.push("writing tools"); }
+      if (hasTool(/^(text\\.|document\\.|notes\\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("writing tools"); }
       if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
     } else if (capability === "android") {
-      if (hasTool(/device\.|android\.|mobile/)) { score += 6; capabilityMatch = true; reasons.push("Android/device tools"); }
+      if (hasTool(/^(device\\.|android\\.|mobile\\.)/)) { score += 6; matchedCapabilities.add(capability); reasons.push("Android/device tools"); }
       if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
     } else if (capability === "general") {
       score += 1;
     }
   }
+  const required = subtask.requiredCapabilities.filter((capability) => capability !== "general");
+  const capabilityMatch = required.every((capability) => matchedCapabilities.has(capability));
   const words = subtask.objective.toLowerCase().match(/[a-z]{4,}/g) ?? [];
   const profileWords = new Set(profile.match(/[a-z]{4,}/g) ?? []);
   const overlap = [...new Set(words)].filter((word) => profileWords.has(word)).length;
