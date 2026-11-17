@@ -57,14 +57,42 @@ export async function POST(request: Request) {
       catch { tavilyAvailable = false; }
     }
     const githubAvailable = Boolean(process.env.GITHUB_READ_TOKEN);
-    const registeredToolIds = new Set(TOOL_CATALOG.map((tool) => tool.id));
+    const registeredToolIds = new Set<string>(TOOL_CATALOG.map((tool) => tool.id));
+    const { data: remoteServers } = await admin.from("remote_mcp_servers")
+      .select("discovered_tools").eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true);
+    const remoteToolIds = new Set<string>();
+    for (const server of remoteServers ?? []) {
+      const discovered = Array.isArray(server.discovered_tools) ? server.discovered_tools : [];
+      for (const tool of discovered) {
+        if (tool && typeof tool === "object" && !Array.isArray(tool) &&
+            typeof (tool as Record<string, unknown>).id === "string" &&
+            (tool as Record<string, unknown>).annotations &&
+            typeof (tool as Record<string, unknown>).annotations === "object" &&
+            ((tool as Record<string, unknown>).annotations as Record<string, unknown>).readOnlyHint === true) {
+          remoteToolIds.add((tool as Record<string, unknown>).id as string);
+        }
+      }
+    }
+    const deviceCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: onlineDevices } = await admin.from("agent_devices").select("capabilities")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("status", "online").gte("last_seen_at", deviceCutoff);
+    const deviceToolIds = new Set<string>();
+    for (const device of onlineDevices ?? []) {
+      if (!Array.isArray(device.capabilities)) continue;
+      for (const capability of device.capabilities) {
+        if (capability && typeof capability === "object" && !Array.isArray(capability) &&
+            typeof (capability as Record<string, unknown>).id === "string") {
+          deviceToolIds.add((capability as Record<string, unknown>).id as string);
+        }
+      }
+    }
     const agents: AssignableAgent[] = (data ?? []).map((agent) => ({
       id: agent.id, name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
       allowedTools: Array.isArray(agent.allowed_tools)
         ? agent.allowed_tools.filter((item): item is string => typeof item === "string" &&
-            registeredToolIds.has(item as (typeof TOOL_CATALOG)[number]["id"]) &&
+            (registeredToolIds.has(item) || remoteToolIds.has(item) || deviceToolIds.has(item)) &&
             (item === "web.search" ? tavilyAvailable : item.startsWith("github.") ? githubAvailable : true))
         : [],
       enabled: agent.enabled === true,
