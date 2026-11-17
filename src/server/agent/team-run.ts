@@ -44,6 +44,6 @@ export function summarizeAgentTeamMembers(members: readonly AgentTeamMemberState
 }
 
 export function isAgentTeamTerminal(status: string): boolean {
-  return status === "completed" || status === "partial" || status === "failed" ||
+  return status === "completed" || status === "partial" || status === "needs_review" || status === "failed" ||
     (TERMINAL.has(status));
 }
