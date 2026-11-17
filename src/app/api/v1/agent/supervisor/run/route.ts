@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       catch { tavilyAvailable = false; }
     }
     const githubAvailable = Boolean(process.env.GITHUB_READ_TOKEN);
+    const githubWriteAvailable = Boolean(process.env.GITHUB_WRITE_TOKEN);
     const registeredToolIds = new Set<string>(TOOL_CATALOG.map((tool) => tool.id));
     const { data: remoteServers } = await admin.from("remote_mcp_servers")
       .select("discovered_tools").eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true);
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
       allowedTools: Array.isArray(agent.allowed_tools)
         ? agent.allowed_tools.filter((item): item is string => typeof item === "string" &&
             (registeredToolIds.has(item) || remoteToolIds.has(item) || deviceToolIds.has(item)) &&
-            (item === "web.search" ? tavilyAvailable : item.startsWith("github.") ? githubAvailable : true))
+            (item === "web.search" ? tavilyAvailable : item.startsWith("github.create_") || item === "github.update_file" ? githubWriteAvailable : item.startsWith("github.") ? githubAvailable : true))
         : [],
       enabled: agent.enabled === true,
     }));
