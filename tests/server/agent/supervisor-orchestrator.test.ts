@@ -10,7 +10,7 @@ import {
 
 const agents = [
   { id: "research", name: "Research Agent", description: "Web research", role: "Research analyst", allowedTools: ["web.search"], enabled: true },
-  { id: "developer", name: "Developer Agent", description: "Repository coding", role: "Software engineer", allowedTools: ["github.read_file"], enabled: true },
+  { id: "developer", name: "Developer Agent", description: "Repository coding", role: "Software engineer", allowedTools: ["github.write_file"], enabled: true },
   { id: "disabled", name: "Disabled Agent", description: "Research", role: "Research analyst", allowedTools: ["web.search"], enabled: false },
 ];
 
@@ -42,14 +42,28 @@ test("supervisor schema rejects unsupported capability labels", () => {
   assert.equal(result.ok, false);
 });
 
-test("capability assignment routes research and coding to matching specialists", () => {
-  const plan = buildFallbackSupervisorPlan("Research sources; Implement code in repository");
-  const result = assignSubtasksToAgents(plan.subtasks, agents);
+test("read-only GitHub access never qualifies an Agent for coding", () => {
+  const result = assignSubtasksToAgents([
+    { id: "coding", title: "Implement", objective: "Implement code in repository", requiredCapabilities: ["coding", "github"] },
+  ], agents, ["github.read_file", "web.search"]);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /No enabled Agent matches/);
+});
+
+test("coding requires an explicitly registered repository write tool", () => {
+  const writer = [{ ...agents[1], allowedTools: ["github.write_file"] }];
+  const result = assignSubtasksToAgents([
+    { id: "coding", title: "Implement", objective: "Implement code in repository", requiredCapabilities: ["coding", "github"] },
+  ], writer, ["github.write_file"]);
   assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.assignments[0].agentId, "research");
-    assert.equal(result.assignments[1].agentId, "developer");
-  }
+  if (result.ok) assert.equal(result.assignments[0].agentId, "developer");
+});
+
+test("research requires an executable connected web search tool, not a role label", () => {
+  const result = assignSubtasksToAgents([
+    { id: "research", title: "Research", objective: "Research sources", requiredCapabilities: ["research", "web"] },
+  ], agents, ["github.read_file"]);
+  assert.equal(result.ok, false);
 });
 
 test("specialized tasks are not dispatched to an unrelated Agent", () => {
@@ -83,7 +97,7 @@ test("specialist assignment ignores generic keyword overlap and reuses a qualifi
   const result = assignSubtasksToAgents([
     { id: "one", title: "Fix", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
     { id: "two", title: "Review", objective: "Review repository implementation", requiredCapabilities: ["coding", "github"] },
-  ], candidates);
+  ], candidates, ["github.write_file"]);
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual(result.assignments.map((item) => item.agentId), ["developer", "developer"]);
 });
