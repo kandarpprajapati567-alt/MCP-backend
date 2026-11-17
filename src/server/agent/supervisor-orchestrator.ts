@@ -148,25 +148,25 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
 
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/^web\\.search$/)) { score += 5; matchedCapabilities.add(capability); reasons.push("connected web search tool"); }
+      if (hasTool(/^web\.search$/)) { score += 5; matchedCapabilities.add(capability); reasons.push("connected web search tool"); }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding") {
-      if (hasTool(/^(github\\.(write_file|create_file|update_file|push_changes)|code\\.(write_file|apply_patch|edit)|repo\\.(write_file|apply_patch|edit))$/)) {
+      if (hasTool(/^(github\.(write_file|create_file|update_file|push_changes)|code\.(write_file|apply_patch|edit)|repo\.(write_file|apply_patch|edit))$/)) {
         score += 7; matchedCapabilities.add(capability); reasons.push("repository write/patch tool");
       }
       if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
     } else if (capability === "github") {
-      if (hasTool(/^github\\.(list_branches|list_commits|list_files|read_file|write_file|create_file|update_file)$/)) {
+      if (hasTool(/^github\.(list_branches|list_commits|list_files|read_file|write_file|create_file|update_file)$/)) {
         score += 5; matchedCapabilities.add(capability); reasons.push("registered GitHub repository tool");
       }
     } else if (capability === "analysis") {
-      if (hasTool(/^(text\\.|analytics\\.|data\\.|metrics\\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("analysis tools"); }
+      if (hasTool(/^(text\.|analytics\.|data\.|metrics\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("analysis tools"); }
       if (/analyst|analysis|research|auditor|qa|quality/.test(profile)) { score += 3; reasons.push("analysis role"); }
     } else if (capability === "writing") {
-      if (hasTool(/^(text\\.|document\\.|notes\\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("writing tools"); }
+      if (hasTool(/^(text\.|document\.|notes\.)/)) { score += 3; matchedCapabilities.add(capability); reasons.push("writing tools"); }
       if (/writer|writing|content|documentation|editor/.test(profile)) { score += 3; reasons.push("writing role"); }
     } else if (capability === "android") {
-      if (hasTool(/^(device\\.|android\\.|mobile\\.)/)) { score += 6; matchedCapabilities.add(capability); reasons.push("Android/device tools"); }
+      if (hasTool(/^(device\.|android\.|mobile\.)/)) { score += 6; matchedCapabilities.add(capability); reasons.push("Android/device tools"); }
       if (/android|mobile|device/.test(profile)) { score += 4; reasons.push("Android/device role"); }
     } else if (capability === "general") {
       score += 1;
