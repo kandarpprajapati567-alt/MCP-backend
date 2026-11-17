@@ -35,6 +35,26 @@ test("fallback planner separates clear action clauses joined by and", () => {
   assert.match(plan.subtasks[2].objective, /write/i);
 });
 
+test("planner cannot bypass inferred coding requirements with a general label", () => {
+  const result = parseSupervisorPlan({
+    goal: "Implement code in repository",
+    summary: "Workstream",
+    subtasks: [{ id: "coding", title: "Implement", objective: "Implement code in repository", requiredCapabilities: ["general"] }],
+  }, "Implement code in repository");
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.value.subtasks[0].requiredCapabilities, ["coding", "github"]);
+});
+
+test("repository inspection infers read capability without inventing coding access", () => {
+  const result = parseSupervisorPlan({
+    goal: "Read repository files",
+    summary: "Inspect",
+    subtasks: [{ id: "inspect", title: "Inspect", objective: "Read repository files", requiredCapabilities: [] }],
+  }, "Read repository files");
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.value.subtasks[0].requiredCapabilities, ["github"]);
+});
+
 test("supervisor schema rejects unsupported capability labels", () => {
   const result = parseSupervisorPlan({
     goal: "Test", summary: "Plan", subtasks: [{ id: "one", title: "One", objective: "Do work", requiredCapabilities: ["root"] }],
