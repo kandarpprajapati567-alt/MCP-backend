@@ -177,7 +177,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
   ].join("\n") : "";
 
   return (
-    <section className="space-y-4 rounded-2xl border border-violet-700/60 bg-gradient-to-br from-violet-950/40 via-zinc-950 to-cyan-950/25 p-4 sm:p-6">
+    <section className="agent-command-console space-y-4 rounded-2xl border border-violet-700/60 bg-gradient-to-br from-violet-950/40 via-zinc-950 to-cyan-950/25 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[.18em] text-violet-300">Stage 02 · Orchestration</p>
