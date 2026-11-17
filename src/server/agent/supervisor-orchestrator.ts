@@ -83,7 +83,12 @@ export function parseSupervisorPlan(value: unknown, originalGoal: string): { ok:
       id: raw.id,
       title: raw.title.trim(),
       objective: raw.objective.trim(),
-      requiredCapabilities: [...new Set(raw.requiredCapabilities as string[])],
+      requiredCapabilities: (() => {
+        const declared = (raw.requiredCapabilities as string[]).filter((item) => item !== "general");
+        const inferred = inferCapabilities(raw.objective).filter((item) => item !== "general");
+        const required = [...new Set([...declared, ...inferred])];
+        return required.length ? required : ["general"];
+      })(),
     });
   }
   return {
