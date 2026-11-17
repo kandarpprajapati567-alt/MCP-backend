@@ -32,6 +32,7 @@ test("marks a fully successful team complete", () => {
 
 test("team terminal states are explicit", () => {
   assert.equal(isAgentTeamTerminal("partial"), true);
+  assert.equal(isAgentTeamTerminal("needs_review"), true);
   assert.equal(isAgentTeamTerminal("running"), false);
 });
 
