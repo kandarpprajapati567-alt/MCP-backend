@@ -123,3 +123,14 @@ test("a specialist with a real matching tool manifest remains eligible even when
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.assignments[0].agentId, "agent-a");
 });
+
+test("unavailable research integrations cannot satisfy research capability", () => {
+  const disconnected = [{
+    id: "research", name: "Research Agent", description: "Web research", role: "Research analyst",
+    allowedTools: [], enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "research-task", title: "Research", objective: "Research current sources", requiredCapabilities: ["research", "web"] },
+  ], disconnected);
+  assert.equal(result.ok, false);
+});
