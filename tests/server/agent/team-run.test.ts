@@ -10,7 +10,7 @@ test("summarizes a queued parallel team", () => {
 
 test("summarizes active mixed worker states", () => {
   assert.deepEqual(summarizeAgentTeamMembers([{ status: "executing" }, { status: "completed" }]), {
-    status: "running", total: 2, completed: 0, partial: 0, needsReview: 0, failed: 0, pending: 1,
+    status: "running", total: 2, completed: 0, partial: 0, needsReview: 1, failed: 0, pending: 1,
   });
 });
 
@@ -66,4 +66,34 @@ test("team remains running while a child is not terminal", () => {
     { status: "completed", completionVerdict: "execution_complete", goalVerdict: "criteria_covered", evidenceCount: 1 },
     { status: "queued" },
   ]).status, "running");
+});
+
+test("task finalization rejection remains needs_review instead of being counted as an ordinary failure", () => {
+  const summary = summarizeAgentTeamMembers([
+    {
+      status: "failed",
+      errorCode: "AGENT_COMPLETION_UNVERIFIED",
+      completionVerdict: "needs_review",
+      goalVerdict: "criteria_covered",
+      evidenceCount: 0,
+    },
+  ]);
+  assert.equal(summary.status, "needs_review");
+  assert.equal(summary.failed, 0);
+  assert.equal(summary.needsReview, 1);
+});
+
+test("a partial evaluation saved as a rejected task remains partial in the team rollup", () => {
+  const summary = summarizeAgentTeamMembers([
+    {
+      status: "failed",
+      errorCode: "AGENT_COMPLETION_UNVERIFIED",
+      completionVerdict: "partial",
+      goalVerdict: "partial",
+      evidenceCount: 1,
+    },
+  ]);
+  assert.equal(summary.status, "partial");
+  assert.equal(summary.partial, 1);
+  assert.equal(summary.failed, 0);
 });
