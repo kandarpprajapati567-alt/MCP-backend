@@ -33,8 +33,12 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       objective: member.objective, taskId: member.taskId,
       status: child?.status ?? (typeof member.status === "string" ? member.status : "failed"),
       ...(typeof child?.result === "string" ? { result: child.result } : {}),
-      completionEvaluation: child?.completion_evaluation && typeof child.completion_evaluation === "object" ? child.completion_evaluation : null,
-      goalEvaluation: child?.goal_evaluation && typeof child.goal_evaluation === "object" ? child.goal_evaluation : null,
+      completionEvaluation: child?.completion_evaluation && typeof child.completion_evaluation === "object" &&
+        typeof (child.completion_evaluation as Record<string, unknown>).verdict === "string"
+        ? { verdict: (child.completion_evaluation as Record<string, unknown>).verdict as string } : null,
+      goalEvaluation: child?.goal_evaluation && typeof child.goal_evaluation === "object" &&
+        typeof (child.goal_evaluation as Record<string, unknown>).verdict === "string"
+        ? { verdict: (child.goal_evaluation as Record<string, unknown>).verdict as string } : null,
       ...(typeof child?.error_code === "string" ? { errorCode: child.error_code } : {}),
       ...(typeof member.error === "string" ? { error: member.error } : {}),
       ...(typeof child?.updated_at === "string" ? { updatedAt: child.updated_at } : {}),
