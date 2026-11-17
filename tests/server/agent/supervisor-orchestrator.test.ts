@@ -43,9 +43,10 @@ test("supervisor schema rejects unsupported capability labels", () => {
 });
 
 test("read-only GitHub access never qualifies an Agent for coding", () => {
+  const readOnlyDeveloper = [{ ...agents[1], allowedTools: ["github.read_file"] }];
   const result = assignSubtasksToAgents([
     { id: "coding", title: "Implement", objective: "Implement code in repository", requiredCapabilities: ["coding", "github"] },
-  ], agents, ["github.read_file", "web.search"]);
+  ], readOnlyDeveloper, ["github.read_file"]);
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /No enabled Agent matches/);
 });
