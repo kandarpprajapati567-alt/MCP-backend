@@ -298,3 +298,71 @@ export async function updateGitHubAgentFile(args: JsonRecord) {
   if (!isRecord(result) || !isRecord(result.commit) || typeof result.commit.sha !== "string") throw new Error("GitHub updated the file but returned an unexpected commit.");
   return { repository: REPOSITORY, branch, path, updated: true, commitSha: result.commit.sha };
 }
+
+
+export async function createGitHubAgentPullRequest(args: JsonRecord) {
+  if (Object.keys(args).some((key) => !["branch", "title", "body"].includes(key)) ||
+      typeof args.title !== "string" || !args.title.trim() || args.title.length > 120 ||
+      (args.body !== undefined && (typeof args.body !== "string" || args.body.length > 8000))) {
+    throw new Error("github.create_pull_request requires branch, a 1–120 character title and an optional body up to 8000 characters.");
+  }
+  const branch = validateAgentBranch(args.branch);
+  const result = await githubWriteRequest("POST", "/pulls", {
+    title: args.title.trim(),
+    head: branch,
+    base: "main",
+    body: typeof args.body === "string" ? args.body : "",
+    draft: true,
+  });
+  if (!isRecord(result) || typeof result.number !== "number" || typeof result.html_url !== "string" ||
+      !isRecord(result.head) || typeof result.head.sha !== "string") {
+    throw new Error("GitHub created the pull request but returned an unexpected response.");
+  }
+  return {
+    repository: REPOSITORY,
+    number: result.number,
+    url: result.html_url,
+    title: typeof result.title === "string" ? result.title : args.title.trim(),
+    state: typeof result.state === "string" ? result.state : "open",
+    draft: result.draft === true,
+    headSha: result.head.sha,
+    base: "main",
+  };
+}
+
+export async function getGitHubAgentCiStatus(args: JsonRecord) {
+  if (Object.keys(args).some((key) => key !== "ref")) throw new Error("github.get_ci_status accepts only ref.");
+  const ref = validateRef(args.ref);
+  const encodedRef = ref.split("/").map(encodeURIComponent).join("/");
+  const [checkData, statusData] = await Promise.all([
+    githubGet("/commits/" + encodedRef + "/check-runs?per_page=100"),
+    githubGet("/commits/" + encodedRef + "/status"),
+  ]);
+  const checkRuns = isRecord(checkData) && Array.isArray(checkData.check_runs) ? checkData.check_runs.filter(isRecord) : [];
+  const contexts = isRecord(statusData) && Array.isArray(statusData.statuses) ? statusData.statuses.filter(isRecord) : [];
+  const requiredChecks = checkRuns.filter((item) => item.name === "CI" || item.name === "Phase 1 checks").map((item) => ({
+    name: typeof item.name === "string" ? item.name : "unknown",
+    status: typeof item.status === "string" ? item.status : "unknown",
+    conclusion: typeof item.conclusion === "string" ? item.conclusion : null,
+    url: typeof item.html_url === "string" ? item.html_url : null,
+  }));
+  const otherChecks = contexts.map((item) => ({
+    context: typeof item.context === "string" ? item.context : "unknown",
+    state: typeof item.state === "string" ? item.state : "unknown",
+    description: typeof item.description === "string" ? item.description.slice(0, 240) : "",
+    url: typeof item.target_url === "string" ? item.target_url : null,
+  }));
+  const pending = requiredChecks.filter((item) => item.status !== "completed").length;
+  const failed = requiredChecks.filter((item) => item.status === "completed" && !["success", "neutral", "skipped"].includes(item.conclusion ?? "")).length;
+  const allPassed = requiredChecks.length > 0 && pending === 0 && failed === 0;
+  return {
+    repository: REPOSITORY,
+    ref,
+    allPassed,
+    requiredChecks,
+    pending,
+    failed,
+    otherChecks,
+    note: "Only the repository CI and Phase 1 GitHub Actions checks gate this result. Other provider statuses are shown separately.",
+  };
+}
