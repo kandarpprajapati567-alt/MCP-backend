@@ -17,6 +17,8 @@ export type RegisteredToolId =
   | "github.create_branch"
   | "github.create_file"
   | "github.update_file"
+  | "github.create_pull_request"
+  | "github.get_ci_status"
   | "web.search";
 
 export type ToolDefinition = {
@@ -159,6 +161,28 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
       expectedSha: { type: "string", minLength: 40, maxLength: 40, pattern: "^[a-fA-F0-9]{40}$" },
     }, required: ["path", "branch", "content", "message", "expectedSha"], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.create_pull_request",
+    description: "Open a draft pull request from an agent/* feature branch to main in the fixed repository. Never merges.",
+    permission: "github.repository.write",
+    sideEffect: true,
+    inputSchema: { type: "object", properties: {
+      branch: { type: "string", minLength: 7, maxLength: 85, pattern: "^agent/[a-zA-Z0-9][a-zA-Z0-9._/-]*$" },
+      title: { type: "string", minLength: 1, maxLength: 120 },
+      body: { type: "string", maxLength: 8000 },
+    }, required: ["branch", "title"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.get_ci_status",
+    description: "Read repository CI and Phase 1 GitHub Actions check results for a branch or commit. Reports pending, failed and other provider statuses separately.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: { type: "object", properties: {
+      ref: { type: "string", minLength: 1, maxLength: 120 },
+    }, required: ["ref"], additionalProperties: false },
+    annotations: githubReadOnly,
   },
   {
     id: "web.search",
