@@ -6,12 +6,14 @@ export type AgentTaskLifecycleStatus =
   | "executing"
   | "synthesizing"
   | "completed"
+  | "partial"
+  | "needs_review"
   | "failed"
   | "cancelled";
 
 export type CancellationDisposition = "cancel_now" | "request" | "already_terminal";
 
-const TERMINAL_STATUSES = new Set<AgentTaskLifecycleStatus>(["completed", "failed", "cancelled"]);
+const TERMINAL_STATUSES = new Set<AgentTaskLifecycleStatus>(["completed", "partial", "needs_review", "failed", "cancelled"]);
 const IMMEDIATE_CANCELLATION_STATUSES = new Set<AgentTaskLifecycleStatus>([
   "queued",
   "awaiting_approval",
