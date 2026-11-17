@@ -70,12 +70,12 @@ test("specialized tasks are not dispatched to an unrelated Agent", () => {
   const genericOnly = [{ id: "general", name: "General Agent", description: "General assistant", role: "Assistant", allowedTools: [], enabled: true }];
   const result = assignSubtasksToAgents([
     { id: "code", title: "Fix code", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
-  ], genericOnly);
+  ], genericOnly, []);
   assert.equal(result.ok, false);
 });
 
 test("disabled agents are excluded and no-enabled-agent state is explicit", () => {
-  const result = assignSubtasksToAgents([{ id: "one", title: "Research", objective: "Research", requiredCapabilities: ["research"] }], agents);
+  const result = assignSubtasksToAgents([{ id: "one", title: "Research", objective: "Research", requiredCapabilities: ["research"] }], agents, ["web.search", "github.write_file"]);
   assert.equal(result.ok, true);
   if (result.ok) assert.ok(result.assignments.every((item) => item.agentId !== "disabled"));
   assert.equal(assignSubtasksToAgents([{ id: "one", title: "Work", objective: "Work", requiredCapabilities: ["general"] }], agents.map((agent) => ({ ...agent, enabled: false }))).ok, false);
@@ -121,7 +121,7 @@ test("specialist role labels cannot substitute for missing registered tool capab
   const result = assignSubtasksToAgents([
     { id: "research-task", title: "Research", objective: "Research current sources", requiredCapabilities: ["research", "web"] },
     { id: "coding-task", title: "Implement", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
-  ], roleOnly);
+  ], roleOnly, []);
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /No enabled Agent matches/);
 });
@@ -132,7 +132,7 @@ test("a specialist with a real matching tool manifest remains eligible even when
   ];
   const result = assignSubtasksToAgents([
     { id: "research-task", title: "Research", objective: "Find sources", requiredCapabilities: ["research", "web"] },
-  ], manifestOnly);
+  ], manifestOnly, ["web.search"]);
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.assignments[0].agentId, "agent-a");
 });
