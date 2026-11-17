@@ -9,6 +9,8 @@ export const AGENT_TASK_EVENT_TYPES = [
   "tool.failed",
   "task.synthesizing",
   "task.completed",
+  "task.partial",
+  "task.needs_review",
   "task.failed",
   "task.cancelled",
   "task.cancellation_requested",
