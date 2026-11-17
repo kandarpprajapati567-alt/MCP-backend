@@ -2,7 +2,7 @@ import { PERSONAL_OWNER_ID } from "@/server/security/owner-auth";
 import { parseDeviceJobDispatch } from "@/server/agent/device-contract";
 import { executeRegisteredTool } from "@/server/tools/registry";
 import { getProviderAdapter, listProviderAdapters } from "@/server/models/catalog";
-import { listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile } from "@/server/tools/github";
+import { createGitHubAgentBranch, createGitHubAgentFile, listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile, updateGitHubAgentFile } from "@/server/tools/github";
 import { searchWeb } from "@/server/tools/web-search";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -22,6 +22,9 @@ export async function executeBackendTool(name: string, args: Record<string, unkn
   if (name === "github.list_commits") return listGitHubCommits(args);
   if (name === "github.list_files") return listGitHubFiles(args);
   if (name === "github.read_file") return readGitHubFile(args);
+  if (name === "github.create_branch") return createGitHubAgentBranch(args);
+  if (name === "github.create_file") return createGitHubAgentFile(args);
+  if (name === "github.update_file") return updateGitHubAgentFile(args);
   if (name === "web.search") return searchWeb(args);
   if (name.startsWith("remote_mcp.")) {
     const { callRemoteMcpTool } = await import("@/server/mcp/remote");
