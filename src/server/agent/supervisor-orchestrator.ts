@@ -221,8 +221,11 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
   ];
   const assigned = assignSubtasksToAgents([
     { id: "research", title: "Research", objective: "Research official documentation and sources", requiredCapabilities: ["research", "web"] },
+    { id: "repository-read", title: "Inspect repository", objective: "Read repository files", requiredCapabilities: ["github"] },
+  ], agents, ["web.search", "github.read_file"]);
+  const codingRejected = assignSubtasksToAgents([
     { id: "coding", title: "Code", objective: "Implement code changes in the repository", requiredCapabilities: ["coding", "github"] },
-  ], agents);
+  ], agents, ["github.read_file", "web.search"]);
   const completionPlan: AgentPlan = {
     version: 1,
     goal: "Verify deterministic tool completion",
@@ -243,7 +246,8 @@ export function runStageTwoDiagnostics(): Array<{ id: string; status: "passed" |
     { id: "supervisor_plan_schema", pass: valid.ok && valid.value.subtasks.length === 3, detail: "Valid 3-workstream supervisor plan is accepted." },
     { id: "supervisor_rejects_unsafe_schema", pass: !invalid.ok, detail: "Unsupported capabilities and malformed subtask IDs are rejected." },
     { id: "local_task_planner", pass: fixture.subtasks.length === 3 && fixture.subtasks[1].objective.includes("Analyze"), detail: "Local fallback splits explicit independent objectives into bounded workstreams." },
-    { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and coding objectives route to matching enabled specialists." },
+    { id: "capability_assignment", pass: assigned.ok && assigned.assignments[0]?.agentId === "research" && assigned.assignments[1]?.agentId === "developer", detail: "Research and GitHub read objectives route only to agents with matching executable tools." },
+    { id: "coding_requires_write_tool", pass: !codingRejected.ok, detail: "Read-only GitHub tools cannot satisfy a coding/write capability requirement." },
     { id: "disabled_agent_exclusion", pass: assigned.ok && assigned.assignments.every((item) => item.agentId !== "disabled"), detail: "Disabled Agents are never selected." },
     { id: "completion_evaluator_success", pass: completionPassed.verdict === "execution_complete" && completionPassed.independentGoalVerification === "not_performed", detail: "Completion evaluator accepts observed tool output with valid evidence IDs and makes no false truth-verification claim." },
     { id: "completion_evaluator_missing_output", pass: completionMissing.verdict === "partial" && completionMissing.missingToolCallIds.includes("diag-call"), detail: "Completion evaluator detects planned calls with no persisted tool result." },
