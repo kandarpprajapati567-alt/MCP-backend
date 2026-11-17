@@ -43,9 +43,9 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
   const summary = summarizeAgentTeamMembers(members);
   let persistedResult = parent.result;
   let persistedStatus = parent.status;
-  if (summary.pending === 0 && !parent.result && ["planning", "executing", "completed", "failed"].includes(parent.status)) {
+  if (summary.pending === 0 && !parent.result && ["planning", "executing", "completed", "partial", "failed"].includes(parent.status)) {
     const now = new Date().toISOString();
-    const terminalDbStatus = summary.status === "completed" ? "completed" : "failed";
+    const terminalDbStatus = summary.status === "completed" ? "completed" : summary.status === "failed" ? "failed" : "partial";
     persistedResult = JSON.stringify({
       kind: "supervisor_team_rollup",
       method: "deterministic_member_result_aggregation",
@@ -65,7 +65,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       persistedResult = updated.result;
       await admin.from("agent_task_events").insert({
         task_id: teamRunId, owner_id: PERSONAL_OWNER_ID,
-        event_type: terminalDbStatus === "completed" ? "task.completed" : "task.failed",
+        event_type: terminalDbStatus === "completed" ? "task.completed" : terminalDbStatus === "partial" ? "task.partial" : "task.failed",
         payload: { teamStatus: summary.status, ...summary, method: "deterministic_member_result_aggregation" },
       });
     } else {
