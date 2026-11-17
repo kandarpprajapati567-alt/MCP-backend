@@ -22,7 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
   const rawMembers = teamRun && Array.isArray(teamRun.members) ? teamRun.members as Array<Record<string, unknown>> : [];
   const taskIds = rawMembers.flatMap((member) => typeof member.taskId === "string" ? [member.taskId] : []);
   const { data: children, error: childError } = taskIds.length
-    ? await admin.from("agent_tasks").select("id,status,result,error_code,updated_at,completed_at").eq("owner_id", PERSONAL_OWNER_ID).in("id", taskIds)
+    ? await admin.from("agent_tasks").select("id,status,result,error_code,completion_evaluation,goal_evaluation,updated_at,completed_at").eq("owner_id", PERSONAL_OWNER_ID).in("id", taskIds)
     : { data: [], error: null };
   if (childError) return NextResponse.json({ error: "Team member task status is unavailable." }, { status: 503 });
   const childById = new Map((children ?? []).map((child) => [child.id, child]));
@@ -33,6 +33,8 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       objective: member.objective, taskId: member.taskId,
       status: child?.status ?? (typeof member.status === "string" ? member.status : "failed"),
       ...(typeof child?.result === "string" ? { result: child.result } : {}),
+      completionEvaluation: child?.completion_evaluation && typeof child.completion_evaluation === "object" ? child.completion_evaluation : null,
+      goalEvaluation: child?.goal_evaluation && typeof child.goal_evaluation === "object" ? child.goal_evaluation : null,
       ...(typeof child?.error_code === "string" ? { errorCode: child.error_code } : {}),
       ...(typeof member.error === "string" ? { error: member.error } : {}),
       ...(typeof child?.updated_at === "string" ? { updatedAt: child.updated_at } : {}),
@@ -50,7 +52,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
       goal: parent.task,
       status: summary.status,
       summary,
-      members: members.map((member) => ({ agentId: member.agentId, agentName: member.agentName, subtaskId: member.subtaskId, status: member.status, result: member.result ?? null, error: member.error ?? member.errorCode ?? null })),
+      members: members.map((member) => ({ agentId: member.agentId, agentName: member.agentName, subtaskId: member.subtaskId, status: member.status, completionEvaluation: member.completionEvaluation ?? null, goalEvaluation: member.goalEvaluation ?? null, result: member.result ?? null, error: member.error ?? member.errorCode ?? null })),
       semanticTeamGoalVerification: "not_performed",
     }, null, 2);
     const { data: updated, error: updateError } = await admin.from("agent_tasks").update({
