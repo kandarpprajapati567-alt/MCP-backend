@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PERSONAL_OWNER_ID, verifyOwnerRequest } from "@/server/security/owner-auth";
 import { assignSubtasksToAgents, runStageTwoDiagnostics, type AssignableAgent } from "@/server/agent/supervisor-orchestrator";
+import { TOOL_CATALOG } from "@/server/tools/registry";
 
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
@@ -30,10 +31,15 @@ export async function POST(request: Request) {
           ? agents.length + " enabled Agent definition(s) loaded from the production database."
           : "No enabled Agent definitions exist. Enable or create at least one Agent before dispatching goals.",
       });
+      const { data: tavilyConnection } = await admin.from("integration_connections")
+        .select("enabled").eq("owner_id", PERSONAL_OWNER_ID).eq("provider", "tavily").eq("enabled", true).maybeSingle();
+      const executableToolIds = TOOL_CATALOG
+        .filter((tool) => tool.id !== "web.search" || tavilyConnection?.enabled === true)
+        .map((tool) => tool.id);
       const assignment = assignSubtasksToAgents([
         { id: "live-research", title: "Research capability probe", objective: "Research sources and official documentation", requiredCapabilities: ["research", "web"] },
         { id: "live-analysis", title: "Analysis capability probe", objective: "Analyze findings and verify evidence", requiredCapabilities: ["analysis"] },
-      ], agents);
+      ], agents, executableToolIds);
       const enabledIds = new Set(agents.map((agent) => agent.id));
       const valid = assignment.ok && assignment.assignments.length === 2 &&
         assignment.assignments.every((item) => enabledIds.has(item.agentId));
