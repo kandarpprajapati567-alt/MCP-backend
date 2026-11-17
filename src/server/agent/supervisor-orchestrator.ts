@@ -148,7 +148,9 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
 
   for (const capability of subtask.requiredCapabilities) {
     if (capability === "research" || capability === "web") {
-      if (hasTool(/^web\.search$/)) { score += 5; matchedCapabilities.add(capability); reasons.push("connected web search tool"); }
+      if (hasTool(/^web\.search$/) || hasTool(/^remote_mcp\.[^.]+\..*(search|lookup|fetch|query|research)/)) {
+        score += 5; matchedCapabilities.add(capability); reasons.push("registered read-only research tool");
+      }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding") {
       if (hasTool(/^(github\.(write_file|create_file|update_file|push_changes)|code\.(write_file|apply_patch|edit)|repo\.(write_file|apply_patch|edit))$/)) {
