@@ -471,7 +471,7 @@ export default function AgentLabPage() {
   const enabledCount = agents.filter((agent) => agent.enabled).length;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="agent-lab-page mx-auto max-w-6xl space-y-5">
       <PageHeader title="Agent Lab" description="Run real Agent tasks, inspect plans, tool outputs, device jobs and execution events from one testing workspace." />
 
       {!connected ? (
