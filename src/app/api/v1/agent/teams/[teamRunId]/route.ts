@@ -57,7 +57,7 @@ export async function POST(request: Request, context: { params: Promise<{ teamRu
     }, null, 2);
     const { data: updated, error: updateError } = await admin.from("agent_tasks").update({
       status: terminalDbStatus, result: persistedResult, completed_at: now, updated_at: now,
-    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", teamRunId).in("status", ["planning", "executing", "completed", "failed"]).is("result", null)
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", teamRunId).in("status", ["planning", "executing", "completed", "partial", "failed"]).is("result", null)
       .select("status,result").maybeSingle();
     if (updateError) return NextResponse.json({ error: "Team run finalization could not be saved." }, { status: 503 });
     if (updated) {
