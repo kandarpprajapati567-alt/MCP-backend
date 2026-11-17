@@ -11,6 +11,8 @@ test.before(() => { process.env.GITHUB_READ_TOKEN = "github-read-only-test-token
 test.after(() => {
   if (originalToken === undefined) delete process.env.GITHUB_READ_TOKEN;
   else process.env.GITHUB_READ_TOKEN = originalToken;
+  if (originalWriteToken === undefined) delete process.env.GITHUB_WRITE_TOKEN;
+  else process.env.GITHUB_WRITE_TOKEN = originalWriteToken;
   globalThis.fetch = originalFetch;
 });
 
@@ -28,6 +30,7 @@ test("registers GitHub read tools as read-only and side-effect free", () => {
     "github.list_commits",
     "github.list_files",
     "github.read_file",
+    "github.get_ci_status",
   ]);
   assert.equal(githubTools.every((tool) => !tool.sideEffect && tool.annotations.readOnlyHint &&
     !tool.annotations.destructiveHint && tool.annotations.openWorldHint), true);
