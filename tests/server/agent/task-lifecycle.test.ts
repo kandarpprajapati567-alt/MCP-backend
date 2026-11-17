@@ -22,6 +22,8 @@ test("active execution receives a cooperative cancellation request", () => {
 
 test("terminal tasks cannot be cancelled again", () => {
   assert.equal(getCancellationDisposition("completed"), "already_terminal");
+  assert.equal(getCancellationDisposition("partial"), "already_terminal");
+  assert.equal(getCancellationDisposition("needs_review"), "already_terminal");
   assert.equal(getCancellationDisposition("failed"), "already_terminal");
   assert.equal(getCancellationDisposition("cancelled"), "already_terminal");
 });
@@ -40,7 +42,7 @@ test("cancellation timestamps and errors have explicit semantics", () => {
 
 test("runtime task event vocabulary matches the persisted database constraint", () => {
   const migration = readFileSync(
-    "supabase/migrations/20261112161000_add_agent_task_cancellation.sql",
+    "supabase/migrations/20261117120000_agent_completion_integrity.sql",
     "utf8",
   );
   for (const eventType of AGENT_TASK_EVENT_TYPES) {
