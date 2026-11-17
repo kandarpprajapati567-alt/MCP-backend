@@ -43,7 +43,7 @@ test("tools/list exposes registered tools with JSON input schemas", async () => 
   const response = await handleMcpRequest(request({ jsonrpc: "2.0", id: 2, method: "tools/list" }, "2026-07-28"));
   const body = await result(response);
   const tools = body.result?.tools as Array<{ name: string; inputSchema: { additionalProperties: boolean } }>;
-  assert.equal(tools.length, 19);
+  assert.equal(tools.length, 21);
   assert.equal(tools.some((tool) => tool.name === "models.list_providers"), true);
   assert.equal(tools.some((tool) => tool.name === "models.provider_info"), true);
   assert.equal(tools.some((tool) => tool.name === "github.list_branches"), true);
@@ -53,6 +53,8 @@ test("tools/list exposes registered tools with JSON input schemas", async () => 
   assert.equal(tools.some((tool) => tool.name === "github.create_branch"), true);
   assert.equal(tools.some((tool) => tool.name === "github.create_file"), true);
   assert.equal(tools.some((tool) => tool.name === "github.update_file"), true);
+  assert.equal(tools.some((tool) => tool.name === "github.create_pull_request"), true);
+  assert.equal(tools.some((tool) => tool.name === "github.get_ci_status"), true);
   assert.equal(tools.some((tool) => tool.name === "web.search"), true);
   assert.equal(tools.some((tool) => tool.name === "text.word_count"), true);
   assert.equal(tools[0].inputSchema.additionalProperties, false);
