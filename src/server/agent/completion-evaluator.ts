@@ -61,3 +61,14 @@ export function evaluateAgentCompletion(
     reasons,
   };
 }
+
+export type AgentTaskOutcomeStatus = "completed" | "partial" | "needs_review";
+
+export function deriveAgentTaskOutcomeStatus(
+  completion: AgentCompletionEvaluation,
+  goal: import("./goal-evaluator").AgentGoalEvaluation,
+): AgentTaskOutcomeStatus {
+  if (completion.verdict === "partial" || goal.verdict === "partial") return "partial";
+  if (completion.verdict === "needs_review" || goal.verdict === "needs_review") return "needs_review";
+  return "completed";
+}
