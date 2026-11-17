@@ -13,6 +13,18 @@ export type AgentCompletionEvaluation = {
   reasons: string[];
 };
 
+
+export function canMarkAgentTaskCompleted(
+  completionVerdict: AgentCompletionEvaluation["verdict"],
+  goalVerdict: "criteria_covered" | "partial" | "needs_review",
+  evidenceCount: number,
+): boolean {
+  return completionVerdict === "execution_complete" &&
+    goalVerdict === "criteria_covered" &&
+    Number.isInteger(evidenceCount) &&
+    evidenceCount > 0;
+}
+
 /**
  * Deterministic completion evaluation. It checks whether planned operations
  * produced successful observations and whether synthesis citations match them.
