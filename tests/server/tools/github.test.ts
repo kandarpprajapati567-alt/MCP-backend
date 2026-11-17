@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createGitHubAgentBranch, createGitHubAgentFile, listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile, updateGitHubAgentFile } from "../../../src/server/tools/github";
+import { createGitHubAgentBranch, createGitHubAgentFile, createGitHubAgentPullRequest, getGitHubAgentCiStatus, listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile, updateGitHubAgentFile } from "../../../src/server/tools/github";
 import { TOOL_CATALOG } from "../../../src/server/tools/registry";
 
 const originalToken = process.env.GITHUB_READ_TOKEN;
@@ -130,8 +130,8 @@ test("normalizes GitHub request timeouts into a safe retry message", async () =>
 
 
 test("registers GitHub write tools as side-effecting and separate from read-only tools", () => {
-  const writeTools = TOOL_CATALOG.filter((tool) => ["github.create_branch", "github.create_file", "github.update_file"].includes(tool.id));
-  assert.equal(writeTools.length, 3);
+  const writeTools = TOOL_CATALOG.filter((tool) => ["github.create_branch", "github.create_file", "github.update_file", "github.create_pull_request"].includes(tool.id));
+  assert.equal(writeTools.length, 4);
   assert.ok(writeTools.every((tool) => tool.permission === "github.repository.write" && tool.sideEffect &&
     !tool.annotations.readOnlyHint && !tool.annotations.destructiveHint));
 });
@@ -191,4 +191,58 @@ test("GitHub write tools fail closed when GITHUB_WRITE_TOKEN is absent", async (
   delete process.env.GITHUB_WRITE_TOKEN;
   await assert.rejects(() => createGitHubAgentBranch({ branch: "agent/no-token" }), /GITHUB_WRITE_TOKEN/);
   process.env.GITHUB_WRITE_TOKEN = token;
+});
+
+
+test("opens draft pull requests only from agent branches and never merges", async () => {
+  let requestBody: Record<string, unknown> = {};
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({
+      number: 81, html_url: "https://github.com/kandarpprajapati567-alt/MCP-backend/pull/81",
+      title: "Agent change", state: "open", draft: true, head: { sha: "d".repeat(40) },
+    }), { status: 201 });
+  }) as typeof fetch;
+  const result = await createGitHubAgentPullRequest({
+    branch: "agent/level3-work", title: "Agent change", body: "CI verification pending",
+  });
+  assert.equal(result.draft, true);
+  assert.equal(result.base, "main");
+  assert.equal(requestBody.base, "main");
+  assert.equal(requestBody.draft, true);
+  await assert.rejects(() => createGitHubAgentPullRequest({ branch: "main", title: "Unsafe" }), /agent\//);
+});
+
+test("CI status requires completed successful repository workflows and reports provider statuses separately", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    if (calls === 1) return new Response(JSON.stringify({
+      check_runs: [
+        { name: "CI", status: "completed", conclusion: "success", html_url: "https://github.com/checks/ci" },
+        { name: "Phase 1 checks", status: "completed", conclusion: "success" },
+      ],
+    }), { status: 200 });
+    return new Response(JSON.stringify({
+      statuses: [{ context: "Vercel – mcp-backend", state: "failure", description: "Build rate limit" }],
+    }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, true);
+  assert.equal(result.requiredChecks.length, 2);
+  assert.equal(result.otherChecks[0].state, "failure");
+  assert.equal(calls, 2);
+});
+
+test("CI status never passes while a required workflow is pending or failed", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify(calls === 1
+      ? { check_runs: [{ name: "CI", status: "in_progress", conclusion: null }] }
+      : { statuses: [] }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, false);
+  assert.equal(result.pending, 1);
 });
