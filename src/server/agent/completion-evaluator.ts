@@ -69,6 +69,6 @@ export function deriveAgentTaskOutcomeStatus(
   goal: import("./goal-evaluator").AgentGoalEvaluation,
 ): AgentTaskOutcomeStatus {
   if (completion.verdict === "partial" || goal.verdict === "partial") return "partial";
-  if (completion.verdict === "needs_review" || goal.verdict === "needs_review") return "needs_review";
-  return "completed";
+  if (completion.verdict === "execution_complete" && goal.verdict === "criteria_covered") return "completed";
+  return "needs_review";
 }
