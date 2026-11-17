@@ -92,7 +92,7 @@ test("planner preserves overflow work instead of silently dropping objectives", 
 test("specialist assignment ignores generic keyword overlap and reuses a qualified Agent", () => {
   const candidates = [
     { id: "general", name: "General Helper", description: "Repository support assistant", role: "General assistant", allowedTools: [], enabled: true },
-    { id: "developer", name: "Developer", description: "Software engineering", role: "Developer", allowedTools: ["github.read_file"], enabled: true },
+    { id: "developer", name: "Developer", description: "Software engineering", role: "Developer", allowedTools: ["github.write_file"], enabled: true },
   ];
   const result = assignSubtasksToAgents([
     { id: "one", title: "Fix", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
