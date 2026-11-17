@@ -471,7 +471,7 @@ export default function AgentLabPage() {
   const enabledCount = agents.filter((agent) => agent.enabled).length;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="agent-lab-page mx-auto max-w-6xl space-y-5">
       <PageHeader title="Agent Lab" description="Run real Agent tasks, inspect plans, tool outputs, device jobs and execution events from one testing workspace." />
 
       {!connected ? (
@@ -485,7 +485,7 @@ export default function AgentLabPage() {
         </section>
       ) : (
         <>
-          <section className="grid gap-3 sm:grid-cols-3">
+          <section className="agent-lab-metrics grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Enabled Agents</p><p className="mt-2 text-2xl font-semibold text-white">{enabledCount}</p></div>
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Registered tools</p><p className="mt-2 text-2xl font-semibold text-white">{registeredCount}</p></div>
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Recent tasks</p><p className="mt-2 text-2xl font-semibold text-white">{tasks.length}</p></div>
