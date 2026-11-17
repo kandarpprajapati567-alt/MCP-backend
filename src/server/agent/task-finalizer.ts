@@ -238,7 +238,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
     await admin.from("agent_tasks").update({
       error_code: "TASK_EVENT_PERSISTENCE_FAILED",
       updated_at: new Date().toISOString(),
-    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", "completed");
+    }).eq("owner_id", PERSONAL_OWNER_ID).eq("id", taskId).eq("status", outcomeStatus);
   }
   return true;
 }
