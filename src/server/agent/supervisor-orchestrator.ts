@@ -153,7 +153,7 @@ function scoreAgent(agent: AssignableAgent, subtask: SupervisorSubtask): { score
       }
       if (/research|web|search|analyst/.test(profile)) { score += 3; reasons.push("research role"); }
     } else if (capability === "coding") {
-      if (hasTool(/^(github\.(write_file|create_file|update_file|push_changes)|code\.(write_file|apply_patch|edit)|repo\.(write_file|apply_patch|edit))$/)) {
+      if (hasTool(/^github\.(write_file|create_file|update_file)$/)) {
         score += 7; matchedCapabilities.add(capability); reasons.push("repository write/patch tool");
       }
       if (/developer|coding|engineer|software|programmer/.test(profile)) { score += 3; reasons.push("engineering role"); }
