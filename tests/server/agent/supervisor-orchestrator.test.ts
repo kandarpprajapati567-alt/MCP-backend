@@ -134,3 +134,15 @@ test("unavailable research integrations cannot satisfy research capability", () 
   ], disconnected);
   assert.equal(result.ok, false);
 });
+
+test("a registered repository content-write tool can satisfy coding capability", () => {
+  const writer = [{
+    id: "writer", name: "Repository Writer", description: "Repository implementation", role: "Engineer",
+    allowedTools: ["github.read_file", "github.update_file"], enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "coding-task", title: "Implement", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
+  ], writer);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.assignments[0].agentId, "writer");
+});
