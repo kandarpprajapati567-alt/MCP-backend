@@ -72,7 +72,7 @@ export function StageTwoSupervisor({ token, agents }: Props) {
     }
     const taskIds = (initial.assignments ?? []).flatMap((item) => item.taskId ? [item.taskId] : []);
     if (!taskIds.length) return;
-    const terminal = new Set(["completed", "failed", "cancelled"]);
+    const terminal = new Set(["completed", "partial", "needs_review", "failed", "cancelled"]);
     for (let attempt = 0; attempt < 60; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       const snapshots = await Promise.all(taskIds.map(async (taskId) => {
