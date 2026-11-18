@@ -69,7 +69,7 @@ export function buildLocalAgentPlan(task: string, agent?: AgentDefinitionInput):
     steps: [{
       id: "step-1",
       objective: toolId ? "Process only the text supplied by the user." : "Interpret the request and complete the available safe operation.",
-      expectedOutcome: toolId ? "A result derived from the supplied text." : "A bounded result with execution evidence.",
+      expectedOutcome: toolId === "text.word_count" ? "wordCount" : toolId === "text.extract_keywords" ? "keywords" : toolId === "text.text_stats" ? "characters words sentences" : "A bounded result with execution evidence.",
     }],
     toolCalls: toolId ? [{ id: "call-1", toolId, arguments: { text: toolText } }] : [],
   };
