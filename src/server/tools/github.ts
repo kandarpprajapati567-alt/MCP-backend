@@ -352,17 +352,21 @@ export async function getGitHubAgentCiStatus(args: JsonRecord) {
     description: typeof item.description === "string" ? item.description.slice(0, 240) : "",
     url: typeof item.target_url === "string" ? item.target_url : null,
   }));
+  const requiredNames = ["CI", "Phase 1 checks"] as const;
+  const presentNames = new Set(requiredChecks.map((item) => item.name));
+  const missingChecks = requiredNames.filter((name) => !presentNames.has(name));
   const pending = requiredChecks.filter((item) => item.status !== "completed").length;
   const failed = requiredChecks.filter((item) => item.status === "completed" && !["success", "neutral", "skipped"].includes(item.conclusion ?? "")).length;
-  const allPassed = requiredChecks.length > 0 && pending === 0 && failed === 0;
+  const allPassed = missingChecks.length === 0 && pending === 0 && failed === 0;
   return {
     repository: REPOSITORY,
     ref,
     allPassed,
     requiredChecks,
+    missingChecks,
     pending,
     failed,
     otherChecks,
-    note: "Only the repository CI and Phase 1 GitHub Actions checks gate this result. Other provider statuses are shown separately.",
+    note: "Both repository CI and Phase 1 GitHub Actions checks must be present and successful. Other provider statuses are shown separately.",
   };
 }
