@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { buildMockSynthesisAnswer, buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
