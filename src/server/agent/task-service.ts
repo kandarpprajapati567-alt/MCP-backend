@@ -13,7 +13,7 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially, executeToolCallsWithConcurrency, type ToolCallExecution } from "@/server/agent/tool-call-execution";
 import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
-import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { buildMockSynthesisAnswer, buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
@@ -325,9 +325,7 @@ async function executeAgentTaskRecord(
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     const result = synthesis.route.providerId !== "mock"
       ? guardSynthesisAnswer(synthesis.result.text, results)
-      : "AI synthesis unavailable. No model-generated conclusion was produced. Raw tool outputs follow; they are observations and are not independently verified.\n" +
-        JSON.stringify(results, null, 2) +
-        (results.length ? "" : "\nNo registered tool returned evidence. Configure an AI provider and enable appropriate evidence tools before relying on a conclusion.");
+      : buildMockSynthesisAnswer(results);
     const evaluation = evaluateAgentCompletion(plan, results, result);
     const evaluatedResult = result + "\\n\\nCOMPLETION EVALUATION\\n" + JSON.stringify(evaluation, null, 2);
     const goalEvaluation = evaluateAgentGoalCriteria(plan, results, result);

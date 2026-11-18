@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAgentWorkflow, executeUserWorkflow } from "@/server/ai/routing/runtime-executor";
 import { AGENT_PROVIDERS, type AgentProviderPreference } from "@/server/agent/definition-schema";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
-import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { buildMockSynthesisAnswer, buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
@@ -144,7 +144,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     result = synthesis.route.providerId === "mock"
-      ? "AI synthesis unavailable. No model-generated conclusion was produced. Raw device tool outcomes follow; they are observations and are not independently verified.\n" + JSON.stringify(toolResults, null, 2)
+      ? buildMockSynthesisAnswer(toolResults)
       : guardSynthesisAnswer(synthesis.result.text, toolResults);
   } catch (error) {
     const { data: latestLifecycle } = await admin.from("agent_tasks")
