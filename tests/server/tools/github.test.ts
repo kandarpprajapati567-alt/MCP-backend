@@ -237,6 +237,21 @@ test("CI status requires completed successful repository workflows and reports p
   assert.equal(calls, 2);
 });
 
+test("CI status fails closed when either required workflow is missing", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify(calls === 1
+      ? { check_runs: [{ name: "CI", status: "completed", conclusion: "success" }] }
+      : { statuses: [] }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, false);
+  assert.deepEqual(result.missingChecks, ["Phase 1 checks"]);
+  assert.equal(result.pending, 0);
+  assert.equal(result.failed, 0);
+});
+
 test("CI status never passes while a required workflow is pending or failed", async () => {
   let calls = 0;
   globalThis.fetch = (async () => {
