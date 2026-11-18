@@ -54,3 +54,10 @@ test("local research planner rejects Agents without web search permission", () =
     /cannot use web.search/,
   );
 });
+
+
+test("deterministic text plans describe observable tool result fields", () => {
+  assert.equal(buildLocalAgentPlan("Count words in: alpha beta", agent(["text.word_count"])).steps[0].expectedOutcome, "wordCount");
+  assert.equal(buildLocalAgentPlan("Extract keywords from: solar energy", agent(["text.extract_keywords"])).steps[0].expectedOutcome, "keywords");
+  assert.equal(buildLocalAgentPlan("Text stats for: hello world.", agent(["text.text_stats"])).steps[0].expectedOutcome, "characters words sentences");
+});
