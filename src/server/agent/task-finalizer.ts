@@ -144,7 +144,7 @@ export async function finalizeAgentTaskIfReady(taskId: string): Promise<boolean>
         })
       : await executeUserWorkflow(PERSONAL_OWNER_ID, "summarization", synthesisRequest);
     result = synthesis.route.providerId === "mock"
-      ? "AI synthesis unavailable. No model-generated conclusion was produced. Raw device tool outcomes follow; they are observations and are not independently verified.\n" + JSON.stringify(toolResults, null, 2)
+      ? buildMockSynthesisAnswer(toolResults)
       : guardSynthesisAnswer(synthesis.result.text, toolResults);
   } catch (error) {
     const { data: latestLifecycle } = await admin.from("agent_tasks")
