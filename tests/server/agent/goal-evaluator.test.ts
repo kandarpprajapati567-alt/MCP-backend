@@ -48,3 +48,17 @@ test("does not treat unrelated numeric fields as a contradiction", () => {
   assert.equal(report.verdict, "criteria_covered");
   assert.equal(report.contradictoryCriteria, 0);
 });
+
+
+test("covers deterministic text-tool outcomes by their returned field names", () => {
+  const cases = [
+    { toolId: "text.word_count", expectedOutcome: "wordCount", result: { wordCount: 4 } },
+    { toolId: "text.extract_keywords", expectedOutcome: "keywords", result: { keywords: [{ keyword: "solar", count: 2 }] } },
+    { toolId: "text.text_stats", expectedOutcome: "characters words sentences", result: { characters: 71, words: 10, sentences: 2 } },
+  ];
+  for (const item of cases) {
+    const generatedPlan = { ...plan, steps: [{ id: "step-1", objective: "Run " + item.toolId, expectedOutcome: item.expectedOutcome }], toolCalls: [{ id: "call-1", toolId: item.toolId, arguments: { text: "sample" } }] };
+    const report = evaluateAgentGoalCriteria(generatedPlan, [{ callId: "call-1", toolId: item.toolId, result: item.result }], "Raw deterministic result [ev-call-1].");
+    assert.equal(report.verdict, "criteria_covered", item.toolId);
+  }
+});
