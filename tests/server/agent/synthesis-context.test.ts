@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "../../../src/server/agent/synthesis-context";
+import { buildMockSynthesisAnswer, buildSynthesisSystemPrompt, buildSynthesisUserContent } from "../../../src/server/agent/synthesis-context";
 
 test("keeps large tool output within provider message limits", () => {
   const content = buildSynthesisUserContent(
@@ -127,4 +127,16 @@ test("labels tool output as unverified evidence and exposes only source URLs act
   assert.deepEqual(parsed.toolResults[0].sourceReferenceCandidates, ["https://example.org/source"]);
   assert.equal(parsed.toolResults[1].executionOutcome, "reported_failure");
   assert.deepEqual(parsed.toolResults[1].sourceReferenceCandidates, []);
+});
+
+
+test("mock synthesis cites every tool observation using its supplied evidence ID", () => {
+  const answer = buildMockSynthesisAnswer([
+    { callId: "call-1", toolId: "text.word_count", result: { wordCount: 4 } },
+    { callId: "call-2", toolId: "text.text_stats", result: { words: 10, sentences: 2 } },
+  ]);
+  assert.match(answer, /\[ev-call-1\]/);
+  assert.match(answer, /\[ev-call-2\]/);
+  assert.match(answer, /wordCount/);
+  assert.match(answer, /not independently verified/);
 });
