@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateAgentCompletion } from "../../../src/server/agent/completion-evaluator";
+import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "../../../src/server/agent/completion-evaluator";
 
 const plan = {
   version: 1 as const,
@@ -46,4 +46,13 @@ test("requires evidence citations before declaring execution complete", () => {
   ], "A factual answer without a citation.");
   assert.equal(report.verdict, "needs_review");
   assert.ok(report.reasons.some((reason) => reason.includes("No supplied evidence ID was cited")));
+});
+
+test("only verified goal coverage with observed evidence can mark a task completed", () => {
+  assert.equal(canMarkAgentTaskCompleted("execution_complete", "criteria_covered", 1), true);
+  assert.equal(canMarkAgentTaskCompleted("partial", "criteria_covered", 1), false);
+  assert.equal(canMarkAgentTaskCompleted("needs_review", "criteria_covered", 1), false);
+  assert.equal(canMarkAgentTaskCompleted("execution_complete", "partial", 1), false);
+  assert.equal(canMarkAgentTaskCompleted("execution_complete", "needs_review", 1), false);
+  assert.equal(canMarkAgentTaskCompleted("execution_complete", "criteria_covered", 0), false);
 });

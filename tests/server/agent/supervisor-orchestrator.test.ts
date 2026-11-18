@@ -42,14 +42,17 @@ test("supervisor schema rejects unsupported capability labels", () => {
   assert.equal(result.ok, false);
 });
 
-test("capability assignment routes research and coding to matching specialists", () => {
-  const plan = buildFallbackSupervisorPlan("Research sources; Implement code in repository");
-  const result = assignSubtasksToAgents(plan.subtasks, agents);
-  assert.equal(result.ok, true);
-  if (result.ok) {
-    assert.equal(result.assignments[0].agentId, "research");
-    assert.equal(result.assignments[1].agentId, "developer");
-  }
+test("research routes to connected search while read-only GitHub cannot qualify for coding", () => {
+  const research = assignSubtasksToAgents([
+    { id: "research", title: "Research", objective: "Research official sources", requiredCapabilities: ["research", "web"] },
+  ], agents);
+  assert.equal(research.ok, true);
+  if (research.ok) assert.equal(research.assignments[0].agentId, "research");
+
+  const coding = assignSubtasksToAgents([
+    { id: "coding", title: "Implement", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
+  ], agents);
+  assert.equal(coding.ok, false);
 });
 
 test("specialized tasks are not dispatched to an unrelated Agent", () => {
@@ -75,22 +78,20 @@ test("planner preserves overflow work instead of silently dropping objectives", 
   assert.match(plan.subtasks[2].objective, /Verify citations/);
 });
 
-test("specialist assignment ignores generic keyword overlap and reuses a qualified Agent", () => {
+test("read-only repository tools and profile keyword overlap never qualify for coding", () => {
   const candidates = [
     { id: "general", name: "General Helper", description: "Repository support assistant", role: "General assistant", allowedTools: [], enabled: true },
     { id: "developer", name: "Developer", description: "Software engineering", role: "Developer", allowedTools: ["github.read_file"], enabled: true },
   ];
   const result = assignSubtasksToAgents([
     { id: "one", title: "Fix", objective: "Fix and refactor repository code", requiredCapabilities: ["coding", "github"] },
-    { id: "two", title: "Review", objective: "Review repository implementation", requiredCapabilities: ["coding", "github"] },
   ], candidates);
-  assert.equal(result.ok, true);
-  if (result.ok) assert.deepEqual(result.assignments.map((item) => item.agentId), ["developer", "developer"]);
+  assert.equal(result.ok, false);
 });
 
 test("Stage 2 self-test reports every diagnostic check as passed", () => {
   const results = runStageTwoDiagnostics();
-  assert.equal(results.length, 10);
+  assert.equal(results.length, 11);
   assert.ok(results.every((item) => item.status === "passed"));
   assert.ok(results.some((item) => item.id === "completion_evaluator_success"));
   assert.ok(results.some((item) => item.id === "completion_evaluator_missing_output"));
@@ -121,4 +122,27 @@ test("a specialist with a real matching tool manifest remains eligible even when
   ], manifestOnly);
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.assignments[0].agentId, "agent-a");
+});
+
+test("unavailable research integrations cannot satisfy research capability", () => {
+  const disconnected = [{
+    id: "research", name: "Research Agent", description: "Web research", role: "Research analyst",
+    allowedTools: [], enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "research-task", title: "Research", objective: "Research current sources", requiredCapabilities: ["research", "web"] },
+  ], disconnected);
+  assert.equal(result.ok, false);
+});
+
+test("a registered repository content-write tool can satisfy coding capability", () => {
+  const writer = [{
+    id: "writer", name: "Repository Writer", description: "Repository implementation", role: "Engineer",
+    allowedTools: ["github.read_file", "github.update_file"], enabled: true,
+  }];
+  const result = assignSubtasksToAgents([
+    { id: "coding-task", title: "Implement", objective: "Implement repository changes", requiredCapabilities: ["coding", "github"] },
+  ], writer);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.assignments[0].agentId, "writer");
 });

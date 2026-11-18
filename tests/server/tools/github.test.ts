@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile } from "../../../src/server/tools/github";
+import { createGitHubAgentBranch, createGitHubAgentFile, createGitHubAgentPullRequest, getGitHubAgentCiStatus, listGitHubBranches, listGitHubCommits, listGitHubFiles, readGitHubFile, updateGitHubAgentFile } from "../../../src/server/tools/github";
 import { TOOL_CATALOG } from "../../../src/server/tools/registry";
 
 const originalToken = process.env.GITHUB_READ_TOKEN;
+const originalWriteToken = process.env.GITHUB_WRITE_TOKEN;
 const originalFetch = globalThis.fetch;
 
-test.before(() => { process.env.GITHUB_READ_TOKEN = "github-read-only-test-token"; });
+test.before(() => { process.env.GITHUB_READ_TOKEN = "github-read-only-test-token"; process.env.GITHUB_WRITE_TOKEN = "github-write-test-token"; });
 test.after(() => {
   if (originalToken === undefined) delete process.env.GITHUB_READ_TOKEN;
   else process.env.GITHUB_READ_TOKEN = originalToken;
+  if (originalWriteToken === undefined) delete process.env.GITHUB_WRITE_TOKEN;
+  else process.env.GITHUB_WRITE_TOKEN = originalWriteToken;
   globalThis.fetch = originalFetch;
 });
 
@@ -20,13 +23,14 @@ function mockResponse(body: unknown, status = 200) {
   })) as typeof fetch;
 }
 
-test("registers four GitHub tools as read-only and side-effect free", () => {
-  const githubTools = TOOL_CATALOG.filter((tool) => tool.id.startsWith("github."));
+test("registers GitHub read tools as read-only and side-effect free", () => {
+  const githubTools = TOOL_CATALOG.filter((tool) => tool.id.startsWith("github.") && tool.annotations.readOnlyHint);
   assert.deepEqual(githubTools.map((tool) => tool.id), [
     "github.list_branches",
     "github.list_commits",
     "github.list_files",
     "github.read_file",
+    "github.get_ci_status",
   ]);
   assert.equal(githubTools.every((tool) => !tool.sideEffect && tool.annotations.readOnlyHint &&
     !tool.annotations.destructiveHint && tool.annotations.openWorldHint), true);
@@ -125,4 +129,138 @@ test("normalizes GitHub request timeouts into a safe retry message", async () =>
     throw new DOMException("network timeout", "TimeoutError");
   }) as typeof fetch;
   await assert.rejects(() => listGitHubBranches({}), /timed out after 15 seconds/);
+});
+
+
+test("registers GitHub write tools as side-effecting and separate from read-only tools", () => {
+  const writeTools = TOOL_CATALOG.filter((tool) => ["github.create_branch", "github.create_file", "github.update_file", "github.create_pull_request"].includes(tool.id));
+  assert.equal(writeTools.length, 4);
+  assert.ok(writeTools.every((tool) => tool.permission === "github.repository.write" && tool.sideEffect &&
+    !tool.annotations.readOnlyHint && !tool.annotations.destructiveHint));
+});
+
+test("creates only agent-prefixed branches from a verified base ref", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    if (requests.length === 1) return new Response(JSON.stringify({ object: { sha: "a".repeat(40) } }), { status: 200 });
+    return new Response(JSON.stringify({ ref: "refs/heads/agent/level3-work" }), { status: 201 });
+  }) as typeof fetch;
+  const result = await createGitHubAgentBranch({ branch: "agent/level3-work", baseRef: "main" });
+  assert.equal(result.created, true);
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].url, /\/git\/ref\/heads\/main$/);
+  assert.equal(requests[1].init?.method, "POST");
+  assert.equal(new Headers(requests[1].init?.headers).get("authorization"), "Bearer github-write-test-token");
+  assert.deepEqual(JSON.parse(String(requests[1].init?.body)), {
+    ref: "refs/heads/agent/level3-work", sha: "a".repeat(40),
+  });
+  await assert.rejects(() => createGitHubAgentBranch({ branch: "main" }), /agent\//);
+});
+
+test("creates and SHA-guards source/test file writes on agent branches", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return new Response(JSON.stringify({ commit: { sha: "b".repeat(40) } }), { status: 201 });
+  }) as typeof fetch;
+
+  const created = await createGitHubAgentFile({
+    path: "src/server/example.ts", branch: "agent/level3-work",
+    content: "export const answer = 42;\n", message: "Add example source",
+  });
+  assert.equal(created.created, true);
+  const createBody = JSON.parse(String(requests[0].init?.body));
+  assert.equal(createBody.branch, "agent/level3-work");
+  assert.equal(Buffer.from(createBody.content, "base64").toString("utf8"), "export const answer = 42;\n");
+
+  const updated = await updateGitHubAgentFile({
+    path: "tests/server/example.test.ts", branch: "agent/level3-work",
+    content: "export {};\n", message: "Add example test", expectedSha: "c".repeat(40),
+  });
+  assert.equal(updated.updated, true);
+  assert.equal(JSON.parse(String(requests[1].init?.body)).sha, "c".repeat(40));
+
+  await assert.rejects(() => createGitHubAgentFile({
+    path: "README.md", branch: "agent/level3-work", content: "no", message: "No",
+  }), /limited to source and test/);
+  await assert.rejects(() => updateGitHubAgentFile({
+    path: "src/server/example.ts", branch: "agent/level3-work", content: "x", message: "No", expectedSha: "stale",
+  }), /40-character expectedSha/);
+});
+
+test("GitHub write tools fail closed when GITHUB_WRITE_TOKEN is absent", async () => {
+  const token = process.env.GITHUB_WRITE_TOKEN;
+  delete process.env.GITHUB_WRITE_TOKEN;
+  await assert.rejects(() => createGitHubAgentBranch({ branch: "agent/no-token" }), /GITHUB_WRITE_TOKEN/);
+  process.env.GITHUB_WRITE_TOKEN = token;
+});
+
+
+test("opens draft pull requests only from agent branches and never merges", async () => {
+  let requestBody: Record<string, unknown> = {};
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({
+      number: 81, html_url: "https://github.com/kandarpprajapati567-alt/MCP-backend/pull/81",
+      title: "Agent change", state: "open", draft: true, head: { sha: "d".repeat(40) },
+    }), { status: 201 });
+  }) as typeof fetch;
+  const result = await createGitHubAgentPullRequest({
+    branch: "agent/level3-work", title: "Agent change", body: "CI verification pending",
+  });
+  assert.equal(result.draft, true);
+  assert.equal(result.base, "main");
+  assert.equal(requestBody.base, "main");
+  assert.equal(requestBody.draft, true);
+  await assert.rejects(() => createGitHubAgentPullRequest({ branch: "main", title: "Unsafe" }), /agent\//);
+});
+
+test("CI status requires completed successful repository workflows and reports provider statuses separately", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    if (calls === 1) return new Response(JSON.stringify({
+      check_runs: [
+        { name: "CI", status: "completed", conclusion: "success", html_url: "https://github.com/checks/ci" },
+        { name: "Phase 1 checks", status: "completed", conclusion: "success" },
+      ],
+    }), { status: 200 });
+    return new Response(JSON.stringify({
+      statuses: [{ context: "Vercel – mcp-backend", state: "failure", description: "Build rate limit" }],
+    }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, true);
+  assert.equal(result.requiredChecks.length, 2);
+  assert.equal(result.otherChecks[0].state, "failure");
+  assert.equal(calls, 2);
+});
+
+test("CI status fails closed when either required workflow is missing", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify(calls === 1
+      ? { check_runs: [{ name: "CI", status: "completed", conclusion: "success" }] }
+      : { statuses: [] }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, false);
+  assert.deepEqual(result.missingChecks, ["Phase 1 checks"]);
+  assert.equal(result.pending, 0);
+  assert.equal(result.failed, 0);
+});
+
+test("CI status never passes while a required workflow is pending or failed", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify(calls === 1
+      ? { check_runs: [{ name: "CI", status: "in_progress", conclusion: null }] }
+      : { statuses: [] }), { status: 200 });
+  }) as typeof fetch;
+  const result = await getGitHubAgentCiStatus({ ref: "agent/level3-work" });
+  assert.equal(result.allPassed, false);
+  assert.equal(result.pending, 1);
 });

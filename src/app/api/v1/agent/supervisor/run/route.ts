@@ -7,6 +7,8 @@ import { createSupervisorPlan } from "@/server/agent/supervisor-service";
 import { submitAgentTask } from "@/server/agent/task-service";
 import { createAgentTaskRequestFingerprint, isSameAgentTaskRequest, isValidAgentTaskIdempotencyKey } from "@/server/agent/task-idempotency";
 import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
+import { TOOL_CATALOG } from "@/server/tools/registry";
+import { decryptProviderSecret } from "@/server/ai/secrets/encryption";
 import { readJsonBody } from "@/server/http/read-json";
 
 export const dynamic = "force-dynamic";
@@ -45,11 +47,55 @@ export async function POST(request: Request) {
       .select("id,name,description,role,allowed_tools,enabled")
       .eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true).limit(100);
     if (error) return json({ error: "Agent registry is unavailable." }, 503);
+    const { data: tavilyConnection, error: tavilyError } = await admin.from("integration_connections")
+      .select("encrypted_secret,iv,auth_tag,key_version")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("provider", "tavily").eq("enabled", true).maybeSingle();
+    if (tavilyError) return json({ error: "Research tool availability could not be verified." }, 503);
+    let tavilyAvailable = false;
+    if (tavilyConnection) {
+      try { tavilyAvailable = decryptProviderSecret(tavilyConnection).length >= 8; }
+      catch { tavilyAvailable = false; }
+    }
+    const githubAvailable = Boolean(process.env.GITHUB_READ_TOKEN);
+    const githubWriteAvailable = Boolean(process.env.GITHUB_WRITE_TOKEN);
+    const registeredToolIds = new Set<string>(TOOL_CATALOG.map((tool) => tool.id));
+    const { data: remoteServers } = await admin.from("remote_mcp_servers")
+      .select("discovered_tools").eq("owner_id", PERSONAL_OWNER_ID).eq("enabled", true);
+    const remoteToolIds = new Set<string>();
+    for (const server of remoteServers ?? []) {
+      const discovered = Array.isArray(server.discovered_tools) ? server.discovered_tools : [];
+      for (const tool of discovered) {
+        if (tool && typeof tool === "object" && !Array.isArray(tool) &&
+            typeof (tool as Record<string, unknown>).id === "string" &&
+            (tool as Record<string, unknown>).annotations &&
+            typeof (tool as Record<string, unknown>).annotations === "object" &&
+            ((tool as Record<string, unknown>).annotations as Record<string, unknown>).readOnlyHint === true) {
+          remoteToolIds.add((tool as Record<string, unknown>).id as string);
+        }
+      }
+    }
+    const deviceCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: onlineDevices } = await admin.from("agent_devices").select("capabilities")
+      .eq("owner_id", PERSONAL_OWNER_ID).eq("status", "online").gte("last_seen_at", deviceCutoff);
+    const deviceToolIds = new Set<string>();
+    for (const device of onlineDevices ?? []) {
+      if (!Array.isArray(device.capabilities)) continue;
+      for (const capability of device.capabilities) {
+        if (capability && typeof capability === "object" && !Array.isArray(capability) &&
+            typeof (capability as Record<string, unknown>).id === "string") {
+          deviceToolIds.add((capability as Record<string, unknown>).id as string);
+        }
+      }
+    }
     const agents: AssignableAgent[] = (data ?? []).map((agent) => ({
       id: agent.id, name: agent.name,
       description: typeof agent.description === "string" ? agent.description : "",
       role: typeof agent.role === "string" ? agent.role : "",
-      allowedTools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools.filter((item): item is string => typeof item === "string") : [],
+      allowedTools: Array.isArray(agent.allowed_tools)
+        ? agent.allowed_tools.filter((item): item is string => typeof item === "string" &&
+            (registeredToolIds.has(item) || remoteToolIds.has(item) || deviceToolIds.has(item)) &&
+            (item === "web.search" ? tavilyAvailable : item.startsWith("github.create_") || item === "github.update_file" ? githubWriteAvailable : item.startsWith("github.") ? githubAvailable : true))
+        : [],
       enabled: agent.enabled === true,
     }));
     const planned = await createSupervisorPlan(PERSONAL_OWNER_ID, goal);

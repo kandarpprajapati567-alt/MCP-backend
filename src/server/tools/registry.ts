@@ -14,6 +14,11 @@ export type RegisteredToolId =
   | "github.list_commits"
   | "github.list_files"
   | "github.read_file"
+  | "github.create_branch"
+  | "github.create_file"
+  | "github.update_file"
+  | "github.create_pull_request"
+  | "github.get_ci_status"
   | "web.search";
 
 export type ToolDefinition = {
@@ -117,6 +122,66 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
       required: ["path"],
       additionalProperties: false,
     },
+    annotations: githubReadOnly,
+  },
+  {
+    id: "github.create_branch",
+    description: "Create an isolated agent/<name> feature branch from main or another permitted ref. Never writes to main.",
+    permission: "github.repository.write",
+    sideEffect: true,
+    inputSchema: { type: "object", properties: {
+      branch: { type: "string", minLength: 7, maxLength: 85, pattern: "^agent/[a-zA-Z0-9][a-zA-Z0-9._/-]*$" },
+      baseRef: { type: "string", maxLength: 120 },
+    }, required: ["branch"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.create_file",
+    description: "Create a UTF-8 source or test file under src/ or tests/ on an existing agent/* branch. Maximum 100 KB.",
+    permission: "github.repository.write",
+    sideEffect: true,
+    inputSchema: { type: "object", properties: {
+      path: { type: "string", minLength: 5, maxLength: 240 },
+      branch: { type: "string", minLength: 7, maxLength: 85, pattern: "^agent/[a-zA-Z0-9][a-zA-Z0-9._/-]*$" },
+      content: { type: "string", minLength: 1, maxLength: 100000 },
+      message: { type: "string", minLength: 1, maxLength: 120 },
+    }, required: ["path", "branch", "content", "message"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.update_file",
+    description: "Update a UTF-8 source or test file under src/ or tests/ on an existing agent/* branch. Requires the current file SHA to prevent overwriting concurrent changes. Maximum 100 KB.",
+    permission: "github.repository.write",
+    sideEffect: true,
+    inputSchema: { type: "object", properties: {
+      path: { type: "string", minLength: 5, maxLength: 240 },
+      branch: { type: "string", minLength: 7, maxLength: 85, pattern: "^agent/[a-zA-Z0-9][a-zA-Z0-9._/-]*$" },
+      content: { type: "string", minLength: 1, maxLength: 100000 },
+      message: { type: "string", minLength: 1, maxLength: 120 },
+      expectedSha: { type: "string", minLength: 40, maxLength: 40, pattern: "^[a-fA-F0-9]{40}$" },
+    }, required: ["path", "branch", "content", "message", "expectedSha"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.create_pull_request",
+    description: "Open a draft pull request from an agent/* feature branch to main in the fixed repository. Never merges.",
+    permission: "github.repository.write",
+    sideEffect: true,
+    inputSchema: { type: "object", properties: {
+      branch: { type: "string", minLength: 7, maxLength: 85, pattern: "^agent/[a-zA-Z0-9][a-zA-Z0-9._/-]*$" },
+      title: { type: "string", minLength: 1, maxLength: 120 },
+      body: { type: "string", maxLength: 8000 },
+    }, required: ["branch", "title"], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    id: "github.get_ci_status",
+    description: "Read repository CI and Phase 1 GitHub Actions check results for a branch or commit. Reports pending, failed and other provider statuses separately.",
+    permission: "github.repository.read",
+    sideEffect: false,
+    inputSchema: { type: "object", properties: {
+      ref: { type: "string", minLength: 1, maxLength: 120 },
+    }, required: ["ref"], additionalProperties: false },
     annotations: githubReadOnly,
   },
   {

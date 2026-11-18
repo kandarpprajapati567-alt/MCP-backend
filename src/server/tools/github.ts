@@ -173,3 +173,200 @@ export async function readGitHubFile(args: JsonRecord) {
     content,
   };
 }
+
+
+const MAX_WRITE_FILE_BYTES = 100_000;
+
+function getWriteToken(): string {
+  const token = process.env.GITHUB_WRITE_TOKEN?.trim();
+  if (!token) throw new Error("GitHub write access is not configured. Add GITHUB_WRITE_TOKEN with fine-grained Contents read/write and Metadata read permissions.");
+  return token;
+}
+
+function validateAgentBranch(value: unknown): string {
+  if (typeof value !== "string" || !/^agent\/[a-z0-9][a-z0-9._/-]{0,78}$/i.test(value) ||
+      value.includes("..") || value.includes("//") || value.endsWith("/") || value.includes("@{")) {
+    throw new Error("Writes are restricted to a valid agent/<name> feature branch.");
+  }
+  return value;
+}
+
+function validateWritablePath(value: unknown): string {
+  const path = validatePath(value);
+  if (!(path.startsWith("src/") || path.startsWith("tests/")) ||
+      !/\.(tsx?|jsx?|json|md|css|sql)$/i.test(path) ||
+      /^\.github\//i.test(path) || /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i.test(path)) {
+    throw new Error("Agent writes are limited to source and test text files under src/ and tests/.");
+  }
+  return path;
+}
+
+function validateWriteContent(value: unknown): string {
+  if (typeof value !== "string" || !value.length || Buffer.byteLength(value, "utf8") > MAX_WRITE_FILE_BYTES || value.includes("\0")) {
+    throw new Error("content must be non-empty UTF-8 text no larger than 100 KB.");
+  }
+  return value;
+}
+
+async function githubWriteRequest(method: "POST" | "PUT", path: string, body: Record<string, unknown>): Promise<unknown> {
+  const token = getWriteToken();
+  let response: Response;
+  try {
+    response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + path, {
+      method,
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: "Bearer " + token,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Futuristic-System-MCP-Backend",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") throw new Error("GitHub write request timed out after 15 seconds.");
+    throw new Error("GitHub write request could not connect. Retry after checking the network.");
+  }
+  if (!response.ok) {
+    if (response.status === 401) throw new Error("GitHub rejected GITHUB_WRITE_TOKEN. Check that it is valid and not expired.");
+    if (response.status === 403) throw new Error("GitHub denied write access or the API rate limit was reached. Check Contents read/write permission.");
+    if (response.status === 404) throw new Error("GitHub repository or base ref was not found. Confirm token repository access.");
+    if (response.status === 409 || response.status === 422) throw new Error("GitHub rejected the write because the branch or file state changed. Re-read the branch/file and retry with the current SHA.");
+    throw new Error("GitHub write request failed with HTTP " + response.status + ".");
+  }
+  return response.json();
+}
+
+export async function createGitHubAgentBranch(args: JsonRecord) {
+  if (Object.keys(args).some((key) => key !== "branch" && key !== "baseRef")) {
+    throw new Error("github.create_branch accepts only branch and baseRef.");
+  }
+  const branch = validateAgentBranch(args.branch);
+  const baseRef = validateRef(args.baseRef);
+  const base = await githubWriteRequest("POST", "/git/refs", { ref: "refs/heads/" + branch, sha: await (async () => {
+    const token = getWriteToken();
+    const response = await fetch(GITHUB_API + "/repos/" + REPOSITORY + "/git/ref/heads/" + baseRef.split("/").map(encodeURIComponent).join("/"), {
+      headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Futuristic-System-MCP-Backend" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error("GitHub base branch could not be read (HTTP " + response.status + ").");
+    const data: unknown = await response.json();
+    if (!isRecord(data) || !isRecord(data.object) || typeof data.object.sha !== "string") throw new Error("GitHub returned an invalid base branch reference.");
+    return data.object.sha;
+  })() });
+  if (!isRecord(base) || typeof base.ref !== "string") {
+    throw new Error("GitHub created the branch but returned an unexpected reference.");
+  }
+  return { repository: REPOSITORY, branch, baseRef, created: true, ref: base.ref };
+}
+
+export async function createGitHubAgentFile(args: JsonRecord) {
+  if (Object.keys(args).some((key) => !["path", "branch", "content", "message"].includes(key)) ||
+      typeof args.message !== "string" || !args.message.trim() || args.message.length > 120) {
+    throw new Error("github.create_file requires path, branch, content and a 1–120 character message.");
+  }
+  const path = validateWritablePath(args.path);
+  const branch = validateAgentBranch(args.branch);
+  const content = validateWriteContent(args.content);
+  const result = await githubWriteRequest("PUT", "/contents/" + path.split("/").map(encodeURIComponent).join("/"), {
+    message: args.message.trim(),
+    content: Buffer.from(content, "utf8").toString("base64"),
+    branch,
+  });
+  if (!isRecord(result) || !isRecord(result.commit) || typeof result.commit.sha !== "string") throw new Error("GitHub created the file but returned an unexpected commit.");
+  return { repository: REPOSITORY, branch, path, created: true, commitSha: result.commit.sha };
+}
+
+export async function updateGitHubAgentFile(args: JsonRecord) {
+  if (Object.keys(args).some((key) => !["path", "branch", "content", "message", "expectedSha"].includes(key)) ||
+      typeof args.message !== "string" || !args.message.trim() || args.message.length > 120 ||
+      typeof args.expectedSha !== "string" || !/^[a-f0-9]{40}$/i.test(args.expectedSha)) {
+    throw new Error("github.update_file requires path, branch, content, message and a 40-character expectedSha.");
+  }
+  const path = validateWritablePath(args.path);
+  const branch = validateAgentBranch(args.branch);
+  const content = validateWriteContent(args.content);
+  const result = await githubWriteRequest("PUT", "/contents/" + path.split("/").map(encodeURIComponent).join("/"), {
+    message: args.message.trim(),
+    content: Buffer.from(content, "utf8").toString("base64"),
+    branch,
+    sha: args.expectedSha,
+  });
+  if (!isRecord(result) || !isRecord(result.commit) || typeof result.commit.sha !== "string") throw new Error("GitHub updated the file but returned an unexpected commit.");
+  return { repository: REPOSITORY, branch, path, updated: true, commitSha: result.commit.sha };
+}
+
+
+export async function createGitHubAgentPullRequest(args: JsonRecord) {
+  if (Object.keys(args).some((key) => !["branch", "title", "body"].includes(key)) ||
+      typeof args.title !== "string" || !args.title.trim() || args.title.length > 120 ||
+      (args.body !== undefined && (typeof args.body !== "string" || args.body.length > 8000))) {
+    throw new Error("github.create_pull_request requires branch, a 1–120 character title and an optional body up to 8000 characters.");
+  }
+  const branch = validateAgentBranch(args.branch);
+  const result = await githubWriteRequest("POST", "/pulls", {
+    title: args.title.trim(),
+    head: branch,
+    base: "main",
+    body: typeof args.body === "string" ? args.body : "",
+    draft: true,
+  });
+  if (!isRecord(result) || typeof result.number !== "number" || typeof result.html_url !== "string" ||
+      !isRecord(result.head) || typeof result.head.sha !== "string") {
+    throw new Error("GitHub created the pull request but returned an unexpected response.");
+  }
+  return {
+    repository: REPOSITORY,
+    number: result.number,
+    url: result.html_url,
+    title: typeof result.title === "string" ? result.title : args.title.trim(),
+    state: typeof result.state === "string" ? result.state : "open",
+    draft: result.draft === true,
+    headSha: result.head.sha,
+    base: "main",
+  };
+}
+
+export async function getGitHubAgentCiStatus(args: JsonRecord) {
+  if (Object.keys(args).some((key) => key !== "ref")) throw new Error("github.get_ci_status accepts only ref.");
+  const ref = validateRef(args.ref);
+  const encodedRef = ref.split("/").map(encodeURIComponent).join("/");
+  const [checkData, statusData] = await Promise.all([
+    githubGet("/commits/" + encodedRef + "/check-runs?per_page=100"),
+    githubGet("/commits/" + encodedRef + "/status"),
+  ]);
+  const checkRuns = isRecord(checkData) && Array.isArray(checkData.check_runs) ? checkData.check_runs.filter(isRecord) : [];
+  const contexts = isRecord(statusData) && Array.isArray(statusData.statuses) ? statusData.statuses.filter(isRecord) : [];
+  const requiredChecks = checkRuns.filter((item) => item.name === "CI" || item.name === "Phase 1 checks").map((item) => ({
+    name: typeof item.name === "string" ? item.name : "unknown",
+    status: typeof item.status === "string" ? item.status : "unknown",
+    conclusion: typeof item.conclusion === "string" ? item.conclusion : null,
+    url: typeof item.html_url === "string" ? item.html_url : null,
+  }));
+  const otherChecks = contexts.map((item) => ({
+    context: typeof item.context === "string" ? item.context : "unknown",
+    state: typeof item.state === "string" ? item.state : "unknown",
+    description: typeof item.description === "string" ? item.description.slice(0, 240) : "",
+    url: typeof item.target_url === "string" ? item.target_url : null,
+  }));
+  const requiredNames = ["CI", "Phase 1 checks"] as const;
+  const presentNames = new Set(requiredChecks.map((item) => item.name));
+  const missingChecks = requiredNames.filter((name) => !presentNames.has(name));
+  const pending = requiredChecks.filter((item) => item.status !== "completed").length;
+  const failed = requiredChecks.filter((item) => item.status === "completed" && !["success", "neutral", "skipped"].includes(item.conclusion ?? "")).length;
+  const allPassed = missingChecks.length === 0 && pending === 0 && failed === 0;
+  return {
+    repository: REPOSITORY,
+    ref,
+    allPassed,
+    requiredChecks,
+    missingChecks,
+    pending,
+    failed,
+    otherChecks,
+    note: "Both repository CI and Phase 1 GitHub Actions checks must be present and successful. Other provider statuses are shown separately.",
+  };
+}
