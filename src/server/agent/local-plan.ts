@@ -10,7 +10,7 @@ export type LocalAgentPlan = {
 function extractInput(task: string, toolId: string): string {
   const patterns: Record<string, RegExp[]> = {
     "text.word_count": [
-      /^(?:please\\s+)?count\\s+the\\s+number\\s+of\\s+words?\\s+(?:in|of)\\s*:?\\s*(.+)$/i,
+      /^(?:please\s+)?count\s+the\s+number\s+of\s+words?\s+(?:in|of)\s*:?\s*(.+)$/i,
       /^(?:please\\s+)?count\\s+words?\\s+(?:in|of)\\s*:?\s*(.+)$/i,
       /^(?:please\s+)?count\s+words?\s*[:\-]\s*(.+)$/i,
       /^(?:please\s+)?word\s+count\s*[:\-]\s*(.+)$/i,
