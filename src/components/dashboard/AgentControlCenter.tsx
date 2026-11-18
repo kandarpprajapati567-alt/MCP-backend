@@ -138,10 +138,15 @@ const tabs = [
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
 
-function statusTone(status: string) {
-  if (status === "completed") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-300";
-  if (status === "failed" || status === "cancelled") return "border-rose-400/25 bg-rose-400/10 text-rose-300";
-  if (status === "partial" || status === "needs_review") return "border-amber-400/25 bg-amber-400/10 text-amber-200";
+function displayStatus(status: string, errorCode?: string | null) {
+  return status === "failed" && errorCode === "AGENT_COMPLETION_UNVERIFIED" ? "needs_review" : status;
+}
+
+function statusTone(status: string, errorCode?: string | null) {
+  const normalized = displayStatus(status, errorCode);
+  if (normalized === "completed") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-300";
+  if (normalized === "failed" || normalized === "cancelled") return "border-rose-400/25 bg-rose-400/10 text-rose-300";
+  if (normalized === "partial" || normalized === "needs_review") return "border-amber-400/25 bg-amber-400/10 text-amber-200";
   return "border-amber-400/25 bg-amber-400/10 text-amber-200";
 }
 
@@ -436,17 +441,18 @@ export default function AgentControlCenter() {
           if (latest.length) {
             setRunInfo((current) => current ? ({
               ...current,
-              status: latest.length === taskIds.length && latest.every((item) => item.status === "completed") ? "completed"
-                : latest.length === taskIds.length && latest.every((item) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(item.status))
-                  ? latest.some((item) => item.status === "completed") ? "partial" : "failed"
+              status: latest.length === taskIds.length && latest.every((item) => displayStatus(item.status, item.error_code) === "completed") ? "completed"
+                : latest.length === taskIds.length && latest.every((item) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(displayStatus(item.status, item.error_code)))
+                  ? latest.some((item) => displayStatus(item.status, item.error_code) === "needs_review") ? "needs_review"
+                    : latest.some((item) => ["completed", "partial"].includes(displayStatus(item.status, item.error_code))) ? "partial" : "failed"
                   : "running",
               assignments: current.assignments?.map((assignment) => {
                 const snapshot = assignment.taskId ? latest.find((item) => item.id === assignment.taskId) : undefined;
-                return snapshot ? { ...assignment, status: snapshot.status } : assignment;
+                return snapshot ? { ...assignment, status: displayStatus(snapshot.status, snapshot.error_code) } : assignment;
               }),
             }) : current);
           }
-          if (latest.length === taskIds.length && latest.every((item) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(item.status))) break;
+          if (latest.length === taskIds.length && latest.every((item) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(displayStatus(item.status, item.error_code)))) break;
         }
         await loadData().catch(() => undefined);
       }
@@ -458,7 +464,7 @@ export default function AgentControlCenter() {
   }
 
   const enabledAgents = agents.filter((agent) => agent.enabled);
-  const terminalTasks = tasks.filter((task) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(task.status));
+  const terminalTasks = tasks.filter((task) => ["completed", "partial", "needs_review", "failed", "cancelled"].includes(displayStatus(task.status, task.error_code)));
   const completedTasks = tasks.filter((task) => task.status === "completed");
   const failedTasks = tasks.filter((task) => task.status === "failed");
   const toolExecutions = tasks.reduce((sum, task) => sum + toolCount(task), 0);
@@ -545,7 +551,7 @@ export default function AgentControlCenter() {
                 </section>
                 <section className="rounded-3xl border border-border bg-zinc-950/70 p-5">
                   <div className="flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-[.18em] text-zinc-500">Recent activity</p><h2 className="mt-1 text-base font-semibold text-white">Latest tasks</h2></div><button type="button" onClick={() => setActiveTab("activity")} className="text-xs text-cyan-200">History →</button></div>
-                  <div className="mt-4 space-y-2">{tasks.slice(0, 5).map((task) => <button key={task.id} type="button" onClick={() => void openTask(task.id)} className="w-full rounded-xl border border-white/[.07] p-3 text-left hover:border-cyan-400/30"><span className="block truncate text-xs text-zinc-200">{task.task}</span><span className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-zinc-500">{new Date(task.created_at).toLocaleString()}</span><span className={"rounded-full border px-2 py-0.5 text-[9px] " + statusTone(task.status)}>{task.status.replaceAll("_", " ")}</span></span></button>)}
+                  <div className="mt-4 space-y-2">{tasks.slice(0, 5).map((task) => <button key={task.id} type="button" onClick={() => void openTask(task.id)} className="w-full rounded-xl border border-white/[.07] p-3 text-left hover:border-cyan-400/30"><span className="block truncate text-xs text-zinc-200">{task.task}</span><span className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-zinc-500">{new Date(task.created_at).toLocaleString()}</span><span className={"rounded-full border px-2 py-0.5 text-[9px] " + statusTone(task.status, task.error_code)}>{displayStatus(task.status, task.error_code).replaceAll("_", " ")}</span></span></button>)}
                     {!tasks.length && <p className="text-xs text-zinc-500">Your completed and running tasks will appear here.</p>}
                   </div>
                 </section>
@@ -587,8 +593,8 @@ export default function AgentControlCenter() {
 
           {activeTab === "activity" && (
             <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-              <section className="rounded-3xl border border-border bg-zinc-950/70 p-5"><div className="flex items-center justify-between gap-2"><h2 className="text-base font-semibold text-white">Execution history</h2><span className="text-[10px] text-zinc-500">Latest {tasks.length}</span></div><div className="mt-4 space-y-2">{tasks.map((task) => <button key={task.id} type="button" onClick={() => void openTask(task.id)} className="w-full rounded-xl border border-border/70 p-3 text-left hover:border-cyan-400/30"><div className="flex items-start justify-between gap-3"><span className="min-w-0 text-xs text-zinc-200">{task.task}</span><span className={"shrink-0 rounded-full border px-2 py-1 text-[9px] " + statusTone(task.status)}>{task.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-[10px] text-zinc-500">{task.agent_snapshot?.name ?? "Auto / default"} · {toolCount(task)} tool result(s) · {new Date(task.created_at).toLocaleString()}</p></button>)}{!tasks.length && <p className="text-xs text-zinc-500">No tasks yet.</p>}</div></section>
-              <section className="rounded-3xl border border-border bg-zinc-950/70 p-5"><h2 className="text-base font-semibold text-white">Execution evidence</h2>{detail ? <><div className="mt-3 flex items-center justify-between gap-2"><p className="text-xs text-zinc-400">Task result</p><span className={"rounded-full border px-2 py-1 text-[9px] " + statusTone(String(detail.task.status ?? "unknown"))}>{String(detail.task.status ?? "unknown")}</span></div><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{String(detail.task.task ?? "")}</p>{typeof detail.task.result === "string" && <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/40 p-3 text-xs text-emerald-100">{detail.task.result}</pre>}{typeof detail.task.error_code === "string" && <p className="mt-2 text-xs text-rose-300">Failure: {detail.task.error_code}</p>}<div className="mt-4"><h3 className="text-xs font-semibold text-white">Tool outputs</h3><pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-black/40 p-3 text-[10px] text-zinc-300">{JSON.stringify(detail.task.tool_results ?? [], null, 2)}</pre></div><div className="mt-4"><h3 className="text-xs font-semibold text-white">Event timeline</h3><div className="mt-2 space-y-2">{detail.events.map((event) => <article key={event.id} className="rounded-xl border border-border/70 p-3"><div className="flex justify-between gap-2"><span className="text-[10px] text-cyan-200">{event.event_type}</span><span className="text-[9px] text-zinc-600">{new Date(event.created_at).toLocaleString()}</span></div><pre className="mt-2 whitespace-pre-wrap break-words text-[10px] text-zinc-400">{JSON.stringify(event.payload, null, 2)}</pre></article>)}</div></div>{detail.deviceJobs.length > 0 && <div className="mt-4"><h3 className="text-xs font-semibold text-white">Device jobs</h3><pre className="mt-2 max-h-52 overflow-auto rounded-xl bg-black/40 p-3 text-[10px] text-zinc-300">{JSON.stringify(detail.deviceJobs, null, 2)}</pre></div>}</> : <div className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center"><p className="text-sm text-zinc-300">Select a task to inspect its evidence.</p><p className="mt-1 text-xs text-zinc-500">Plans, tool outputs, task events and device jobs are shown here.</p></div>}</section>
+              <section className="rounded-3xl border border-border bg-zinc-950/70 p-5"><div className="flex items-center justify-between gap-2"><h2 className="text-base font-semibold text-white">Execution history</h2><span className="text-[10px] text-zinc-500">Latest {tasks.length}</span></div><div className="mt-4 space-y-2">{tasks.map((task) => <button key={task.id} type="button" onClick={() => void openTask(task.id)} className="w-full rounded-xl border border-border/70 p-3 text-left hover:border-cyan-400/30"><div className="flex items-start justify-between gap-3"><span className="min-w-0 text-xs text-zinc-200">{task.task}</span><span className={"shrink-0 rounded-full border px-2 py-1 text-[9px] " + statusTone(task.status, task.error_code)}>{displayStatus(task.status, task.error_code).replaceAll("_", " ")}</span></div><p className="mt-2 text-[10px] text-zinc-500">{task.agent_snapshot?.name ?? "Auto / default"} · {toolCount(task)} tool result(s) · {new Date(task.created_at).toLocaleString()}</p></button>)}{!tasks.length && <p className="text-xs text-zinc-500">No tasks yet.</p>}</div></section>
+              <section className="rounded-3xl border border-border bg-zinc-950/70 p-5"><h2 className="text-base font-semibold text-white">Execution evidence</h2>{detail ? <><div className="mt-3 flex items-center justify-between gap-2"><p className="text-xs text-zinc-400">Task result</p><span className={"rounded-full border px-2 py-1 text-[9px] " + statusTone(String(detail.task.status ?? "unknown"), typeof detail.task.error_code === "string" ? detail.task.error_code : null)}>{displayStatus(String(detail.task.status ?? "unknown"), typeof detail.task.error_code === "string" ? detail.task.error_code : null)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{String(detail.task.task ?? "")}</p>{typeof detail.task.result === "string" && <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/40 p-3 text-xs text-emerald-100">{detail.task.result}</pre>}{typeof detail.task.error_code === "string" && <p className="mt-2 text-xs text-rose-300">Failure: {detail.task.error_code}</p>}<div className="mt-4"><h3 className="text-xs font-semibold text-white">Tool outputs</h3><pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-black/40 p-3 text-[10px] text-zinc-300">{JSON.stringify(detail.task.tool_results ?? [], null, 2)}</pre></div><div className="mt-4"><h3 className="text-xs font-semibold text-white">Event timeline</h3><div className="mt-2 space-y-2">{detail.events.map((event) => <article key={event.id} className="rounded-xl border border-border/70 p-3"><div className="flex justify-between gap-2"><span className="text-[10px] text-cyan-200">{event.event_type}</span><span className="text-[9px] text-zinc-600">{new Date(event.created_at).toLocaleString()}</span></div><pre className="mt-2 whitespace-pre-wrap break-words text-[10px] text-zinc-400">{JSON.stringify(event.payload, null, 2)}</pre></article>)}</div></div>{detail.deviceJobs.length > 0 && <div className="mt-4"><h3 className="text-xs font-semibold text-white">Device jobs</h3><pre className="mt-2 max-h-52 overflow-auto rounded-xl bg-black/40 p-3 text-[10px] text-zinc-300">{JSON.stringify(detail.deviceJobs, null, 2)}</pre></div>}</> : <div className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center"><p className="text-sm text-zinc-300">Select a task to inspect its evidence.</p><p className="mt-1 text-xs text-zinc-500">Plans, tool outputs, task events and device jobs are shown here.</p></div>}</section>
             </div>
           )}
         </>
