@@ -13,7 +13,7 @@ import { safeAgentFailureMessage } from "@/server/agent/failure-diagnostics";
 import { executeToolCallsSequentially, executeToolCallsWithConcurrency, type ToolCallExecution } from "@/server/agent/tool-call-execution";
 import { TOOL_CATALOG } from "@/server/tools/registry";
 import { finalizeAgentTaskIfReady } from "@/server/agent/task-finalizer";
-import { buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
+import { buildMockSynthesisAnswer, buildSynthesisSystemPrompt, buildSynthesisUserContent } from "@/server/agent/synthesis-context";
 import { guardSynthesisAnswer } from "@/server/agent/evidence-guard";
 import { canMarkAgentTaskCompleted, evaluateAgentCompletion } from "@/server/agent/completion-evaluator";
 import { evaluateAgentGoalCriteria } from "@/server/agent/goal-evaluator";
