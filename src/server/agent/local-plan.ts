@@ -27,7 +27,15 @@ function extractInput(task: string, toolId: string): string {
   };
   for (const pattern of patterns[toolId] ?? []) {
     const match = task.match(pattern);
-    if (match?.[1]?.trim()) return match[1].trim();
+    if (match?.[1]?.trim()) {
+      const value = match[1].trim();
+      const first = value[0];
+      const last = value[value.length - 1];
+      if ((first === "'" || first === '"') && last === first && value.length >= 2) {
+        return value.slice(1, -1).trim();
+      }
+      return value;
+    }
   }
   throw new Error("Add the text to process after a colon, for example: Count words in: apple banana.");
 }
@@ -51,7 +59,7 @@ export function buildLocalAgentPlan(task: string, agent?: AgentDefinitionInput):
     };
   }
 
-  const toolId = lower.includes("word count") || lower.includes("count word")
+  const toolId = /\bcount\s+(?:the\s+number\s+of\s+)?words?\b|\bword\s+count\b/i.test(lower)
     ? "text.word_count"
     : lower.includes("keyword")
       ? "text.extract_keywords"
