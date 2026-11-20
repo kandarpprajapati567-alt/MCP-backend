@@ -146,3 +146,16 @@ test("a registered repository content-write tool can satisfy coding capability",
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.assignments[0].agentId, "writer");
 });
+
+ 
+test("deterministic text-analysis workstreams require an Agent with text tools", () => {
+  const candidates = [
+    { id: "general", name: "General Agent", description: "General assistant", role: "Assistant", allowedTools: [], enabled: true },
+    { id: "text", name: "Free Test Agent", description: "Deterministic text analysis", role: "Text analyst", allowedTools: ["text.word_count", "text.extract_keywords", "text.text_stats"], enabled: true },
+  ];
+  const result = assignSubtasksToAgents([
+    { id: "word-count", title: "Count words", objective: "Count the number of words in alpha beta gamma delta", requiredCapabilities: ["analysis"] },
+  ], candidates);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.assignments[0].agentId, "text");
+});

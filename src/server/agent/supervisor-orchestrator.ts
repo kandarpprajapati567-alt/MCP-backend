@@ -99,6 +99,7 @@ export function parseSupervisorPlan(value: unknown, originalGoal: string): { ok:
 function inferCapabilities(text: string): string[] {
   const value = text.toLowerCase();
   const found: string[] = [];
+  if (/\bcount\s+(?:the\s+number\s+of\s+)?words?\b|\bword\s+count\b|\bextract\s+keywords?\b|\btext\s+stats?\b|\btext\s+statistics\b/.test(value)) found.push("analysis");
   if (/research|search|source|reference|latest|news|investigat|compare|competitor/.test(value)) found.push("research", "web");
   if (/code|coding|program|debug|bug|fix|repair|patch|refactor|implement|repository|github|software|api/.test(value)) found.push("coding", "github");
   if (/analy[sz]|data|metric|evaluate|audit|review|risk|test|verify/.test(value)) found.push("analysis");

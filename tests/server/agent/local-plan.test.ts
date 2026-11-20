@@ -61,3 +61,9 @@ test("deterministic text plans describe observable tool result fields", () => {
   assert.equal(buildLocalAgentPlan("Extract keywords from: solar energy", agent(["text.extract_keywords"])).steps[0].expectedOutcome, "keywords");
   assert.equal(buildLocalAgentPlan("Text stats for: hello world.", agent(["text.text_stats"])).steps[0].expectedOutcome, "characters words sentences");
 });
+
+ 
+test("word count accepts the Supervisor safe-planner paraphrase", () => {
+  const plan = buildLocalAgentPlan("Count the number of words in 'alpha beta gamma delta'", agent(["text.word_count"]));
+  assert.deepEqual(plan.toolCalls[0], { id: "call-1", toolId: "text.word_count", arguments: { text: "alpha beta gamma delta" } });
+});

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StageTwoSupervisor } from "@/components/dashboard/StageTwoSupervisor";
 
 type Agent = {
   id: string;
@@ -491,10 +490,14 @@ export default function AgentLabPage() {
             <div className="rounded-2xl border border-border bg-zinc-950/70 p-4"><p className="text-xs text-zinc-500">Recent tasks</p><p className="mt-2 text-2xl font-semibold text-white">{tasks.length}</p></div>
           </section>
 
-          <StageTwoSupervisor token={token} agents={agents.map((agent) => ({ id: agent.id, name: agent.name, enabled: agent.enabled }))} />
+          <details className="rounded-2xl border border-violet-900/50 bg-violet-950/10 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-violet-200">Advanced Supervisor tests (separate from individual Agent tests)</summary>
+            <p className="mt-2 text-xs leading-5 text-zinc-400">Use this section only to test automatic planning and multi-agent delegation. For Word count, Keyword extraction, Text statistics, Idempotency and Cancellation tests, use the individual Test Center below.</p>
+            <p className="mt-2 text-xs text-zinc-500">Supervisor test controls are available from Agent Control Center → Workbench.</p>
+          </details>
 
-          <section className="space-y-4 rounded-2xl border border-border bg-zinc-950/70 p-5">
-            <div><h2 className="font-semibold text-white">Run an Agent test</h2><p className="mt-1 text-xs text-zinc-500">This calls the same production Agent task pipeline: planning, policy validation, tools, synthesis and persistence.</p></div>
+          <section className="space-y-4 rounded-2xl border border-cyan-800/50 bg-cyan-950/10 p-5">
+            <div><h2 className="font-semibold text-white">Individual Agent tests — use this section</h2><p className="mt-1 text-xs text-cyan-200">For Stage 1 verification, use only this form and the Test Center buttons below. Do not enter these test prompts in Supervisor or Team Run.</p><p className="mt-1 text-xs text-zinc-500">This calls the same production Agent task pipeline: planning, policy validation, tools, synthesis and persistence.</p></div>
             <form onSubmit={runTask} className="space-y-3">
               <label className="block space-y-1 text-xs text-zinc-400">Agent
                 <select value={agentId} onChange={(event) => setAgentId(event.target.value)} className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white">
