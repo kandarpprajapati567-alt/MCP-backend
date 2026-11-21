@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { AgentLabNavigation } from "@/components/dashboard/agent-lab/AgentLabNavigation";
+import { AgentLabStatusStrip } from "@/components/dashboard/agent-lab/AgentLabStatusStrip";
 
 type Agent = {
   id: string;
@@ -53,6 +55,7 @@ export default function AgentLabPage() {
   const [suiteBusy, setSuiteBusy] = useState(false);
   const [activeTest, setActiveTest] = useState<string | null>(null);
   const [suiteResults, setSuiteResults] = useState<SuiteResult[]>([]);
+  const [historyStatus, setHistoryStatus] = useState("all");
 
   async function api(path: string, init: RequestInit = {}) {
     return fetch(path, {
@@ -471,7 +474,9 @@ export default function AgentLabPage() {
 
   return (
     <div className="agent-lab-page mx-auto max-w-6xl space-y-5">
-      <PageHeader title="Agent Lab" description="Run real Agent tasks, inspect plans, tool outputs, device jobs and execution events from one testing workspace." />
+      <PageHeader title="Agent Lab" description="A focused workbench for single-agent runs, specialist teams, deterministic checks and execution evidence." />
+      <AgentLabStatusStrip connected={connected} agentName={selectedAgent?.name ?? ""} provider={selectedAgent?.provider_preference ?? ""} lastStatus={tasks[0]?.status ?? ""} costMode={selectedAgent?.provider_preference === "mock" ? "Mock · no paid inference" : selectedAgent ? "Live provider · usage may apply" : "Not configured"} />
+      <AgentLabNavigation />
 
       {!connected ? (
         <section className="rounded-2xl border border-border bg-zinc-950/70 p-5">
@@ -496,7 +501,7 @@ export default function AgentLabPage() {
             <p className="mt-2 text-xs text-zinc-500">Supervisor test controls are available from Agent Control Center → Workbench.</p>
           </details>
 
-          <section className="space-y-4 rounded-2xl border border-cyan-800/50 bg-cyan-950/10 p-5">
+          <section id="run" className="scroll-mt-28 space-y-4 rounded-2xl border border-cyan-800/50 bg-cyan-950/10 p-5">
             <div><h2 className="font-semibold text-white">Individual Agent tests — use this section</h2><p className="mt-1 text-xs text-cyan-200">For Stage 1 verification, use only this form and the Test Center buttons below. Do not enter these test prompts in Supervisor or Team Run.</p><p className="mt-1 text-xs text-zinc-500">This calls the same production Agent task pipeline: planning, policy validation, tools, synthesis and persistence.</p></div>
             <form onSubmit={runTask} className="space-y-3">
               <label className="block space-y-1 text-xs text-zinc-400">Agent
@@ -507,14 +512,15 @@ export default function AgentLabPage() {
               </label>
               {selectedAgent && <p className="text-xs text-zinc-500">Assigned tools: {selectedAgent.allowed_tools?.length ? selectedAgent.allowed_tools.join(", ") : "none — this Agent is tool-free"}</p>}
               <label className="block space-y-1 text-xs text-zinc-400">Task / test prompt
-                <textarea required minLength={1} maxLength={4000} rows={4} value={taskInput} onChange={(event) => { setTaskInput(event.target.value); setIdempotencyKey(""); }} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
+                <textarea aria-label="Task prompt" required minLength={1} maxLength={4000} rows={5} value={taskInput} onChange={(event) => { setTaskInput(event.target.value); setIdempotencyKey(""); }} placeholder="Describe what you want this Agent to do…" className="w-full rounded-xl border border-border bg-black/30 px-3 py-3 text-sm text-white" />
               </label>
+              <details className="rounded-xl border border-border/70 bg-black/20 px-3 py-2"><summary className="cursor-pointer text-xs font-medium text-zinc-300">Advanced options</summary><div className="mt-3 space-y-2"><label className="block text-xs text-zinc-400">Idempotency key (generated automatically if blank)<input value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} placeholder="Auto-generated on submit" className="mt-1 w-full rounded-lg border border-border bg-black/40 px-3 py-2 text-xs text-white" /></label><p className="text-[11px] text-zinc-500">The selected Agent controls its configured maximum steps and tool-call limit.</p></div></details>
               <div className="flex flex-wrap gap-2">
                 <button disabled={busy || !taskInput.trim()} className="rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-40">{busy ? "Running…" : "Run Agent test"}</button>
                 <button type="button" disabled={busy} onClick={() => void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Refresh failed."))} className="rounded-xl border border-border px-4 py-2.5 text-sm text-zinc-300">Refresh data</button>
               </div>
             </form>
-            <div className="mt-4 rounded-xl border border-border/80 bg-black/20 p-4">
+            <div id="team" className="scroll-mt-28 mt-4 rounded-xl border border-border/80 bg-black/20 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><h3 className="text-sm font-semibold text-white">Parallel specialist team</h3><p className="mt-1 text-[11px] text-zinc-500">Assign a different subtask to 2–3 specialists. Each uses its own instructions, model preference and tool allowlist; all run concurrently.</p></div>
                 <span className="text-[10px] text-zinc-500">{teamAgentIds.length}/3 selected</span>
@@ -538,7 +544,7 @@ export default function AgentLabPage() {
               <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Queued to the server worker (up to three tasks concurrently). Task records persist; shared-memory supervision is still a later phase. The free Render service can suspend after inactivity.</p>
               {teamResults.length > 0 && <div className="mt-3 space-y-2">{teamResults.map((member) => <article key={member.agentId} className="rounded-lg border border-border/70 p-3"><div className="flex items-center justify-between gap-2"><b className="text-xs text-zinc-100">{agents.find((agent) => agent.id === member.agentId)?.name ?? "Specialist Agent"}</b><span className="text-[10px] uppercase tracking-wider text-zinc-400">{member.status.replaceAll("_", " ")}</span></div>{member.result && <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">{member.result}</p>}{member.error && <p className="mt-2 text-xs text-red-300">{member.error}</p>}{member.taskId && <p className="mt-2 text-[10px] text-zinc-500">Task record: {member.taskId}</p>}</article>)}</div>}
             </div>
-            <div className="border-t border-border pt-3">
+            <div id="test-center" className="scroll-mt-28 border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Test Center · Individual tests</p>
@@ -600,9 +606,9 @@ export default function AgentLabPage() {
             <p className="text-xs text-amber-300/80">Live Agents may call configured AI providers and consume API usage. Tool execution remains limited by each Agent's assigned-tool allowlist.</p>
           </section>
 
-          <section className="space-y-3 rounded-2xl border border-border bg-zinc-950/70 p-5">
-            <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-white">Task history</h2><span className="text-xs text-zinc-500">Latest {tasks.length}</span></div>
-            {tasks.length === 0 ? <p className="text-sm text-zinc-500">No Agent tests yet. Submit a task above to create the first execution trace.</p> : tasks.map((task) => (
+          <section id="history" className="scroll-mt-28 space-y-3 rounded-2xl border border-border bg-zinc-950/70 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">History & Trace</h2><p className="mt-1 text-xs text-zinc-500">Latest {tasks.length} task records</p></div><label className="text-xs text-zinc-400">Filter status <select value={historyStatus} onChange={(event) => setHistoryStatus(event.target.value)} className="ml-2 rounded-lg border border-border bg-black/40 px-2 py-2 text-zinc-100"><option value="all">All statuses</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label></div>
+            {tasks.length === 0 ? <p className="rounded-xl border border-dashed border-border p-5 text-sm text-zinc-500">No tasks yet. Run an Agent task to create the first execution trace.</p> : tasks.filter((task) => historyStatus === "all" || task.status === historyStatus).map((task) => (
               <button key={task.id} type="button" onClick={() => void openTask(task.id)} className="flex w-full flex-col gap-2 rounded-xl border border-border/80 p-3 text-left hover:border-cyan-800 sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0"><span className="block truncate text-sm text-white">{task.task}</span><span className="mt-1 block text-[11px] text-zinc-500">{new Date(task.created_at).toLocaleString()}</span></span>
                 <span className={"shrink-0 rounded-full px-3 py-1 text-xs " + (task.status === "completed" ? "bg-emerald-500/15 text-emerald-300" : task.status === "failed" ? "bg-red-500/15 text-red-300" : "bg-amber-500/15 text-amber-200")}>{task.status.replaceAll("_", " ")}</span>
@@ -611,7 +617,7 @@ export default function AgentLabPage() {
           </section>
 
           {detail && (
-            <section className="space-y-4 rounded-2xl border border-cyan-900/50 bg-zinc-950/80 p-5">
+            <section id="trace" tabIndex={-1} aria-label="Selected task execution trace" className="scroll-mt-28 space-y-4 rounded-2xl border border-cyan-900/50 bg-zinc-950/80 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-semibold text-white">Execution trace</h2>
                 <div className="flex items-center gap-2">
@@ -635,8 +641,8 @@ export default function AgentLabPage() {
           )}
         </>
       )}
-      {error && <p role="alert" className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
-      {message && <p role="status" className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}
+      {error && <p role="alert" aria-live="assertive" className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-300">{error}</p>}
+      {message && <p role="status" aria-live="polite" className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-3 text-sm text-emerald-300">{message}</p>}
     </div>
   );
 }
